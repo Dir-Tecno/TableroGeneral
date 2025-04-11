@@ -1,4 +1,4 @@
-FROM python:3.9-slimFROM python:3.9-slim
+FROM python:3.9-slim
 
 # 1. Actualiza primero las listas de paquetes solas
 RUN apt-get update || apt-get update
