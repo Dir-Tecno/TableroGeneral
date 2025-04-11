@@ -1,30 +1,27 @@
 FROM python:3.9
 
-# 1. Instalar dependencias esenciales con manejo de errores
+# 1. Instalar git y dependencias básicas
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     git \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. Configuración de Git (sin usar variables todavía)
-RUN git config --global http.sslVerify true && \
-    git config --global url."https://github.com".insteadOf "git@github.com:"
+# 2. Clonación usando ARG (más fiable que secrets para builds)
+ARG GITHUB_TOKEN
+ARG GITHUB_REPO
+ARG GITHUB_BRANCH=main
 
-# 3. Etapa de clonación (usando BuildKit para secrets)
-RUN --mount=type=secret,id=github_token \
-    --mount=type=secret,id=github_repo \
-    --mount=type=secret,id=github_branch \
-    mkdir -p /app && \
-    REPO_URL="https://$(cat /run/secrets/github_token)@github.com/$(cat /run/secrets/github_repo).git" && \
-    git clone -b "$(cat /run/secrets/github_branch)" "$REPO_URL" /app || \
-    { echo "ERROR: Fallo al clonar repositorio"; ls -la /run/secrets/; exit 1; }
+RUN mkdir -p /app && \
+    git clone -b ${GITHUB_BRANCH} \
+    https://${GITHUB_TOKEN}@github.com/${GITHUB_REPO}.git /app || \
+    { echo "ERROR: Fallo al clonar repositorio"; exit 1; }
 
 WORKDIR /app
 
-# 4. Instalación de dependencias Python
+# 3. Instalar dependencias Python
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 5. Configuración final
+# 4. Configuración final
 EXPOSE 8501
 CMD ["streamlit", "run", "app_principal.py"]
