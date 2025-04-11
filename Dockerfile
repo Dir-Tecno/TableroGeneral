@@ -1,28 +1,30 @@
 FROM python:3.9-slim
 
-# 1. Configurar fuentes de paquetes correctas y prioridades
-RUN echo "deb http://deb.debian.org/debian buster main" > /etc/apt/sources.list && \
-    echo "deb http://deb.debian.org/debian buster-updates main" >> /etc/apt/sources.list && \
-    echo "deb http://security.debian.org/debian-security buster/updates main" >> /etc/apt/sources.list
+# 1. Configuración inicial crítica
+RUN echo "deb http://archive.debian.org/debian buster main" > /etc/apt/sources.list && \
+    echo "deb http://archive.debian.org/debian buster-updates main" >> /etc/apt/sources.list && \
+    echo "deb http://archive.debian.org/debian-security buster/updates main" >> /etc/apt/sources.list
 
-# 2. Actualizar índices con reintentos
-RUN apt-get update -o Acquire::Retries=3 --fix-missing
+# 2. Actualización del sistema con manejo de errores
+RUN apt-get update -o Acquire::Check-Valid-Until=false --fix-missing
 
-# 3. Instalar dependencias esenciales primero
+# 3. Instalación en dos etapas con dependencias explícitas
 RUN apt-get install -y --no-install-recommends \
     zlib1g-dev \
-    libjpeg-dev \
+    libjpeg62-turbo-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# 4. Instalar las librerías problemáticas con dependencias explícitas
-RUN apt-get install -y --no-install-recommends \
-    libfreetype6-dev=2.9.1-3+deb10u3 \
-    libpng-dev=1.6.36-6 \
-    pkg-config=0.29-6 \
+# 4. Instalación de paquetes problemáticos sin fijar versión
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    libfreetype6-dev \
+    libpng-dev \
+    pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
-# 5. Continuar con el resto de las instalaciones
-RUN apt-get install -y --no-install-recommends \
+# 5. Instalación del resto de dependencias
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
     git \
     gcc \
     g++ \
