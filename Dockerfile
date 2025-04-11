@@ -1,40 +1,36 @@
 FROM python:3.9-slim
 
-# 1. Configuración inicial crítica
-RUN echo "deb http://archive.debian.org/debian buster main" > /etc/apt/sources.list && \
-    echo "deb http://archive.debian.org/debian buster-updates main" >> /etc/apt/sources.list && \
-    echo "deb http://archive.debian.org/debian-security buster/updates main" >> /etc/apt/sources.list
+# 1. Configurar fuentes de paquetes confiables
+RUN echo "deb http://deb.debian.org/debian bullseye main" > /etc/apt/sources.list && \
+    echo "deb http://deb.debian.org/debian bullseye-updates main" >> /etc/apt/sources.list && \
+    echo "deb http://security.debian.org/debian-security bullseye-security main" >> /etc/apt/sources.list
 
-# 2. Actualización del sistema con manejo de errores
-RUN apt-get update -o Acquire::Check-Valid-Until=false --fix-missing
+# 2. Actualización robusta del sistema
+RUN apt-get update || (rm -rf /var/lib/apt/lists/* && apt-get update)
 
-# 3. Instalación en dos etapas con dependencias explícitas
+# 3. Instalación de paquetes esenciales en bloques
 RUN apt-get install -y --no-install-recommends \
-    zlib1g-dev \
-    libjpeg62-turbo-dev \
+    ca-certificates \
+    apt-transport-https \
     && rm -rf /var/lib/apt/lists/*
 
-# 4. Instalación de paquetes problemáticos sin fijar versión
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
+# 4. Reintentar actualización con certificados instalados
+RUN apt-get update -o Acquire::Retries=3 -o Acquire::http::Timeout=30
+
+# 5. Instalar dependencias principales
+RUN apt-get install -y --no-install-recommends \
+    build-essential \
+    zlib1g-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# 6. Instalar paquetes gráficos
+RUN apt-get install -y --no-install-recommends \
     libfreetype6-dev \
     libpng-dev \
     pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
-# 5. Instalación del resto de dependencias
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    git \
-    gcc \
-    g++ \
-    libgomp1 \
-    libspatialindex-dev \
-    libarrow-dev \
-    libgeos-dev \
-    libproj-dev \
-    libssl-dev \
-    && rm -rf /var/lib/apt/lists/*
+# Resto de tus instalaciones...
     
 # Argumentos de build (se pasan desde docker-compose)
 ARG GITHUB_TOKEN
