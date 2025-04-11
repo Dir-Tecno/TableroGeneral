@@ -1,4 +1,4 @@
-FROM python:3.9-slim
+FROM python:3.9
 
 # 1. Configurar fuentes de paquetes confiables
 RUN echo "deb http://deb.debian.org/debian bullseye main" > /etc/apt/sources.list && \
