@@ -1,31 +1,31 @@
 FROM python:3.9-slim
 
-# 1. Configuración previa para evitar errores de repositorios
-RUN echo "Acquire::Check-Valid-Until \"false\";" > /etc/apt/apt.conf.d/10no--check-valid-until && \
-    echo "Acquire::Check-Date \"false\";" >> /etc/apt/apt.conf.d/10no--check-valid-until
+# 1. Configurar fuentes de paquetes correctas y prioridades
+RUN echo "deb http://deb.debian.org/debian buster main" > /etc/apt/sources.list && \
+    echo "deb http://deb.debian.org/debian buster-updates main" >> /etc/apt/sources.list && \
+    echo "deb http://security.debian.org/debian-security buster/updates main" >> /etc/apt/sources.list
 
-# 2. Actualización de paquetes con reintentos
-RUN apt-get update --fix-missing || apt-get update --fix-missing
+# 2. Actualizar índices con reintentos
+RUN apt-get update -o Acquire::Retries=3 --fix-missing
 
-# 3. Instalación en bloques con dependencias explícitas
+# 3. Instalar dependencias esenciales primero
 RUN apt-get install -y --no-install-recommends \
-    build-essential \
+    zlib1g-dev \
+    libjpeg-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# 4. Instalar las librerías problemáticas con dependencias explícitas
 RUN apt-get install -y --no-install-recommends \
-    gcc \
-    g++ \
+    libfreetype6-dev=2.9.1-3+deb10u3 \
+    libpng-dev=1.6.36-6 \
+    pkg-config=0.29-6 \
     && rm -rf /var/lib/apt/lists/*
 
-RUN apt-get install -y --no-install-recommends \
-    libfreetype6-dev \
-    libpng-dev \
-    pkg-config \
-    && rm -rf /var/lib/apt/lists/*
-
-# 4. Instalación limpia de dependencias restantes
+# 5. Continuar con el resto de las instalaciones
 RUN apt-get install -y --no-install-recommends \
     git \
+    gcc \
+    g++ \
     libgomp1 \
     libspatialindex-dev \
     libarrow-dev \
