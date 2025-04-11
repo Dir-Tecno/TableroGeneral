@@ -24,4 +24,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # 4. Configuración final
 EXPOSE 8501
-CMD ["streamlit", "run", "app_principal.py"]
+CMD ["streamlit", "run", "app.py"]
