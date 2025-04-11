@@ -1,25 +1,30 @@
 FROM python:3.9
 
-# 1. Instalar dependencias esenciales
-RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
+# 1. Instalar dependencias esenciales con manejo de errores
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    git \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
-# 2. Variables de construcción (se pasan desde docker-compose)
-ARG GITHUB_TOKEN
-ARG GITHUB_REPO
-ARG GITHUB_BRANCH=main
+# 2. Configuración de Git (sin usar variables todavía)
+RUN git config --global http.sslVerify true && \
+    git config --global url."https://github.com".insteadOf "git@github.com:"
 
-# 3. Clonación segura del repositorio
-RUN mkdir -p /app && \
-    git config --global url."https://${GITHUB_TOKEN}@github.com".insteadOf "https://github.com" && \
-    git clone -c http.sslVerify=true -b ${GITHUB_BRANCH} https://github.com/${GITHUB_REPO}.git /app || \
-    { echo "Error al clonar el repositorio"; exit 1; }
+# 3. Etapa de clonación (usando BuildKit para secrets)
+RUN --mount=type=secret,id=github_token \
+    --mount=type=secret,id=github_repo \
+    --mount=type=secret,id=github_branch \
+    mkdir -p /app && \
+    REPO_URL="https://$(cat /run/secrets/github_token)@github.com/$(cat /run/secrets/github_repo).git" && \
+    git clone -b "$(cat /run/secrets/github_branch)" "$REPO_URL" /app || \
+    { echo "ERROR: Fallo al clonar repositorio"; ls -la /run/secrets/; exit 1; }
 
 WORKDIR /app
 
-# 4. Instalar dependencias de Python
+# 4. Instalación de dependencias Python
 RUN pip install --no-cache-dir -r requirements.txt
 
 # 5. Configuración final
-ENV PYTHONUNBUFFERED=1
 EXPOSE 8501
 CMD ["streamlit", "run", "app_principal.py"]
