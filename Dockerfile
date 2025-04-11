@@ -1,10 +1,4 @@
-# Stage 1: Builder
-FROM python:3.9-slim as builder
-
-# Argumentos de build
-ARG GITHUB_TOKEN
-ARG REPO_URL
-ARG BRANCH=main
+FROM python:3.9-slim
 
 # Instala dependencias del sistema
 RUN apt-get update && apt-get install -y \
@@ -21,28 +15,22 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Argumentos de build (se pasan desde docker-compose)
+ARG GITHUB_TOKEN
+ARG GITHUB_REPO
+ARG GITHUB_BRANCH
+
 # Clona el repositorio privado
-RUN git clone -b ${BRANCH} https://${GITHUB_TOKEN}@github.com/${REPO_URL##*/} /app
+RUN git clone -b ${GITHUB_BRANCH} https://${GITHUB_TOKEN}@github.com/${GITHUB_REPO}.git /app
 
 WORKDIR /app
 
 # Instala dependencias
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Stage 2: Runtime
-FROM python:3.9-slim
-WORKDIR /app
-
-# Copia desde el builder
-COPY --from=builder /usr/local/lib/python3.9/site-packages /usr/local/lib/python3.9/site-packages
-COPY --from=builder /usr/local/bin /usr/local/bin
-COPY --from=builder /usr/lib /usr/lib
-COPY --from=builder /app /app
-
-# Configuración final
-RUN mkdir -p /app/streamlit && \
-    chmod +x /app/entrypoint.sh
+# Variables de entorno (se setean desde docker-compose)
+ENV SLACK_WEBHOOK_URL=""
 
 EXPOSE 8501
 
-ENTRYPOINT ["/app/entrypoint.sh"]
+CMD ["streamlit", "run", "app_principal.py", "--server.port=8501", "--server.address=0.0.0.0"]
