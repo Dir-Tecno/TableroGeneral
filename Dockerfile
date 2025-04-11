@@ -1,14 +1,23 @@
-FROM python:3.9-slim
+FROM python:3.9-slimFROM python:3.9-slim
 
-# Instala dependencias del sistema
-RUN apt-get update && apt-get install -y \
+# 1. Actualiza primero las listas de paquetes solas
+RUN apt-get update || apt-get update
+
+# 2. Instala dependencias en bloques separados con manejo de errores
+RUN apt-get install -y --no-install-recommends \
     git \
     libgomp1 \
     libspatialindex-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN apt-get install -y --no-install-recommends \
     gcc \
     g++ \
     libfreetype6-dev \
     libpng-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN apt-get install -y --no-install-recommends \
     libarrow-dev \
     libgeos-dev \
     libproj-dev \
