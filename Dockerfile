@@ -1,29 +1,39 @@
 FROM python:3.9-slim
 
-# 1. Actualiza primero las listas de paquetes solas
-RUN apt-get update || apt-get update
+# 1. Configuración previa para evitar errores de repositorios
+RUN echo "Acquire::Check-Valid-Until \"false\";" > /etc/apt/apt.conf.d/10no--check-valid-until && \
+    echo "Acquire::Check-Date \"false\";" >> /etc/apt/apt.conf.d/10no--check-valid-until
 
-# 2. Instala dependencias en bloques separados con manejo de errores
+# 2. Actualización de paquetes con reintentos
+RUN apt-get update --fix-missing || apt-get update --fix-missing
+
+# 3. Instalación en bloques con dependencias explícitas
 RUN apt-get install -y --no-install-recommends \
-    git \
-    libgomp1 \
-    libspatialindex-dev \
+    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 RUN apt-get install -y --no-install-recommends \
     gcc \
     g++ \
-    libfreetype6-dev \
-    libpng-dev \
     && rm -rf /var/lib/apt/lists/*
 
 RUN apt-get install -y --no-install-recommends \
+    libfreetype6-dev \
+    libpng-dev \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+# 4. Instalación limpia de dependencias restantes
+RUN apt-get install -y --no-install-recommends \
+    git \
+    libgomp1 \
+    libspatialindex-dev \
     libarrow-dev \
     libgeos-dev \
     libproj-dev \
     libssl-dev \
     && rm -rf /var/lib/apt/lists/*
-
+    
 # Argumentos de build (se pasan desde docker-compose)
 ARG GITHUB_TOKEN
 ARG GITHUB_REPO
