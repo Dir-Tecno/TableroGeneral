@@ -351,9 +351,8 @@ def load_data_from_gitlab(repo_id, branch='main', token=None, use_local=False, l
             return all_data, all_dates
         
         else:
-            # Cargar desde GitLab
-            data_loader = DataLoaderGitLab(token)
-            archivos = data_loader.obtener_lista_archivos(repo_id, branch)
+            # Cargar desde GitLab usando funciones independientes
+            archivos = obtener_lista_archivos(repo_id, branch, token)
             
             if not archivos:
                 return {}, {}
@@ -373,7 +372,7 @@ def load_data_from_gitlab(repo_id, branch='main', token=None, use_local=False, l
                     progress.progress((i + 1) / total)
                     
                     # Obtener contenido
-                    contenido = data_loader.obtener_archivo_gitlab(repo_id, archivo, branch)
+                    contenido = obtener_archivo_gitlab(repo_id, archivo, branch, token)
                     if contenido is None:
                         continue
                     
