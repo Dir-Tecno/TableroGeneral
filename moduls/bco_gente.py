@@ -597,8 +597,7 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
                     serie_historica = df_fechas.groupby('AÑO_MES').size().reset_index(name='Cantidad')
                     
                     # Convertir AÑO_MES a datetime para graficar
-                    serie_historica['FECHA'] = pd.to_datetime(serie_historica['AÑO_MES'] + '-01')
-                    
+                    serie_historica['FECHA'] = pd.to_datetime(serie_historica['AÑO_MES'] + '-01', format='%Y-%m-%d')                    
                     # Ordenar por fecha
                     serie_historica = serie_historica.sort_values('FECHA')
                     

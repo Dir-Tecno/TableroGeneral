@@ -265,7 +265,13 @@ def show_empleo_dashboard(data, dates):
                     selected_loc = st.selectbox("Localidad:", [all_loc_option] + list(localidades))
                 
                 if selected_loc != all_loc_option:
-                    df_filtered = df_filtered[df_filtered['N_LOCALIDAD'] == selected_loc]
+                        if isinstance(selected_loc, str) and selected_loc.isdigit():
+                            # Si la localidad seleccionada es un número en formato string
+                            selected_loc_int = int(selected_loc)
+                            df_filtered = df_filtered[df_filtered['N_LOCALIDAD'].fillna(-1).astype(int) == selected_loc_int]
+                        else:
+                            # Si la localidad seleccionada es un string no numérico
+                            df_filtered = df_filtered[df_filtered['N_LOCALIDAD'].fillna('').astype(str) == str(selected_loc)]
             else:
                 df_filtered = df
                 # Si no se seleccionó departamento, mostrar todas las localidades
