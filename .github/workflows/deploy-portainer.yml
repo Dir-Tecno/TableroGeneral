@@ -1,0 +1,27 @@
+name: Deploy to Portainer
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:  # Permite ejecutar el workflow manualmente desde GitHub
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to Portainer
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            # Ir al directorio del proyecto
+            cd /home/lucasalvador/Reportes/TableroGeneral
+            
+            # Obtener los últimos cambios
+            git pull
+            
+            # Reconstruir y reiniciar el contenedor directamente
+            docker-compose build
+            docker-compose up -d
