@@ -162,11 +162,17 @@ def show_bco_gente_dashboard(data, dates):
     
     with tab_global:
         # Mostrar los datos filtrados en la pestaña GLOBAL
-        mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero)
+        if has_global_data:
+            mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero)
+        else:
+            st.warning("No hay datos globales disponibles para mostrar.")
     
     with tab_recupero:
         # Mostrar los datos de recupero en la pestaña RECUPERO
-        mostrar_recupero(df_recupero, df_localidad_municipio, geojson_data)
+        if has_recupero_data and df_recupero is not None and not df_recupero.empty:
+            mostrar_recupero(df_recupero, df_localidad_municipio, geojson_data)
+        else:
+            st.info("No hay datos de recupero disponibles para mostrar.")
 
 
 
@@ -210,7 +216,7 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
     # Línea divisoria en gris claro
     st.markdown("<hr style='border: 2px solid #cccccc;'>", unsafe_allow_html=True)
     
-    # Nueva tabla: Conteo de Préstamos por Línea y Estado
+      # Nueva tabla: Conteo de Préstamos por Línea y Estado
     st.subheader("Conteo de Préstamos por Línea y Estado")
     
     try:
@@ -440,110 +446,40 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
                                       columns=['N_DEPARTAMENTO', 'N_LOCALIDAD'] + selected_categorias + ['Total'])
             pivot_df_filtered = pd.concat([pivot_df_filtered, totales_row], ignore_index=True)
             
-            # Crear tabla HTML con estilos
-            html_table = """
-                <style>
-                    .estado-table {
-                        width: 100%;
-                        border-collapse: collapse;
-                        margin-bottom: 20px;
-                        font-size: 14px;
-                    }
-                    .estado-table th, .estado-table td {
-                        padding: 8px;
-                        border: 1px solid #ddd;
-                        max-width: 150px;
-                        overflow: hidden;
-                        text-overflow: ellipsis;
-                        white-space: nowrap;
-                    }
-                    .estado-table th {
-                        color: white;
-                        text-align: center;
-                    }
-                    .estado-table td {
-                        text-align: right;
-                    }
-                    .estado-table td:first-child, .estado-table td:nth-child(2) {
-                        text-align: left;
-                    }
-                    .estado-table .group-header {
-                        background-color: #005587;
-                    }
-                    .estado-table .value-header {
-                        background-color: #0072bb;
-                    }
-                    .estado-table .total-header {
-                        background-color: #004b76;
-                    }
-                </style>
-            """
+            # Aplicar estilo a la tabla usando pandas Styler
+            def highlight_totals(val):
+                if val == 'Total':
+                    return 'background-color: #f2f2f2; font-weight: bold'
+                return ''
             
-            # Crear la tabla - Simplificar el HTML y eliminar saltos de línea
-            html_table += '<table class="estado-table"><thead><tr>'
-            html_table += '<th class="group-header">Departamento</th>'
-            html_table += '<th class="group-header">Localidad</th>'
+            def highlight_total_rows(s):
+                is_total_row = s.iloc[0] == 'Total' or s.iloc[1] == 'Total'
+                return ['background-color: #f2f2f2; font-weight: bold' if is_total_row else '' for _ in s]
             
-            # Agregar encabezados para cada categoría con tooltips
-            for categoria in selected_categorias:
-                # Usar tooltips_categorias si está disponible, de lo contrario crear uno básico
-                tooltip_text = ""
-                if 'tooltips_categorias' in locals() or 'tooltips_categorias' in globals():
-                    tooltip_text = tooltips_categorias.get(categoria, "")
-                else:
-                    # Crear tooltip básico con los estados de la categoría
-                    tooltip_text = ", ".join(ESTADO_CATEGORIAS.get(categoria, []))
-                
-                html_table += f'<th class="value-header" title="{tooltip_text}">{categoria}</th>'
+            # Crear objeto Styler
+            styled_df = pivot_df_filtered.style \
+                .applymap(highlight_totals, subset=['N_DEPARTAMENTO', 'N_LOCALIDAD']) \
+                .apply(highlight_total_rows, axis=1, subset=selected_categorias + ['Total']) \
+                .format({col: '{:,.0f}' for col in selected_categorias + ['Total']}) \
+                .background_gradient(subset=selected_categorias, cmap='Blues', low=0.1, high=0.9) \
+                .set_properties(**{'text-align': 'right'}, subset=selected_categorias + ['Total']) \
+                .set_properties(**{'text-align': 'left'}, subset=['N_DEPARTAMENTO', 'N_LOCALIDAD'])
             
-            # Agregar encabezado para el total
-            html_table += '<th class="total-header">Total</th>'
-            
-            html_table += '</tr></thead><tbody>'
-            
-            # Agregar filas de datos
-            for index, row in pivot_df_filtered.iterrows():
-                html_table += '<tr>'
-                
-                # Columna Departamento
-                departamento_valor = str(row['N_DEPARTAMENTO'])
-                if departamento_valor == 'Total':
-                    html_table += f'<td style="font-weight: bold; background-color: #f2f2f2;">{departamento_valor}</td>'
-                else:
-                    html_table += f'<td>{departamento_valor}</td>'
-                
-                # Columna Localidad
-                localidad_valor = str(row['N_LOCALIDAD'])
-                if localidad_valor == 'Total':
-                    html_table += f'<td style="font-weight: bold; background-color: #f2f2f2;">{localidad_valor}</td>'
-                else:
-                    html_table += f'<td>{localidad_valor}</td>'
-                
-                # Columnas para cada categoría
-                for categoria in selected_categorias:
-                    if localidad_valor == 'Total' or departamento_valor == 'Total':
-                        cell_style = 'style="font-weight: bold; background-color: #f2f2f2;"'
-                    else:
-                        cell_style = ''
-                    
-                    valor = int(row[categoria]) if categoria in row else 0
-                    html_table += f'<td {cell_style}>{valor}</td>'
-                
-                # Agregar columna de total
-                if 'Total' in row:
-                    total_valor = int(row['Total'])
-                    if localidad_valor == 'Total' or departamento_valor == 'Total':
-                        cell_style = 'style="font-weight: bold; background-color: #f2f2f2;"'
-                    else:
-                        cell_style = ''
-                    html_table += f'<td {cell_style}>{total_valor}</td>'
-                
-                html_table += '</tr>'
-            
-            html_table += '</tbody></table>'
-            
-            # Mostrar la tabla
-            st.markdown(html_table, unsafe_allow_html=True)
+            # Mostrar la tabla con st.dataframe
+            st.dataframe(
+                styled_df,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "N_DEPARTAMENTO": st.column_config.TextColumn("Departamento"),
+                    "N_LOCALIDAD": st.column_config.TextColumn("Localidad"),
+                    "Total": st.column_config.NumberColumn(
+                        "Total",
+                        help="Suma total de todas las categorías seleccionadas"
+                    )
+                },
+                height=400
+            )
             
             # Línea divisoria en gris claro
             st.markdown("<hr style='border: 1px solid #f0f0f0;'>", unsafe_allow_html=True)
@@ -597,7 +533,8 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
                     serie_historica = df_fechas.groupby('AÑO_MES').size().reset_index(name='Cantidad')
                     
                     # Convertir AÑO_MES a datetime para graficar
-                    serie_historica['FECHA'] = pd.to_datetime(serie_historica['AÑO_MES'] + '-01', format='%Y-%m-%d')                    
+                    serie_historica['FECHA'] = pd.to_datetime(serie_historica['AÑO_MES'] + '-01')
+                    
                     # Ordenar por fecha
                     serie_historica = serie_historica.sort_values('FECHA')
                     
@@ -651,7 +588,37 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
     # Línea divisoria en gris claro
     st.markdown("<hr style='border: 2px solid #cccccc;'>", unsafe_allow_html=True)
 
-        
+    # Gráfico de Torta
+    st.subheader("Gráfico de Torta: Distribución de demanda de Crédito por Línea de Préstamo")
+    grafico_torta = df_filtrado_global.groupby('N_LINEA_PRESTAMO').size().reset_index(name='Cantidad')
+
+    # Colores de la identidad visual
+    colores_identidad = COLORES_IDENTIDAD
+
+    fig_torta = px.pie(
+        grafico_torta, 
+        names='N_LINEA_PRESTAMO', 
+        values='Cantidad', 
+        title='Distribución de Formularios por Línea de Préstamo',
+        color_discrete_sequence=colores_identidad
+    )
+    
+    # Personalizar el diseño del gráfico
+    fig_torta.update_traces(
+        textposition='inside',
+        textinfo='percent+label',
+        marker=dict(line=dict(color='#FFFFFF', width=1))
+    )
+    
+    fig_torta.update_layout(
+        legend_title="Líneas de Préstamo",
+        font=dict(size=12),
+        uniformtext_minsize=10,
+        uniformtext_mode='hide'
+    )
+    
+    st.plotly_chart(fig_torta)
+    
 
 def mostrar_recupero(df_recupero, df_localidad_municipio, geojson_data):
     """

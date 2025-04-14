@@ -123,6 +123,73 @@ def convert_numpy_types(df):
 
     return df
 
+class DataLoaderGitLab:
+    def __init__(self, token):
+        self.token = token
+        
+    def _make_request(self, url, params):
+        # Lógica de reintentos y manejo de errores
+        try:
+            response = requests.get(url, params=params)
+            if response.status_code == 200:
+                return response.content
+            else:
+                st.error(f"Error al obtener archivo: {response.status_code} - {response.text}")
+                return None
+        except Exception as e:
+            st.error(f"Error de conexión: {str(e)}")
+            return None
+
+    def obtener_archivo_gitlab(self, repo_id, file_path, branch='main'):
+        # Asegurar que el repo_id esté correctamente formateado
+        repo_id_encoded = requests.utils.quote(str(repo_id), safe='')
+        
+        # Asegurar que el file_path esté correctamente formateado
+        file_path_encoded = requests.utils.quote(file_path, safe='')
+        
+        url = f'https://gitlab.com/api/v4/projects/{repo_id_encoded}/repository/files/{file_path_encoded}/raw'
+        headers = {'PRIVATE-TOKEN': self.token}
+        params = {'ref': branch}
+        
+        return self._make_request(url, params)
+
+    def obtener_lista_archivos(self, repo_id, branch='main'):
+        # Probar diferentes formatos de ID
+        formatos_id = [
+            repo_id,
+            requests.utils.quote(repo_id, safe=''),
+            repo_id.replace('/', '%2F')
+        ]
+        
+        for id_formato in formatos_id:
+            url = f'https://gitlab.com/api/v4/projects/{id_formato}/repository/tree'
+            headers = {'PRIVATE-TOKEN': self.token}
+            params = {'ref': branch, 'recursive': True}
+            
+            response = self._make_request(url, params)
+            if response is not None:
+                items = response.json()
+                archivos = [item['path'] for item in items if item['type'] == 'blob']
+                return archivos
+        
+        return []
+
+class ParquetLoader:
+    @staticmethod
+    def load(buffer):
+        try:
+            df, error = safe_read_parquet(io.BytesIO(buffer), is_buffer=True)
+            if df is not None:
+                # Convertir tipos numpy
+                df = convert_numpy_types(df)
+                return df
+            else:
+                st.warning(f"Error al cargar archivo: {error}")
+                return None
+        except Exception as e:
+            st.warning(f"Error al cargar archivo: {str(e)}")
+            return None
+
 def safe_read_parquet(file_path_or_buffer, is_buffer=False):
     """
     Lee un archivo parquet de manera segura, manejando diferentes errores comunes.
@@ -284,9 +351,9 @@ def load_data_from_gitlab(repo_id, branch='main', token=None, use_local=False, l
             return all_data, all_dates
         
         else:
-            # Cargar desde GitLab (código existente)
-            # Obtener lista de archivos
-            archivos = obtener_lista_archivos(repo_id, branch, token)
+            # Cargar desde GitLab
+            data_loader = DataLoaderGitLab(token)
+            archivos = data_loader.obtener_lista_archivos(repo_id, branch)
             
             if not archivos:
                 return {}, {}
@@ -306,7 +373,7 @@ def load_data_from_gitlab(repo_id, branch='main', token=None, use_local=False, l
                     progress.progress((i + 1) / total)
                     
                     # Obtener contenido
-                    contenido = obtener_archivo_gitlab(repo_id, archivo, branch, token)
+                    contenido = data_loader.obtener_archivo_gitlab(repo_id, archivo, branch)
                     if contenido is None:
                         continue
                     
@@ -315,17 +382,12 @@ def load_data_from_gitlab(repo_id, branch='main', token=None, use_local=False, l
                     
                     # Cargar según extensión
                     if archivo.endswith('.parquet'):
-                        try:
-                            df, error = safe_read_parquet(io.BytesIO(contenido), is_buffer=True)
-                            if df is not None:
-                                # Convertir tipos numpy
-                                df = convert_numpy_types(df)
-                                all_data[nombre] = df
-                                all_dates[nombre] = datetime.datetime.now()
-                            else:
-                                st.warning(f"Error al cargar {nombre}: {error}")
-                        except Exception as e:
-                            st.warning(f"Error al cargar {nombre}: {str(e)}")
+                        df = ParquetLoader.load(contenido)
+                        if df is not None:
+                            all_data[nombre] = df
+                            all_dates[nombre] = datetime.datetime.now()
+                        else:
+                            st.warning(f"Error al cargar {nombre}")
                     
                     elif archivo.endswith('.csv'):
                         try:

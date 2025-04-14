@@ -513,7 +513,7 @@ def show_empleo_dashboard(data, dates):
                     st.markdown(html_table_grupo3, unsafe_allow_html=True)
             
             # Mostrar tabla de beneficiarios por localidad
-            st.markdown('<h3 style="font-size: 20px; margin: 20px 0 15px 0;">Beneficiarios por Localidad</h3>', unsafe_allow_html=True)
+            st.subheader("Beneficiarios por Localidad")
             
             # Filtrar solo beneficiarios del DataFrame ya filtrado por departamento/localidad
             beneficiarios_estados = ["BENEFICIARIO", "BENEFICIARIO- CTI"]
@@ -543,11 +543,32 @@ def show_empleo_dashboard(data, dates):
                 # Ordenar por departamento y total (descendente)
                 df_pivot_sorted = df_pivot.sort_values(['N_DEPARTAMENTO', 'TOTAL'], ascending=[True, False])
                 
+                # Aplicar formato y estilo a la tabla
+                styled_df = df_pivot_sorted.style \
+                    .background_gradient(subset=['BENEFICIARIO', 'BENEFICIARIO- CTI', 'TOTAL'], cmap='Blues') \
+                    .format(thousands=".", precision=0)
+                
                 # Mostrar tabla con estilo mejorado y sin índice
                 st.dataframe(
-                    df_pivot_sorted,
+                    styled_df,
                     use_container_width=True,
-                    hide_index=True
+                    hide_index=True,
+                    column_config={
+                        "N_DEPARTAMENTO": st.column_config.TextColumn(
+                            "Departamento"),
+                        "N_LOCALIDAD": st.column_config.TextColumn(
+                            "Localidad"),
+                        "BENEFICIARIO": st.column_config.NumberColumn(
+                            "Beneficiarios",
+                            help="Cantidad de beneficiarios regulares"),
+                        "BENEFICIARIO- CTI": st.column_config.NumberColumn(
+                            "Beneficiarios CTI",
+                            help="Beneficiarios en situación crítica"),
+                        "TOTAL": st.column_config.NumberColumn(
+                            "Total General",
+                            help="Suma total de beneficiarios")
+                    },
+                    height=400
                 )
             
             # Mostrar distribución geográfica si hay datos geojson y no hay filtros específicos
