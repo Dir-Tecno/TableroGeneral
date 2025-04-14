@@ -99,6 +99,11 @@ def show_bco_gente_dashboard(data, dates):
                 except:
                     pass
     
+    # Verificar que los datos globales existan antes de continuar
+    if not has_global_data:
+        st.error("No se pudieron cargar los datos globales de Banco de la Gente. Verifique que el archivo 'vt_nomina_rep_dpto_localidad.parquet' exista en el repositorio.")
+        return
+    
     # Crear una copia del DataFrame para trabajar con él
     df_filtrado_global = df_global.copy()
     
