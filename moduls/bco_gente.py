@@ -15,6 +15,132 @@ ESTADO_CATEGORIAS = {
     "En proceso de pago": ["PAGO EMITIDO","IMPAGO"]
 }
 
+def load_and_preprocess_data(data):
+    """
+    Carga y preprocesa los datos necesarios para el dashboard.
+    
+    Args:
+        data: Diccionario de dataframes cargados desde GitLab
+        
+    Returns:
+        Tupla con los dataframes procesados y flags de disponibilidad
+    """
+    with st.spinner("Cargando y procesando datos..."):
+        # Extraer los dataframes necesarios
+        df_global = data.get('vt_nomina_rep_dpto_localidad.parquet')
+        df_recupero = data.get('VT_NOMINA_REP_RECUPERO_X_ANIO.parquet')
+        geojson_data = data.get('capa_departamentos_2010.geojson')
+        df_localidad_municipio = data.get('LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt')
+        
+        # Verificar silenciosamente si los archivos existen
+        has_global_data = df_global is not None and not df_global.empty
+        has_recupero_data = df_recupero is not None and not df_recupero.empty
+        has_geojson_data = geojson_data is not None
+        
+        # Renombrar valores en N_LINEA_PRESTAMO
+        if has_global_data and 'N_LINEA_PRESTAMO' in df_global.columns:
+            # Reemplazar "L4." por "INICIAR EMPRENDIMIENTO"
+            df_global['N_LINEA_PRESTAMO'] = df_global['N_LINEA_PRESTAMO'].replace("L4.", "INICIAR EMPRENDIMIENTO")
+        
+        # Corregir localidades del departamento CAPITAL
+        if has_global_data and 'N_DEPARTAMENTO' in df_global.columns and 'N_LOCALIDAD' in df_global.columns:
+            # Crear una máscara para identificar registros del departamento CAPITAL
+            capital_mask = df_global['N_DEPARTAMENTO'] == 'CAPITAL'
+            
+            # Aplicar la corrección de localidad
+            df_global.loc[capital_mask, 'N_LOCALIDAD'] = 'CORDOBA'
+            
+            # Si existe la columna ID_LOCALIDAD, corregirla también
+            if 'ID_LOCALIDAD' in df_global.columns:
+                df_global.loc[capital_mask, 'ID_LOCALIDAD'] = 1
+        
+        # Filtrar registros con N_DEPARTAMENTO nulo o igual a "BURRUYACU"
+        if has_global_data and 'N_DEPARTAMENTO' in df_global.columns:
+            # Crear máscara para identificar registros a excluir
+            exclude_mask = (df_global['N_DEPARTAMENTO'].isna()) | (df_global['N_DEPARTAMENTO'] == 'BURRUYACU')
+            
+            # Filtrar el DataFrame para excluir estos registros
+            df_global = df_global[~exclude_mask]
+            
+            # Verificar si todavía hay datos después del filtrado
+            has_global_data = not df_global.empty
+        
+        # Filtrar líneas de préstamo que no deben ser consideradas
+        if has_global_data and 'N_LINEA_PRESTAMO' in df_global.columns:
+            # Lista de líneas de préstamo a excluir
+            lineas_a_excluir = ["L1", "L3", "L4", "L6"]
+            
+            # Filtrar el DataFrame para excluir estas líneas
+            df_global = df_global[~df_global['N_LINEA_PRESTAMO'].isin(lineas_a_excluir)]
+            
+            # Verificar si todavía hay datos después del filtrado
+            has_global_data = not df_global.empty
+        
+        return df_global, df_recupero, geojson_data, df_localidad_municipio, has_global_data, has_recupero_data, has_geojson_data
+
+def render_filters(df_filtrado_global):
+    """
+    Renderiza los filtros de la interfaz de usuario.
+    
+    Args:
+        df_filtrado_global: DataFrame filtrado con datos globales
+        
+    Returns:
+        Tupla con los valores seleccionados en los filtros
+    """
+    with st.spinner("Cargando filtros..."):
+        # Contenedor para filtros
+        st.markdown('<div class="filter-container">', unsafe_allow_html=True)
+        st.markdown('<h3 style="font-size: 18px; margin-top: 0;">Filtros</h3>', unsafe_allow_html=True)
+        
+        # Crear tres columnas para los filtros
+        col1, col2, col3 = st.columns(3)
+        
+        # Filtro de departamento en la primera columna
+        with col1:
+            departamentos = sorted(df_filtrado_global['N_DEPARTAMENTO'].dropna().unique())
+            all_dpto_option = "Todos los departamentos"
+            selected_dpto = st.selectbox("Departamento:", [all_dpto_option] + list(departamentos), key="bco_dpto_filter")
+        
+        # Filtrar por departamento seleccionado
+        if selected_dpto != all_dpto_option:
+            df_filtrado = df_filtrado_global[df_filtrado_global['N_DEPARTAMENTO'] == selected_dpto]
+            # Filtro de localidad (dependiente del departamento)
+            localidades = sorted(df_filtrado['N_LOCALIDAD'].dropna().unique())
+            all_loc_option = "Todas las localidades"
+            
+            # Mostrar filtro de localidad en la segunda columna
+            with col2:
+                selected_loc = st.selectbox("Localidad:", [all_loc_option] + list(localidades), key="bco_loc_filter")
+            
+            if selected_loc != all_loc_option:
+                df_filtrado = df_filtrado[df_filtrado['N_LOCALIDAD'] == selected_loc]
+        else:
+            # Si no se seleccionó departamento, mostrar todas las localidades
+            localidades = sorted(df_filtrado_global['N_LOCALIDAD'].dropna().unique())
+            all_loc_option = "Todas las localidades"
+            df_filtrado = df_filtrado_global
+            
+            # Mostrar filtro de localidad en la segunda columna
+            with col2:
+                selected_loc = st.selectbox("Localidad:", [all_loc_option] + list(localidades), key="bco_loc_filter")
+            
+            if selected_loc != all_loc_option:
+                df_filtrado = df_filtrado[df_filtrado['N_LOCALIDAD'] == selected_loc]
+        
+        # Filtro de línea de préstamo en la tercera columna
+        with col3:
+            lineas_prestamo = sorted(df_filtrado['N_LINEA_PRESTAMO'].dropna().unique())
+            all_lineas_option = "Todas las líneas"
+            selected_linea = st.selectbox("Línea de préstamo:", [all_lineas_option] + list(lineas_prestamo), key="bco_linea_filter")
+        
+        if selected_linea != all_lineas_option:
+            df_filtrado = df_filtrado[df_filtrado['N_LINEA_PRESTAMO'] == selected_linea]
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        return df_filtrado, selected_dpto, selected_loc, selected_linea
+
 def show_bco_gente_dashboard(data, dates):
     """
     Muestra el dashboard de Banco de la Gente.
@@ -32,60 +158,8 @@ def show_bco_gente_dashboard(data, dates):
         "En proceso de pago": ", ".join(ESTADO_CATEGORIAS["En proceso de pago"])
     }
     
-    # Extraer los dataframes necesarios
-    df_global = data.get('vt_nomina_rep_dpto_localidad.parquet')
-    df_recupero = data.get('VT_NOMINA_REP_RECUPERO_X_ANIO.parquet')
-    geojson_data = data.get('capa_departamentos_2010.geojson')
-    df_localidad_municipio = data.get('LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt')
-    
-    # Verificar silenciosamente si los archivos existen
-    has_global_data = df_global is not None and not df_global.empty
-    has_recupero_data = df_recupero is not None and not df_recupero.empty
-    has_geojson_data = geojson_data is not None
-    
-    # Renombrar valores en N_LINEA_PRESTAMO
-    if has_global_data and 'N_LINEA_PRESTAMO' in df_global.columns:
-        # Reemplazar "L4." por "INICIAR EMPRENDIMIENTO"
-        df_global['N_LINEA_PRESTAMO'] = df_global['N_LINEA_PRESTAMO'].replace("L4.", "INICIAR EMPRENDIMIENTO")
-    
-    # Corregir localidades del departamento CAPITAL
-    if has_global_data and 'N_DEPARTAMENTO' in df_global.columns and 'N_LOCALIDAD' in df_global.columns:
-        # Crear una máscara para identificar registros del departamento CAPITAL
-        capital_mask = df_global['N_DEPARTAMENTO'] == 'CAPITAL'
-        
-        # Aplicar la corrección de localidad
-        df_global.loc[capital_mask, 'N_LOCALIDAD'] = 'CORDOBA'
-        
-        # Si existe la columna ID_LOCALIDAD, corregirla también
-        if 'ID_LOCALIDAD' in df_global.columns:
-            df_global.loc[capital_mask, 'ID_LOCALIDAD'] = 1
-    
-    # Filtrar registros con N_DEPARTAMENTO nulo o igual a "BURRUYACU"
-    if has_global_data and 'N_DEPARTAMENTO' in df_global.columns:
-        # Crear máscara para identificar registros a excluir
-        exclude_mask = (df_global['N_DEPARTAMENTO'].isna()) | (df_global['N_DEPARTAMENTO'] == 'BURRUYACU')
-        
-        # Filtrar el DataFrame para excluir estos registros
-        df_global = df_global[~exclude_mask]
-        
-        # Verificar si todavía hay datos después del filtrado
-        has_global_data = not df_global.empty
-        if not has_global_data:
-            st.warning("No hay datos disponibles después de aplicar los filtros por departamento.")
-    
-    # Filtrar líneas de préstamo que no deben ser consideradas
-    if has_global_data and 'N_LINEA_PRESTAMO' in df_global.columns:
-        # Lista de líneas de préstamo a excluir
-        lineas_a_excluir = ["L1", "L3", "L4", "L6"]
-        
-        # Filtrar el DataFrame para excluir estas líneas
-        df_global = df_global[~df_global['N_LINEA_PRESTAMO'].isin(lineas_a_excluir)]
-        
-        # Verificar si todavía hay datos después del filtrado
-        has_global_data = not df_global.empty
-        if not has_global_data:
-            st.warning("No hay datos disponibles después de aplicar los filtros por línea de préstamo.")
-
+    # Cargar y preprocesar datos
+    df_global, df_recupero, geojson_data, df_localidad_municipio, has_global_data, has_recupero_data, has_geojson_data = load_and_preprocess_data(data)
     
     # Mostrar información de actualización de datos
     if dates and any(dates.values()):
@@ -107,54 +181,8 @@ def show_bco_gente_dashboard(data, dates):
     # Crear una copia del DataFrame para trabajar con él
     df_filtrado_global = df_global.copy()
     
-    # Contenedor para filtros
-    st.markdown('<div class="filter-container">', unsafe_allow_html=True)
-    st.markdown('<h3 style="font-size: 18px; margin-top: 0;">Filtros</h3>', unsafe_allow_html=True)
-    
-    # Crear tres columnas para los filtros
-    col1, col2, col3 = st.columns(3)
-    
-    # Filtro de departamento en la primera columna
-    with col1:
-        departamentos = sorted(df_filtrado_global['N_DEPARTAMENTO'].dropna().unique())
-        all_dpto_option = "Todos los departamentos"
-        selected_dpto = st.selectbox("Departamento:", [all_dpto_option] + list(departamentos), key="bco_dpto_filter")
-    
-    # Filtrar por departamento seleccionado
-    if selected_dpto != all_dpto_option:
-        df_filtrado_global = df_filtrado_global[df_filtrado_global['N_DEPARTAMENTO'] == selected_dpto]
-        # Filtro de localidad (dependiente del departamento)
-        localidades = sorted(df_filtrado_global['N_LOCALIDAD'].dropna().unique())
-        all_loc_option = "Todas las localidades"
-        
-        # Mostrar filtro de localidad en la segunda columna
-        with col2:
-            selected_loc = st.selectbox("Localidad:", [all_loc_option] + list(localidades), key="bco_loc_filter")
-        
-        if selected_loc != all_loc_option:
-            df_filtrado_global = df_filtrado_global[df_filtrado_global['N_LOCALIDAD'] == selected_loc]
-    else:
-        # Si no se seleccionó departamento, mostrar todas las localidades
-        localidades = sorted(df_filtrado_global['N_LOCALIDAD'].dropna().unique())
-        all_loc_option = "Todas las localidades"
-        
-        # Mostrar filtro de localidad en la segunda columna
-        with col2:
-            selected_loc = st.selectbox("Localidad:", [all_loc_option] + list(localidades), key="bco_loc_filter")
-        
-        if selected_loc != all_loc_option:
-            df_filtrado_global = df_filtrado_global[df_filtrado_global['N_LOCALIDAD'] == selected_loc]
-    
-    # Filtro de línea de préstamo en la tercera columna
-    with col3:
-        lineas_prestamo = sorted(df_filtrado_global['N_LINEA_PRESTAMO'].dropna().unique())
-        all_lineas_option = "Todas las líneas"
-        selected_linea = st.selectbox("Línea de préstamo:", [all_lineas_option] + list(lineas_prestamo), key="bco_linea_filter")
-    
-    if selected_linea != all_lineas_option:
-        df_filtrado_global = df_filtrado_global[df_filtrado_global['N_LINEA_PRESTAMO'] == selected_linea]
-    
-    st.markdown('</div>', unsafe_allow_html=True)
+    # Renderizar filtros y obtener datos filtrados
+    df_filtrado, selected_dpto, selected_loc, selected_linea = render_filters(df_filtrado_global)
     
     # Mostrar información de actualización de datos
     if dates and any(dates.values()):
@@ -168,18 +196,18 @@ def show_bco_gente_dashboard(data, dates):
     with tab_global:
         # Mostrar los datos filtrados en la pestaña GLOBAL
         if has_global_data:
-            mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero)
+            with st.spinner("Cargando visualizaciones globales..."):
+                mostrar_global(df_filtrado, tooltips_categorias, df_recupero)
         else:
             st.warning("No hay datos globales disponibles para mostrar.")
     
     with tab_recupero:
         # Mostrar los datos de recupero en la pestaña RECUPERO
         if has_recupero_data and df_recupero is not None and not df_recupero.empty:
-            mostrar_recupero(df_recupero, df_localidad_municipio, geojson_data)
+            with st.spinner("Cargando visualizaciones de recupero..."):
+                mostrar_recupero(df_recupero, df_localidad_municipio, geojson_data)
         else:
             st.info("No hay datos de recupero disponibles para mostrar.")
-
-
 
 def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
     """
@@ -195,6 +223,42 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
         df_filtrado_global['N_ESTADO_PRESTAMO'] = df_filtrado_global['N_ESTADO_PRESTAMO'].astype(str)
     except Exception as e:
         st.error(f"Error al convertir N_ESTADO_PRESTAMO a string: {e}")
+    
+    # Realizar el cruce entre df_filtrado_global y df_recupero si está disponible
+    if df_recupero is not None and not df_recupero.empty and 'NRO_SOLICITUD' in df_recupero.columns:
+        try:
+            # Verificar si existen las columnas necesarias en df_recupero
+            required_columns = ['NRO_SOLICITUD', 'DEUDA', 'DEUDA_NO_VENCIDA', 'MONTO_OTORGADO']
+            missing_columns = [col for col in required_columns if col not in df_recupero.columns]
+            
+            if not missing_columns:
+                # Seleccionar solo las columnas necesarias de df_recupero para el merge
+                df_recupero_subset = df_recupero[required_columns].copy()
+                
+                # Renombrar DEUDA como DEUDA_VENCIDA
+                df_recupero_subset = df_recupero_subset.rename(columns={'DEUDA': 'DEUDA_VENCIDA'})
+                
+                # Realizar el merge (left join)
+                df_filtrado_global = pd.merge(
+                    df_filtrado_global,
+                    df_recupero_subset,
+                    on='NRO_SOLICITUD',
+                    how='left'
+                )
+                
+                # Rellenar valores NaN con 0
+                for col in ['DEUDA_VENCIDA', 'DEUDA_NO_VENCIDA', 'MONTO_OTORGADO']:
+                    df_filtrado_global[col] = df_filtrado_global[col].fillna(0)
+                
+                # Añadir campos calculados
+                df_filtrado_global['DEUDA_A_RECUPERAR'] = df_filtrado_global['DEUDA_VENCIDA'] + df_filtrado_global['DEUDA_NO_VENCIDA']
+                df_filtrado_global['RECUPERADO'] = df_filtrado_global['MONTO_OTORGADO'] - df_filtrado_global['DEUDA_A_RECUPERAR']
+                
+                st.success("Se ha realizado el cruce de datos con información de deuda y recupero.")
+            else:
+                st.warning(f"No se pudo realizar el cruce con datos de recupero. Faltan columnas: {', '.join(missing_columns)}")
+        except Exception as e:
+            st.warning(f"Error al realizar el cruce con datos de recupero: {str(e)}")
     
     # Crear el conteo de estados
     try:
@@ -221,7 +285,7 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
     # Línea divisoria en gris claro
     st.markdown("<hr style='border: 2px solid #cccccc;'>", unsafe_allow_html=True)
     
-      # Nueva tabla: Conteo de Préstamos por Línea y Estado
+    # Nueva tabla: Conteo de Préstamos por Línea y Estado
     st.subheader("Conteo de Préstamos por Línea y Estado")
     
     try:
@@ -445,11 +509,56 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
             # Agregar columna de total para las categorías seleccionadas
             pivot_df_filtered['Total'] = pivot_df_filtered[selected_categorias].sum(axis=1)
             
-            # Agregar fila de totales
-            totales = pivot_df_filtered[selected_categorias + ['Total']].sum()
-            totales_row = pd.DataFrame([['Total', 'Total'] + totales.values.tolist()], 
-                                      columns=['N_DEPARTAMENTO', 'N_LOCALIDAD'] + selected_categorias + ['Total'])
-            pivot_df_filtered = pd.concat([pivot_df_filtered, totales_row], ignore_index=True)
+            # Agregar información de deuda y recupero si está disponible
+            if all(col in df_filtrado_global.columns for col in ['DEUDA_VENCIDA', 'DEUDA_NO_VENCIDA', 'DEUDA_A_RECUPERAR', 'RECUPERADO']):
+                try:
+                    # Crear un DataFrame de agregación por departamento y localidad
+                    deuda_por_localidad = df_filtrado_global.groupby(['N_DEPARTAMENTO', 'N_LOCALIDAD']).agg({
+                        'DEUDA_VENCIDA': 'sum',
+                        'DEUDA_NO_VENCIDA': 'sum',
+                        'DEUDA_A_RECUPERAR': 'sum',
+                        'RECUPERADO': 'sum',
+                        'MONTO_OTORGADO': 'sum'
+                    }).reset_index()
+                    
+                    # Hacer merge con el pivot_df_filtered
+                    pivot_df_filtered = pd.merge(
+                        pivot_df_filtered,
+                        deuda_por_localidad,
+                        on=['N_DEPARTAMENTO', 'N_LOCALIDAD'],
+                        how='left'
+                    )
+                    
+                    # Rellenar valores NaN con 0
+                    for col in ['DEUDA_VENCIDA', 'DEUDA_NO_VENCIDA', 'DEUDA_A_RECUPERAR', 'RECUPERADO', 'MONTO_OTORGADO']:
+                        pivot_df_filtered[col] = pivot_df_filtered[col].fillna(0)
+                    
+                    # Calcular totales para las nuevas columnas
+                    totales_deuda = {
+                        'DEUDA_VENCIDA': pivot_df_filtered['DEUDA_VENCIDA'].sum(),
+                        'DEUDA_NO_VENCIDA': pivot_df_filtered['DEUDA_NO_VENCIDA'].sum(),
+                        'DEUDA_A_RECUPERAR': pivot_df_filtered['DEUDA_A_RECUPERAR'].sum(),
+                        'RECUPERADO': pivot_df_filtered['RECUPERADO'].sum(),
+                        'MONTO_OTORGADO': pivot_df_filtered['MONTO_OTORGADO'].sum()
+                    }
+                    
+                    # Actualizar la fila de totales con los nuevos valores
+                    totales = pivot_df_filtered[selected_categorias + ['Total']].sum()
+                    totales_row = pd.DataFrame([['Total', 'Total'] + totales.values.tolist() + list(totales_deuda.values())], 
+                                              columns=['N_DEPARTAMENTO', 'N_LOCALIDAD'] + selected_categorias + ['Total'] + list(totales_deuda.keys()))
+                    
+                    # Eliminar la última fila (totales anteriores) y agregar la nueva fila de totales
+                    pivot_df_filtered = pivot_df_filtered[:-1]
+                    pivot_df_filtered = pd.concat([pivot_df_filtered, totales_row], ignore_index=True)
+                    
+                except Exception as e:
+                    st.warning(f"Error al agregar información de deuda: {str(e)}")
+            else:
+                # Agregar fila de totales sin información de deuda
+                totales = pivot_df_filtered[selected_categorias + ['Total']].sum()
+                totales_row = pd.DataFrame([['Total', 'Total'] + totales.values.tolist()], 
+                                          columns=['N_DEPARTAMENTO', 'N_LOCALIDAD'] + selected_categorias + ['Total'])
+                pivot_df_filtered = pd.concat([pivot_df_filtered, totales_row], ignore_index=True)
             
             # Aplicar estilo a la tabla usando pandas Styler
             def highlight_totals(val):
@@ -463,26 +572,75 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
             
             # Crear objeto Styler
             styled_df = pivot_df_filtered.style \
-                .applymap(highlight_totals, subset=['N_DEPARTAMENTO', 'N_LOCALIDAD']) \
-                .apply(highlight_total_rows, axis=1, subset=selected_categorias + ['Total']) \
+                .applymap(highlight_totals, subset=['N_DEPARTAMENTO', 'N_LOCALIDAD'])
+            
+            # Aplicar formato a las columnas numéricas
+            numeric_columns = selected_categorias + ['Total']
+            if all(col in pivot_df_filtered.columns for col in ['DEUDA_VENCIDA', 'DEUDA_NO_VENCIDA', 'DEUDA_A_RECUPERAR', 'RECUPERADO', 'MONTO_OTORGADO']):
+                numeric_columns += ['DEUDA_VENCIDA', 'DEUDA_NO_VENCIDA', 'DEUDA_A_RECUPERAR', 'RECUPERADO', 'MONTO_OTORGADO']
+                
+                # Aplicar formato de moneda a las columnas de deuda y recupero
+                styled_df = styled_df.format({
+                    'DEUDA_VENCIDA': '${:,.2f}',
+                    'DEUDA_NO_VENCIDA': '${:,.2f}',
+                    'DEUDA_A_RECUPERAR': '${:,.2f}',
+                    'RECUPERADO': '${:,.2f}',
+                    'MONTO_OTORGADO': '${:,.2f}'
+                })
+            
+            styled_df = styled_df \
+                .apply(highlight_total_rows, axis=1, subset=numeric_columns) \
                 .format({col: '{:,.0f}' for col in selected_categorias + ['Total']}) \
                 .background_gradient(subset=selected_categorias, cmap='Blues', low=0.1, high=0.9) \
-                .set_properties(**{'text-align': 'right'}, subset=selected_categorias + ['Total']) \
+                .set_properties(**{'text-align': 'right'}, subset=numeric_columns) \
                 .set_properties(**{'text-align': 'left'}, subset=['N_DEPARTAMENTO', 'N_LOCALIDAD'])
+            
+            # Configurar las columnas para st.dataframe
+            column_config = {
+                "N_DEPARTAMENTO": st.column_config.TextColumn("Departamento"),
+                "N_LOCALIDAD": st.column_config.TextColumn("Localidad"),
+                "Total": st.column_config.NumberColumn(
+                    "Total",
+                    help="Suma total de todas las categorías seleccionadas"
+                )
+            }
+            
+            # Añadir configuración para las columnas de deuda si existen
+            if all(col in pivot_df_filtered.columns for col in ['DEUDA_VENCIDA', 'DEUDA_NO_VENCIDA', 'DEUDA_A_RECUPERAR', 'RECUPERADO', 'MONTO_OTORGADO']):
+                column_config.update({
+                    "DEUDA_VENCIDA": st.column_config.NumberColumn(
+                        "DEUDA VENCIDA",
+                        help="Monto de deuda vencida",
+                        format="$%.2f"
+                    ),
+                    "DEUDA_NO_VENCIDA": st.column_config.NumberColumn(
+                        "DEUDA NO VENCIDA",
+                        help="Monto de deuda no vencida",
+                        format="$%.2f"
+                    ),
+                    "DEUDA_A_RECUPERAR": st.column_config.NumberColumn(
+                        "DEUDA A RECUPERAR",
+                        help="Suma de deuda vencida y no vencida",
+                        format="$%.2f"
+                    ),
+                    "RECUPERADO": st.column_config.NumberColumn(
+                        "RECUPERADO",
+                        help="Monto otorgado menos deuda a recuperar",
+                        format="$%.2f"
+                    ),
+                    "MONTO_OTORGADO": st.column_config.NumberColumn(
+                        "MONTO OTORGADO",
+                        help="Monto total otorgado",
+                        format="$%.2f"
+                    )
+                })
             
             # Mostrar la tabla con st.dataframe
             st.dataframe(
                 styled_df,
                 use_container_width=True,
                 hide_index=True,
-                column_config={
-                    "N_DEPARTAMENTO": st.column_config.TextColumn("Departamento"),
-                    "N_LOCALIDAD": st.column_config.TextColumn("Localidad"),
-                    "Total": st.column_config.NumberColumn(
-                        "Total",
-                        help="Suma total de todas las categorías seleccionadas"
-                    )
-                },
+                column_config=column_config,
                 height=400
             )
             

@@ -89,23 +89,19 @@ def calculate_cupo(cantidad_empleados, empleador, adherido):
     
     return 0
 
-def show_empleo_dashboard(data, dates):
+def load_and_preprocess_data(data, dates=None):
     """
-    Muestra el dashboard de PROGRAMAS DE EMPLEO.
+    Carga y preprocesa los datos necesarios para el dashboard.
     
     Args:
         data: Diccionario de dataframes cargados desde GitLab
         dates: Diccionario de fechas de actualización de los archivos
+        
+    Returns:
+        Tupla con los dataframes procesados y flags de disponibilidad
     """
-    # Los estilos ahora se cargan desde app.py
-    
-    if not data:
-        st.info("No se pudieron cargar los datos de PROGRAMAS DE EMPLEO.")
-        return
-    
-    # Extraer los dataframes necesarios
-    try:
-        # Cargar los datasets necesarios
+    with st.spinner("Cargando y procesando datos de empleo..."):
+        # Extraer los dataframes necesarios
         df_inscriptos_raw = data.get('VT_REPORTES_PPP_MAS26.parquet')
         geojson_data = data.get('capa_departamentos_2010.geojson')
         
@@ -117,6 +113,13 @@ def show_empleo_dashboard(data, dates):
         df_liquidacion = data.get('VT_REPORTE_LIQUIDACION_LOCALIDAD.parquet')
         has_liquidacion = df_liquidacion is not None and not df_liquidacion.empty
         
+        # Cargar dataset de población
+        df_poblacion = data.get('POBLACION.parquet')
+        has_poblacion = df_poblacion is not None and not df_poblacion.empty
+        
+        # Verificar si hay datos geojson
+        has_geojson = geojson_data is not None
+        
         # Solo mostrar mensaje si hay error al cargar el dataset
         if not has_liquidacion:
             st.warning("No se pudo cargar el dataset de liquidación por localidad.")
@@ -124,8 +127,8 @@ def show_empleo_dashboard(data, dates):
         # Verificar que los datos estén disponibles
         if df_inscriptos_raw is None or df_inscriptos_raw.empty:
             st.error("No se pudieron cargar los datos de inscripciones.")
-            return
-            
+            return None, None, None, None, False, False, False, False
+        
         # Filtrar para excluir el estado "ADHERIDO"
         if 'N_ESTADO_FICHA' in df_inscriptos_raw.columns:
             df_inscriptos = df_inscriptos_raw[df_inscriptos_raw['N_ESTADO_FICHA'] != "ADHERIDO"].copy()
@@ -157,17 +160,17 @@ def show_empleo_dashboard(data, dates):
         )
         
         # Obtener la fecha de última actualización
-        file_dates = [dates.get(k) for k in dates.keys() if 'VT_REPORTES_PPP_MAS26.parquet' in k]
-        latest_date = file_dates[0] if file_dates else None
-        
-        if latest_date:
-            latest_date = pd.to_datetime(latest_date)
-            st.markdown(f"""
-                <div style="background-color:#e9ecef; padding:10px; border-radius:5px; margin-bottom:20px; font-size:0.9em;">
-                    <i class="fas fa-sync-alt"></i> <strong>Última actualización:</strong> {latest_date.strftime('%d/%m/%Y')}
-                </div>
-            """, unsafe_allow_html=True)
-   
+        if dates:
+            file_dates = [dates.get(k) for k in dates.keys() if 'VT_REPORTES_PPP_MAS26.parquet' in k]
+            latest_date = file_dates[0] if file_dates else None
+            
+            if latest_date:
+                latest_date = pd.to_datetime(latest_date)
+                st.markdown(f"""
+                    <div style="background-color:#e9ecef; padding:10px; border-radius:5px; margin-bottom:20px; font-size:0.9em;">
+                        <i class="fas fa-sync-alt"></i> <strong>Última actualización:</strong> {latest_date.strftime('%d/%m/%Y')}
+                    </div>
+                """, unsafe_allow_html=True)
         
         # Preparar datos para los filtros
         # Limpiar y preparar los datos
@@ -187,23 +190,113 @@ def show_empleo_dashboard(data, dates):
         else:
             df['PROGRAMA'] = "No especificado"
             
-        # Asegurar que las columnas necesarias existan
+        # Asegúrate de que las columnas necesarias existan
         required_columns = ['N_DEPARTAMENTO', 'N_LOCALIDAD', 'ID_FICHA', 'N_ESTADO_FICHA', 'IDETAPA']
         missing_columns = [col for col in required_columns if col not in df.columns]
         
         if missing_columns:
             st.warning(f"Faltan las siguientes columnas en los datos: {', '.join(missing_columns)}")
             st.write("Columnas disponibles:", df.columns.tolist())
-            return
+            return None, None, None, None, False, False, False, False
         
+        has_fichas = True  # Si llegamos hasta aquí, tenemos datos de fichas
+        
+        return df, df_empresas, df_poblacion, geojson_data, has_fichas, has_empresas, has_poblacion, has_geojson
+
+def render_filters(df_inscriptos):
+    """
+    Renderiza los filtros de la interfaz de usuario.
+    
+    Args:
+        df_inscriptos: DataFrame con los datos de inscripciones
+        
+    Returns:
+        Tupla con el DataFrame filtrado y los filtros seleccionados
+    """
+    # Contenedor para filtros
+    st.markdown('<div class="filter-container">', unsafe_allow_html=True)
+    st.markdown('<h3 style="font-size: 18px; margin-top: 0;">Filtros</h3>', unsafe_allow_html=True)
+    
+    # Crear dos columnas para los filtros
+    col1, col2 = st.columns(2)
+    
+    # Filtro de departamento en la primera columna
+    with col1:
+        departamentos = sorted(df_inscriptos['N_DEPARTAMENTO'].dropna().unique())
+        all_dpto_option = "Todos los departamentos"
+        selected_dpto = st.selectbox("Departamento:", [all_dpto_option] + list(departamentos))
+    
+    # Filtrar por departamento seleccionado
+    if selected_dpto != all_dpto_option:
+        df_filtered = df_inscriptos[df_inscriptos['N_DEPARTAMENTO'] == selected_dpto]
+        # Filtro de localidad (dependiente del departamento)
+        localidades = sorted(df_filtered['N_LOCALIDAD'].dropna().unique())
+        all_loc_option = "Todas las localidades"
+        
+        # Mostrar filtro de localidad en la segunda columna
+        with col2:
+            selected_loc = st.selectbox("Localidad:", [all_loc_option] + list(localidades))
+        
+        if selected_loc != all_loc_option:
+                if isinstance(selected_loc, str) and selected_loc.isdigit():
+                    # Si la localidad seleccionada es un número en formato string
+                    selected_loc_int = int(selected_loc)
+                    df_filtered = df_filtered[df_filtered['N_LOCALIDAD'].fillna(-1).astype(int) == selected_loc_int]
+                else:
+                    # Si la localidad seleccionada es un string no numérico
+                    df_filtered = df_filtered[df_filtered['N_LOCALIDAD'].fillna('').astype(str) == str(selected_loc)]
+    else:
+        df_filtered = df_inscriptos
+        # Si no se seleccionó departamento, mostrar todas las localidades
+        localidades = sorted(df_inscriptos['N_LOCALIDAD'].dropna().unique())
+        all_loc_option = "Todas las localidades"
+        
+        # Mostrar filtro de localidad en la segunda columna
+        with col2:
+            selected_loc = st.selectbox("Localidad:", [all_loc_option] + list(localidades))
+        
+        if selected_loc != all_loc_option:
+            df_filtered = df_filtered[df_filtered['N_LOCALIDAD'] == selected_loc]
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Mostrar resumen de filtros aplicados
+    filtros_aplicados = []
+    if selected_dpto != all_dpto_option:
+        filtros_aplicados.append(f"Departamento: {selected_dpto}")
+    if selected_loc != all_loc_option:
+        filtros_aplicados.append(f"Localidad: {selected_loc}")
+        
+    if filtros_aplicados:
+        st.markdown(f"""
+            <div style="background-color:#e9ecef; padding:10px; border-radius:5px; margin-bottom:20px; font-size:0.9em;">
+                <strong>Filtros aplicados:</strong> {' | '.join(filtros_aplicados)}
+            </div>
+        """, unsafe_allow_html=True)
+    
+    return df_filtered, selected_dpto, selected_loc, all_dpto_option, all_loc_option
+
+def render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has_empresas, has_geojson):
+    """
+    Renderiza el dashboard principal con los datos procesados.
+    
+    Args:
+        df_inscriptos: DataFrame con los datos de inscripciones
+        df_empresas: DataFrame con los datos de empresas
+        df_poblacion: DataFrame con los datos de población
+        geojson_data: Datos GeoJSON para visualizaciones geográficas
+        has_empresas: Booleano que indica si hay datos de empresas disponibles
+        has_geojson: Booleano que indica si hay datos geojson disponibles
+    """
+    with st.spinner("Generando visualizaciones..."):
         # Calcular KPIs importantes antes de aplicar filtros
-        total_beneficiarios = df[df['N_ESTADO_FICHA'] == "BENEFICIARIO"].shape[0]
-        total_beneficiarios_cti = df[df['N_ESTADO_FICHA'] == "BENEFICIARIO- CTI"].shape[0]
+        total_beneficiarios = df_inscriptos[df_inscriptos['N_ESTADO_FICHA'] == "BENEFICIARIO"].shape[0]
+        total_beneficiarios_cti = df_inscriptos[df_inscriptos['N_ESTADO_FICHA'] == "BENEFICIARIO- CTI"].shape[0]
         total_general = total_beneficiarios + total_beneficiarios_cti
         
         # Calcular beneficiarios por zona
-        beneficiarios_zona_favorecida = df[(df['N_ESTADO_FICHA'].isin(["BENEFICIARIO", "BENEFICIARIO- CTI"])) & 
-                                          (df['ZONA'] == 'ZONA FAVORECIDA')].shape[0]
+        beneficiarios_zona_favorecida = df_inscriptos[(df_inscriptos['N_ESTADO_FICHA'].isin(["BENEFICIARIO", "BENEFICIARIO- CTI"])) & 
+                                        (df_inscriptos['ZONA'] == 'ZONA FAVORECIDA')].shape[0]
         
         # Mostrar KPIs en la parte superior
         st.markdown('<div class="kpi-container">', unsafe_allow_html=True)
@@ -235,72 +328,14 @@ def show_empleo_dashboard(data, dates):
         display_kpi_row(kpi_data, num_columns=4)
         st.markdown('</div>', unsafe_allow_html=True)
         
+        # Aplicar filtros a los datos
+        df_filtered, selected_dpto, selected_loc, all_dpto_option, all_loc_option = render_filters(df_inscriptos)
+        
         # Crear pestañas para organizar el contenido
         tab_beneficiarios, tab_empresas = st.tabs(["Beneficiarios", "Empresas"])
         
         # Contenido de la pestaña Beneficiarios
         with tab_beneficiarios:
-            # Contenedor para filtros
-            st.markdown('<div class="filter-container">', unsafe_allow_html=True)
-            st.markdown('<h3 style="font-size: 18px; margin-top: 0;">Filtros</h3>', unsafe_allow_html=True)
-            
-            # Crear dos columnas para los filtros
-            col1, col2 = st.columns(2)
-            
-            # Filtro de departamento en la primera columna
-            with col1:
-                departamentos = sorted(df['N_DEPARTAMENTO'].dropna().unique())
-                all_dpto_option = "Todos los departamentos"
-                selected_dpto = st.selectbox("Departamento:", [all_dpto_option] + list(departamentos))
-            
-            # Filtrar por departamento seleccionado
-            if selected_dpto != all_dpto_option:
-                df_filtered = df[df['N_DEPARTAMENTO'] == selected_dpto]
-                # Filtro de localidad (dependiente del departamento)
-                localidades = sorted(df_filtered['N_LOCALIDAD'].dropna().unique())
-                all_loc_option = "Todas las localidades"
-                
-                # Mostrar filtro de localidad en la segunda columna
-                with col2:
-                    selected_loc = st.selectbox("Localidad:", [all_loc_option] + list(localidades))
-                
-                if selected_loc != all_loc_option:
-                        if isinstance(selected_loc, str) and selected_loc.isdigit():
-                            # Si la localidad seleccionada es un número en formato string
-                            selected_loc_int = int(selected_loc)
-                            df_filtered = df_filtered[df_filtered['N_LOCALIDAD'].fillna(-1).astype(int) == selected_loc_int]
-                        else:
-                            # Si la localidad seleccionada es un string no numérico
-                            df_filtered = df_filtered[df_filtered['N_LOCALIDAD'].fillna('').astype(str) == str(selected_loc)]
-            else:
-                df_filtered = df
-                # Si no se seleccionó departamento, mostrar todas las localidades
-                localidades = sorted(df['N_LOCALIDAD'].dropna().unique())
-                all_loc_option = "Todas las localidades"
-                
-                # Mostrar filtro de localidad en la segunda columna
-                with col2:
-                    selected_loc = st.selectbox("Localidad:", [all_loc_option] + list(localidades))
-                
-                if selected_loc != all_loc_option:
-                    df_filtered = df_filtered[df_filtered['N_LOCALIDAD'] == selected_loc]
-            
-            st.markdown('</div>', unsafe_allow_html=True)
-            
-            # Mostrar resumen de filtros aplicados
-            filtros_aplicados = []
-            if selected_dpto != all_dpto_option:
-                filtros_aplicados.append(f"Departamento: {selected_dpto}")
-            if selected_loc != all_loc_option:
-                filtros_aplicados.append(f"Localidad: {selected_loc}")
-                
-            if filtros_aplicados:
-                st.markdown(f"""
-                    <div style="background-color:#e9ecef; padding:10px; border-radius:5px; margin-bottom:20px; font-size:0.9em;">
-                        <strong>Filtros aplicados:</strong> {' | '.join(filtros_aplicados)}
-                    </div>
-                """, unsafe_allow_html=True)
-            
             # Conteo de ID_FICHA por PROGRAMA y ESTADO_FICHA
             pivot_table = df_filtered.pivot_table(
                 index='PROGRAMA',
@@ -572,12 +607,12 @@ def show_empleo_dashboard(data, dates):
                 )
             
             # Mostrar distribución geográfica si hay datos geojson y no hay filtros específicos
-            if geojson_data is not None and selected_dpto == all_dpto_option:
+            if has_geojson and selected_dpto == all_dpto_option:
                 st.markdown('<h3 style="font-size: 20px; margin: 20px 0 15px 0;">Distribución Geográfica</h3>', unsafe_allow_html=True)
                 
                 # Filtrar solo beneficiarios
                 beneficiarios_estados = ["BENEFICIARIO", "BENEFICIARIO- CTI"]
-                df_beneficiarios = df[df['N_ESTADO_FICHA'].isin(beneficiarios_estados)]
+                df_beneficiarios = df_inscriptos[df_inscriptos['N_ESTADO_FICHA'].isin(beneficiarios_estados)]
                 
                 if df_beneficiarios.empty:
                     st.warning("No hay beneficiarios para mostrar en el mapa.")
@@ -618,6 +653,7 @@ def show_empleo_dashboard(data, dates):
                         center={"lat": -31.4, "lon": -64.2}  # Córdoba, Argentina
                     )
                     display_map(fig)
+        
         with tab_empresas:
             if has_empresas:
                 show_companies(df_empresas, geojson_data)
@@ -626,9 +662,7 @@ def show_empleo_dashboard(data, dates):
                     <div class="info-box status-warning">
                         <strong>Información:</strong> No hay datos de empresas disponibles.
                     </div>
-            """, unsafe_allow_html=True)
-    except Exception as e:
-        st.error(f"Error al procesar los datos: {str(e)}")
+                """, unsafe_allow_html=True)
 
 def show_companies(df_empresas, geojson_data):
     # Verificar si los módulos de mapeo están disponibles
@@ -1037,3 +1071,25 @@ def show_inscriptions(df_inscriptos, df_poblacion, geojson_data, file_date):
                 <strong>Información:</strong> Se mostrarán los datos disponibles: {str(e)}
             </div>
         """, unsafe_allow_html=True)
+
+def show_empleo_dashboard(data, dates=None):
+    """
+    Muestra el dashboard de programas de empleo.
+    
+    Args:
+        data: Diccionario de dataframes cargados desde GitLab
+        dates: Diccionario de fechas de actualización de los archivos
+    """
+    try:
+        # Cargar y preprocesar datos
+        df_inscriptos, df_empresas, df_poblacion, geojson_data, has_fichas, has_empresas, has_poblacion, has_geojson = load_and_preprocess_data(data, dates)
+        
+        # Verificar si hay datos de fichas
+        if not has_fichas:
+            return
+        
+        # Renderizar el dashboard principal
+        render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has_empresas, has_geojson)
+    
+    except Exception as e:
+        st.error(f"Error al procesar los datos: {str(e)}")
