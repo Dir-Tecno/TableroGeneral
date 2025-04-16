@@ -38,44 +38,52 @@ jobs:
             echo "❌ Authentication failed. Response: $response"
             exit 1
           fi
-          
-          # ... (previous parts of the script remain the same up to JWT validation) ...
-          
+                    
           # If we reach here, authentication was successful
           echo "✅ Successfully obtained JWT token"
+          # --- Debug: Show beginning of JWT ---
+          echo "JWT (start): ${jwt:0:10}..." 
+          # ------------------------------------
 
-          # --- Clean potential hidden characters from IDs ---
+          # --- Clean potential hidden characters from IDs AND URL ---
+          CLEAN_PORTAINER_URL=$(echo "$PORTAINER_URL" | tr -d '\r\n[:space:]')
           CLEAN_STACK_ID=$(echo "$STACK_ID" | tr -d '\r\n[:space:]')
           CLEAN_ENDPOINT_ID=$(echo "$ENDPOINT_ID" | tr -d '\r\n[:space:]')
-          # -------------------------------------------------
+          # -------------------------------------------------------
 
           # Trigger stack update with validation using cleaned IDs
-          if [ -z "$CLEAN_STACK_ID" ] || [ -z "$CLEAN_ENDPOINT_ID" ]; then
-            echo "❌ Missing or invalid Stack ID or Endpoint ID after cleaning. Check GitHub Secrets."
+          if [ -z "$CLEAN_STACK_ID" ] || [ -z "$CLEAN_ENDPOINT_ID" ] || [ -z "$CLEAN_PORTAINER_URL" ]; then
+            echo "❌ Missing or invalid URL, Stack ID or Endpoint ID after cleaning. Check GitHub Secrets."
             exit 1
           fi
           
           echo "Triggering redeploy of stack $CLEAN_STACK_ID..."
           # Print the cleaned URL
-          CONSTRUCTED_URL="$PORTAINER_URL/api/stacks/$CLEAN_STACK_ID/git/redeploy?endpointId=$CLEAN_ENDPOINT_ID"
+          CONSTRUCTED_URL="$CLEAN_PORTAINER_URL/api/stacks/$CLEAN_STACK_ID/git/redeploy?endpointId=$CLEAN_ENDPOINT_ID"
           echo "Constructed URL (Cleaned): $CONSTRUCTED_URL"
           
-          # --- Temporarily hardcode the URL for debugging ---
+          # --- Temporarily hardcode the URL for debugging using CLEAN_PORTAINER_URL ---
           echo "Attempting curl with hardcoded URL..."
-          HARDCODED_URL="$PORTAINER_URL/api/stacks/18/git/redeploy?endpointId=3" 
+          HARDCODED_URL="$CLEAN_PORTAINER_URL/api/stacks/18/git/redeploy?endpointId=3" 
           echo "Hardcoded URL: $HARDCODED_URL"
-          # --------------------------------------------------
+          # -------------------------------------------------------------------------
 
           # Use the HARDCODED URL in the curl command
+          # Added single quotes around the URL just in case, though double quotes should work
           curl -k -v -X POST \  
-            "$HARDCODED_URL" \
+            '$HARDCODED_URL' \ 
             -H "Authorization: Bearer $jwt" \
             -H "Content-Type: application/json"
           
           # Check curl exit status
           CURL_EXIT_CODE=$?
           if [ $CURL_EXIT_CODE -ne 0 ]; then
-            echo "❌ Final curl command failed with exit code $CURL_EXIT_CODE"
+            # Added more specific error message for URL issues
+            if [ $CURL_EXIT_CODE -eq 3 ]; then 
+              echo "❌ Final curl command failed with exit code 3 (URL Malformed). Check URL components and JWT."
+            else
+              echo "❌ Final curl command failed with exit code $CURL_EXIT_CODE"
+            fi
             exit $CURL_EXIT_CODE
           else
             echo "✅ Final curl command succeeded."
