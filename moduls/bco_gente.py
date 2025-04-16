@@ -35,7 +35,8 @@ def load_and_preprocess_data(data):
         # Verificar silenciosamente si los archivos existen
         has_global_data = df_global is not None and not df_global.empty
         has_recupero_data = df_recupero is not None and not df_recupero.empty
-        has_geojson_data = geojson_data is not None
+        has_geojson_data = geojson_data is not None and not geojson_data.empty
+        has_localidad_municipio_data = df_localidad_municipio is not None and not df_localidad_municipio.empty
         
         # Renombrar valores en N_LINEA_PRESTAMO
         if has_global_data and 'N_LINEA_PRESTAMO' in df_global.columns:
@@ -52,7 +53,64 @@ def load_and_preprocess_data(data):
             
             # Si existe la columna ID_LOCALIDAD, corregirla también
             if 'ID_LOCALIDAD' in df_global.columns:
-                df_global.loc[capital_mask, 'ID_LOCALIDAD'] = 1
+                df_global.loc[capital_mask, 'ID_LOCALIDAD'] = 2
+        
+        # Asegurarse de que N_ESTADO_PRESTAMO sea string
+        if has_global_data and 'N_ESTADO_PRESTAMO' in df_global.columns:
+            try:
+                df_global['N_ESTADO_PRESTAMO'] = df_global['N_ESTADO_PRESTAMO'].astype(str)
+            except Exception as e:
+                st.error(f"Error al convertir N_ESTADO_PRESTAMO a string: {e}")
+        
+        # Realizar el cruce entre df_global y df_recupero si ambos están disponibles
+        if has_global_data and has_recupero_data and 'NRO_SOLICITUD' in df_recupero.columns:
+            try:
+                # Verificar si existen las columnas necesarias en df_recupero
+                required_columns = ['NRO_SOLICITUD', 'DEUDA', 'DEUDA_NO_VENCIDA', 'MONTO_OTORGADO']
+                missing_columns = [col for col in required_columns if col not in df_recupero.columns]
+                
+                if not missing_columns:
+                    # Seleccionar solo las columnas necesarias de df_recupero para el merge
+                    df_recupero_subset = df_recupero[required_columns].copy()
+                    
+                    # Renombrar DEUDA como DEUDA_VENCIDA
+                    df_recupero_subset = df_recupero_subset.rename(columns={'DEUDA': 'DEUDA_VENCIDA'})
+                    
+                    # Convertir columnas numéricas a tipo float
+                    for col in ['DEUDA_VENCIDA', 'DEUDA_NO_VENCIDA', 'MONTO_OTORGADO']:
+                        df_recupero_subset[col] = pd.to_numeric(df_recupero_subset[col], errors='coerce')
+                    
+                    # Realizar el merge (left join)
+                    df_global = pd.merge(
+                        df_global,
+                        df_recupero_subset,
+                        on='NRO_SOLICITUD',
+                        how='left'
+                    )
+                    
+                    # Rellenar valores NaN con 0
+                    for col in ['DEUDA_VENCIDA', 'DEUDA_NO_VENCIDA', 'MONTO_OTORGADO']:
+                        df_global[col] = pd.to_numeric(df_global[col], errors='coerce').fillna(0)
+                    
+                    # Añadir campos calculados
+                    df_global['DEUDA_A_RECUPERAR'] = df_global['DEUDA_VENCIDA'] + df_global['DEUDA_NO_VENCIDA']
+                    df_global['RECUPERADO'] = df_global['MONTO_OTORGADO'] - df_global['DEUDA_A_RECUPERAR']
+                    
+                    st.success("Se ha realizado el cruce de datos con información de deuda y recupero.")
+                else:
+                    st.warning(f"No se pudo realizar el cruce con datos de recupero. Faltan columnas: {', '.join(missing_columns)}")
+            except Exception as e:
+                st.warning(f"Error al realizar el cruce con datos de recupero: {str(e)}")
+        
+        # Añadir la categoría a cada estado
+        if has_global_data and 'N_ESTADO_PRESTAMO' in df_global.columns:
+            # Crear la columna CATEGORIA basada en el estado del préstamo
+            df_global['CATEGORIA'] = 'Otros'
+            for categoria, estados in ESTADO_CATEGORIAS.items():
+                # Crear una máscara para los estados que pertenecen a esta categoría
+                mask = df_global['N_ESTADO_PRESTAMO'].isin(estados)
+                # Asignar la categoría a los registros que cumplen con la máscara
+                df_global.loc[mask, 'CATEGORIA'] = categoria
         
         # Filtrar registros con N_DEPARTAMENTO nulo o igual a "BURRUYACU"
         if has_global_data and 'N_DEPARTAMENTO' in df_global.columns:
@@ -75,8 +133,8 @@ def load_and_preprocess_data(data):
             
             # Verificar si todavía hay datos después del filtrado
             has_global_data = not df_global.empty
-        
-        return df_global, df_recupero, geojson_data, df_localidad_municipio, has_global_data, has_recupero_data, has_geojson_data
+
+        return df_global, df_recupero, geojson_data, df_localidad_municipio, has_global_data, has_recupero_data, has_geojson_data, has_localidad_municipio_data
 
 def render_filters(df_filtrado_global):
     """
@@ -159,19 +217,7 @@ def show_bco_gente_dashboard(data, dates):
     }
     
     # Cargar y preprocesar datos
-    df_global, df_recupero, geojson_data, df_localidad_municipio, has_global_data, has_recupero_data, has_geojson_data = load_and_preprocess_data(data)
-    
-    # Mostrar información de actualización de datos
-    if dates and any(dates.values()):
-        # Mostrar fecha de actualización si está disponible
-        for file_name, date_str in dates.items():
-            if 'vt_nomina_rep_dpto_localidad' in file_name.lower() and date_str:
-                try:
-                    date_obj = datetime.strptime(date_str, '%Y-%m-%d %H:%M:%S')
-                    st.info(f"Datos actualizados al: {date_obj.strftime('%d/%m/%Y')}")
-                    break
-                except:
-                    pass
+    df_global, df_recupero, geojson_data, df_localidad_municipio, has_global_data, has_recupero_data, has_geojson_data, has_localidad_municipio_data = load_and_preprocess_data(data)
     
     # Verificar que los datos globales existan antes de continuar
     if not has_global_data:
@@ -218,48 +264,6 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
         tooltips_categorias: Diccionario con tooltips para cada categoría
         df_recupero: DataFrame con datos de recupero para la serie histórica
     """
-    # Asegurarse de que N_ESTADO_PRESTAMO sea string
-    try:
-        df_filtrado_global['N_ESTADO_PRESTAMO'] = df_filtrado_global['N_ESTADO_PRESTAMO'].astype(str)
-    except Exception as e:
-        st.error(f"Error al convertir N_ESTADO_PRESTAMO a string: {e}")
-    
-    # Realizar el cruce entre df_filtrado_global y df_recupero si está disponible
-    if df_recupero is not None and not df_recupero.empty and 'NRO_SOLICITUD' in df_recupero.columns:
-        try:
-            # Verificar si existen las columnas necesarias en df_recupero
-            required_columns = ['NRO_SOLICITUD', 'DEUDA', 'DEUDA_NO_VENCIDA', 'MONTO_OTORGADO']
-            missing_columns = [col for col in required_columns if col not in df_recupero.columns]
-            
-            if not missing_columns:
-                # Seleccionar solo las columnas necesarias de df_recupero para el merge
-                df_recupero_subset = df_recupero[required_columns].copy()
-                
-                # Renombrar DEUDA como DEUDA_VENCIDA
-                df_recupero_subset = df_recupero_subset.rename(columns={'DEUDA': 'DEUDA_VENCIDA'})
-                
-                # Realizar el merge (left join)
-                df_filtrado_global = pd.merge(
-                    df_filtrado_global,
-                    df_recupero_subset,
-                    on='NRO_SOLICITUD',
-                    how='left'
-                )
-                
-                # Rellenar valores NaN con 0
-                for col in ['DEUDA_VENCIDA', 'DEUDA_NO_VENCIDA', 'MONTO_OTORGADO']:
-                    df_filtrado_global[col] = df_filtrado_global[col].fillna(0)
-                
-                # Añadir campos calculados
-                df_filtrado_global['DEUDA_A_RECUPERAR'] = df_filtrado_global['DEUDA_VENCIDA'] + df_filtrado_global['DEUDA_NO_VENCIDA']
-                df_filtrado_global['RECUPERADO'] = df_filtrado_global['MONTO_OTORGADO'] - df_filtrado_global['DEUDA_A_RECUPERAR']
-                
-                st.success("Se ha realizado el cruce de datos con información de deuda y recupero.")
-            else:
-                st.warning(f"No se pudo realizar el cruce con datos de recupero. Faltan columnas: {', '.join(missing_columns)}")
-        except Exception as e:
-            st.warning(f"Error al realizar el cruce con datos de recupero: {str(e)}")
-    
     # Crear el conteo de estados
     try:
         conteo_estados = (
@@ -284,8 +288,7 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
 
     # Línea divisoria en gris claro
     st.markdown("<hr style='border: 2px solid #cccccc;'>", unsafe_allow_html=True)
-    
-    # Nueva tabla: Conteo de Préstamos por Línea y Estado
+     # Nueva tabla: Conteo de Préstamos por Línea y Estado
     st.subheader("Conteo de Préstamos por Línea y Estado")
     
     try:
@@ -781,7 +784,6 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
     )
     
     st.plotly_chart(fig_torta)
-    
 
 def mostrar_recupero(df_recupero, df_localidad_municipio, geojson_data):
     """
