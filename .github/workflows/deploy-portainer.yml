@@ -39,24 +39,27 @@ jobs:
             exit 1
           fi
           
-          # ... (previous parts of the script remain the same) ...
-          
           # If we reach here, authentication was successful
           echo "✅ Successfully obtained JWT token"
 
-          # Trigger stack update with validation
-          if [ -z "$STACK_ID" ] || [ -z "$ENDPOINT_ID" ]; then
-            echo "❌ Missing Stack ID or Endpoint ID. Check GitHub Secrets."
+          # --- Clean potential hidden characters from IDs ---
+          CLEAN_STACK_ID=$(echo "$STACK_ID" | tr -d '\r\n[:space:]')
+          CLEAN_ENDPOINT_ID=$(echo "$ENDPOINT_ID" | tr -d '\r\n[:space:]')
+          # -------------------------------------------------
+
+          # Trigger stack update with validation using cleaned IDs
+          if [ -z "$CLEAN_STACK_ID" ] || [ -z "$CLEAN_ENDPOINT_ID" ]; then
+            echo "❌ Missing or invalid Stack ID or Endpoint ID after cleaning. Check GitHub Secrets."
             exit 1
           fi
           
-          echo "Triggering redeploy of stack $STACK_ID..."
-          # --- Add this line to print the constructed URL ---
-          echo "Constructed URL: $PORTAINER_URL/api/stacks/$STACK_ID/git/redeploy?endpointId=$ENDPOINT_ID"
-          # ----------------------------------------------------
-          # Added -v for verbose output on the redeploy step too
+          echo "Triggering redeploy of stack $CLEAN_STACK_ID..."
+          # Print the cleaned URL
+          CONSTRUCTED_URL="$PORTAINER_URL/api/stacks/$CLEAN_STACK_ID/git/redeploy?endpointId=$CLEAN_ENDPOINT_ID"
+          echo "Constructed URL (Cleaned): $CONSTRUCTED_URL"
+          
+          # Use the cleaned variables in the curl command
           curl -k -v -X POST \  
-            "$PORTAINER_URL/api/stacks/$STACK_ID/git/redeploy?endpointId=$ENDPOINT_ID" \
+            "$CONSTRUCTED_URL" \
             -H "Authorization: Bearer $jwt" \
             -H "Content-Type: application/json"
-
