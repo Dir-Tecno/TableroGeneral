@@ -15,6 +15,8 @@ ESTADO_CATEGORIAS = {
     "En proceso de pago": ["PAGO EMITIDO","IMPAGO"]
 }
 
+# ... existing code ...
+
 def load_and_preprocess_data(data):
     """
     Carga y preprocesa los datos necesarios para el dashboard.
@@ -35,16 +37,13 @@ def load_and_preprocess_data(data):
         # Verificar silenciosamente si los archivos existen
         has_global_data = df_global is not None and not df_global.empty
         has_recupero_data = df_recupero is not None and not df_recupero.empty
-        has_geojson_data = geojson_data is not None and not geojson_data.empty
-        has_localidad_municipio_data = df_localidad_municipio is not None and not df_localidad_municipio.empty
+        # Check if geojson_data was loaded (it might be bytes, dict, or None initially)
+        has_geojson_data = geojson_data is not None 
+        # Check if df_localidad_municipio (likely a string) is not None and not an empty string
+        has_localidad_municipio_data = df_localidad_municipio is not None and df_localidad_municipio != "" 
         
         # Renombrar valores en N_LINEA_PRESTAMO
         if has_global_data and 'N_LINEA_PRESTAMO' in df_global.columns:
-            # Reemplazar "L4." por "INICIAR EMPRENDIMIENTO"
-            df_global['N_LINEA_PRESTAMO'] = df_global['N_LINEA_PRESTAMO'].replace("L4.", "INICIAR EMPRENDIMIENTO")
-        
-        # Corregir localidades del departamento CAPITAL
-        if has_global_data and 'N_DEPARTAMENTO' in df_global.columns and 'N_LOCALIDAD' in df_global.columns:
             # Crear una máscara para identificar registros del departamento CAPITAL
             capital_mask = df_global['N_DEPARTAMENTO'] == 'CAPITAL'
             
@@ -790,39 +789,163 @@ def mostrar_recupero(df_recupero, df_localidad_municipio, geojson_data):
     Muestra los datos de recupero del Banco de la Gente.
     
     Args:
-        df_recupero: DataFrame con datos de recupero
-        df_localidad_municipio: DataFrame con datos de departamentos
-        geojson_data: Datos GeoJSON para visualización geográfica
+        df_recupero: DataFrame con datos de recupero (ya debería estar cruzado con df_global si es posible)
+        df_localidad_municipio: DataFrame con datos de departamentos (no usado directamente aquí, pero pasado)
+        geojson_data: Datos GeoJSON para visualización geográfica (no usado directamente aquí, pero pasado)
     """
     try:
         st.subheader("Análisis de Recupero de Créditos")
-        
-        # Mostrar información básica
-        st.info("Información básica de recupero")
-        
-        # Crear KPIs simples
-        col1, col2, col3 = st.columns(3)
-        
+
+        # --- Asegurar columnas numéricas ---
+        # Define numeric_cols here to be used later as well
+        numeric_cols = ['MONTO_OTORGADO', 'DEUDA_VENCIDA', 'DEUDA_NO_VENCIDA', 'DEUDA_A_RECUPERAR', 'RECUPERADO']
+        for col in numeric_cols:
+            if col in df_recupero.columns:
+                df_recupero[col] = pd.to_numeric(df_recupero[col], errors='coerce').fillna(0)
+            else:
+                 # Si la columna no existe (p.ej. el cruce falló), la creamos con ceros
+                 df_recupero[col] = 0
+        # ------------------------------------
+
+        # --- KPIs ---
+        st.info("Resumen General de Recupero")
+        col1, col2, col3, col4, col5 = st.columns(5)
+
         with col1:
-            st.metric("Total de Préstamos", f"{len(df_recupero):,}")
-        
+            st.metric("Préstamos Totales", f"{df_recupero.shape[0]:,}")
         with col2:
-            if 'MONTO_OTORGADO' in df_recupero.columns:
-                monto = df_recupero['MONTO_OTORGADO'].sum()
-                st.metric("Monto Total", f"${monto:,.2f}")
-            else:
-                st.metric("Monto Total", "No disponible")
-        
+            monto_otorgado_total = df_recupero['MONTO_OTORGADO'].sum()
+            st.metric("Monto Otorgado", f"${monto_otorgado_total:,.2f}")
         with col3:
-            if 'DEUDA' in df_recupero.columns:
-                deuda = df_recupero['DEUDA'].sum()
-                st.metric("Deuda Total", f"${deuda:,.2f}")
-            else:
-                st.metric("Deuda Total", "No disponible")
-        
-        # Mostrar una tabla simple con los primeros registros
-        st.subheader("Muestra de Datos")
-        st.dataframe(df_recupero.head(5))
-        
+            deuda_vencida_total = df_recupero['DEUDA_VENCIDA'].sum()
+            st.metric("Deuda Vencida", f"${deuda_vencida_total:,.2f}")
+        with col4:
+            deuda_a_recuperar_total = df_recupero['DEUDA_A_RECUPERAR'].sum()
+            st.metric("Deuda a Recuperar", f"${deuda_a_recuperar_total:,.2f}")
+        with col5:
+            recuperado_total = df_recupero['RECUPERADO'].sum()
+            st.metric("Monto Recuperado", f"${recuperado_total:,.2f}")
+        # -----------
+
+        # Línea divisoria
+        st.markdown("<hr style='border: 1px solid #cccccc;'>", unsafe_allow_html=True)
+
+        st.subheader("Detalle de Recupero por Localidad")
+
+        # --- Tabla Detallada ---
+        grouping_cols = ['N_DEPARTAMENTO', 'N_LOCALIDAD']
+
+        # Verificar si las columnas de agrupación existen
+        if all(col in df_recupero.columns for col in grouping_cols):
+
+            # Agrupar y agregar
+            df_agrupado = df_recupero.groupby(grouping_cols).agg(
+                Préstamos=('NRO_SOLICITUD', 'count'),
+                MONTO_OTORGADO=('MONTO_OTORGADO', 'sum'),
+                DEUDA_VENCIDA=('DEUDA_VENCIDA', 'sum'),
+                DEUDA_NO_VENCIDA=('DEUDA_NO_VENCIDA', 'sum'),
+                DEUDA_A_RECUPERAR=('DEUDA_A_RECUPERAR', 'sum'),
+                RECUPERADO=('RECUPERADO', 'sum')
+            ).reset_index()
+
+            # Calcular fila de totales
+            # Use numeric_cols defined earlier
+            totales = df_agrupado[numeric_cols + ['Préstamos']].sum()
+            # Usar 'Total' para N_DEPARTAMENTO y 'Total' para N_LOCALIDAD en la fila de totales
+            totales_row = pd.DataFrame([['Total', 'Total'] + totales.tolist()],
+                                       columns=grouping_cols + numeric_cols + ['Préstamos'])
+
+            # Concatenar datos con totales
+            df_display = pd.concat([df_agrupado, totales_row], ignore_index=True)
+
+            # --- Inicio: Aplicar Estilos ---
+            # Funciones de estilo (similares a mostrar_global)
+            def highlight_totals_recupero(val):
+                if val == 'Total':
+                    return 'background-color: #f2f2f2; font-weight: bold'
+                return ''
+
+            def highlight_total_rows_recupero(s):
+                # Comprobar si la primera o segunda columna es 'Total'
+                is_total_row = s.iloc[0] == 'Total' and s.iloc[1] == 'Total'
+                return ['background-color: #f2f2f2; font-weight: bold' if is_total_row else '' for _ in s]
+
+            # Crear objeto Styler
+            styled_df_recupero = df_display.style
+
+            # Aplicar resaltado a la fila de totales (usando la función específica)
+            # Usamos apply para filas/columnas
+            styled_df_recupero = styled_df_recupero.apply(highlight_total_rows_recupero, axis=1)
+
+            # Aplicar formato numérico y gradiente
+            columns_to_format_currency = numeric_cols # Columnas de moneda
+            columns_to_format_integer = ['Préstamos'] # Columnas enteras
+
+            styled_df_recupero = styled_df_recupero.format({col: '${:,.2f}' for col in columns_to_format_currency})
+            styled_df_recupero = styled_df_recupero.format({col: '{:,.0f}' for col in columns_to_format_integer})
+
+            # Aplicar gradiente a columnas numéricas (excluyendo Préstamos si se prefiere)
+            columns_for_gradient = numeric_cols # Podrías excluir alguna si quieres
+            styled_df_recupero = styled_df_recupero.background_gradient(
+                subset=columns_for_gradient,
+                cmap='Blues',
+                low=0.1,
+                high=0.9,
+                # El estilo de highlight_total_rows_recupero debería sobreescribir el gradiente para la fila total
+            )
+
+            # Establecer alineación
+            styled_df_recupero = styled_df_recupero.set_properties(**{'text-align': 'right'}, subset=columns_to_format_currency + columns_to_format_integer)
+            styled_df_recupero = styled_df_recupero.set_properties(**{'text-align': 'left'}, subset=grouping_cols)
+            # --- Fin: Aplicar Estilos ---
+
+
+            # Configuración de columnas para st.dataframe (similar a mostrar_global)
+            column_config = {
+                "N_DEPARTAMENTO": st.column_config.TextColumn("Departamento"),
+                "N_LOCALIDAD": st.column_config.TextColumn("Localidad"),
+                "Préstamos": st.column_config.NumberColumn(
+                    "Préstamos",
+                    format="%d"
+                ),
+                "MONTO_OTORGADO": st.column_config.NumberColumn(
+                    "Monto Otorgado",
+                    format="$%.2f"
+                ),
+                "DEUDA_VENCIDA": st.column_config.NumberColumn(
+                    "Deuda Vencida",
+                    format="$%.2f"
+                ),
+                "DEUDA_NO_VENCIDA": st.column_config.NumberColumn(
+                    "Deuda No Vencida",
+                    format="$%.2f"
+                ),
+                "DEUDA_A_RECUPERAR": st.column_config.NumberColumn(
+                    "Deuda a Recuperar",
+                    format="$%.2f"
+                ),
+                "RECUPERADO": st.column_config.NumberColumn(
+                    "Recuperado",
+                    format="$%.2f"
+                )
+            }
+
+            # Mostrar la tabla estilizada usando el objeto Styler
+            st.dataframe(
+                styled_df_recupero, # <--- Pasar el objeto Styler aquí
+                use_container_width=True,
+                hide_index=True,
+                column_config=column_config,
+                height=500 # Ajustar altura según necesidad
+            )
+        else:
+            st.warning("No se pueden agrupar los datos de recupero por localidad porque faltan las columnas 'N_DEPARTAMENTO' o 'N_LOCALIDAD'. Mostrando datos sin agrupar.")
+            # Mostrar tabla sin agrupar si faltan columnas (opcional)
+            # Asegurarse de que las columnas numéricas existan antes de mostrar
+            cols_to_show = [col for col in ['NRO_SOLICITUD'] + numeric_cols if col in df_recupero.columns]
+            st.dataframe(df_recupero[cols_to_show].head(10)) # Mostrar una muestra más grande
+
+        # ---------------------
+
     except Exception as e:
-        st.error(f"Error en recupero: {str(e)}")
+        st.error(f"Error al mostrar la pestaña de recupero: {str(e)}")
