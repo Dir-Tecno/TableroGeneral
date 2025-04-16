@@ -16,25 +16,41 @@ jobs:
           STACK_ID: ${{ secrets.PORTAINER_STACK_ID }}
           ENDPOINT_ID: ${{ secrets.PORTAINER_ENDPOINT_ID }}
         run: |
-          # Get JWT token with verbose output
-          echo "Attempting authentication with Portainer..."
-          response=$(curl -k -v -s -X POST "$PORTAINER_URL/api/auth" \
+          # Debug output for secrets
+          echo "Using Stack ID: $STACK_ID"
+          echo "Using Endpoint ID: $ENDPOINT_ID"
+          
+          # Get JWT token with error handling
+          echo "Attempting authentication..."
+          response=$(curl -k -s -X POST "$PORTAINER_URL/api/auth" \
             -H "Content-Type: application/json" \
             -d "{\"Username\":\"$PORTAINER_USER\",\"Password\":\"$PORTAINER_PASS\"}")
           
-          echo "Raw response: $response"
-          JWT=$(echo $response | jq -r '.jwt')
-          
-          if [ -z "$JWT" ]; then
-            echo "❌ Failed to get JWT token"
+          # Check if jq is available and parse JWT
+          if ! command -v jq &> /dev/null; then
+            echo "❌ jq command not found. Cannot parse JWT."
+            exit 1
+          fi
+          jwt=$(echo "$response" | jq -r '.jwt')
+
+          # Validate JWT - Moved this check *before* the success message
+          if [ -z "$jwt" ] || [ "$jwt" = "null" ]; then
+            echo "❌ Authentication failed. Response: $response"
             exit 1
           fi
           
+          # If we reach here, authentication was successful
           echo "✅ Successfully obtained JWT token"
+
+          # Trigger stack update with validation
+          if [ -z "$STACK_ID" ] || [ -z "$ENDPOINT_ID" ]; then
+            echo "❌ Missing Stack ID or Endpoint ID. Check GitHub Secrets."
+            exit 1
+          fi
           
-          # Trigger stack update
-          echo "Triggering stack update..."
-          curl -k -v -X POST \
+          echo "Triggering redeploy of stack $STACK_ID..."
+          # Added -v for verbose output on the redeploy step too
+          curl -k -v -X POST \  
             "$PORTAINER_URL/api/stacks/$STACK_ID/git/redeploy?endpointId=$ENDPOINT_ID" \
-            -H "Authorization: Bearer $JWT" \
+            -H "Authorization: Bearer $jwt" \
             -H "Content-Type: application/json"
