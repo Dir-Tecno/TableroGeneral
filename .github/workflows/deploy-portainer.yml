@@ -39,6 +39,8 @@ jobs:
             exit 1
           fi
           
+          # ... (previous parts of the script remain the same up to JWT validation) ...
+          
           # If we reach here, authentication was successful
           echo "✅ Successfully obtained JWT token"
 
@@ -58,8 +60,24 @@ jobs:
           CONSTRUCTED_URL="$PORTAINER_URL/api/stacks/$CLEAN_STACK_ID/git/redeploy?endpointId=$CLEAN_ENDPOINT_ID"
           echo "Constructed URL (Cleaned): $CONSTRUCTED_URL"
           
-          # Use the cleaned variables in the curl command
+          # --- Temporarily hardcode the URL for debugging ---
+          echo "Attempting curl with hardcoded URL..."
+          HARDCODED_URL="$PORTAINER_URL/api/stacks/18/git/redeploy?endpointId=3" 
+          echo "Hardcoded URL: $HARDCODED_URL"
+          # --------------------------------------------------
+
+          # Use the HARDCODED URL in the curl command
           curl -k -v -X POST \  
-            "$CONSTRUCTED_URL" \
+            "$HARDCODED_URL" \
             -H "Authorization: Bearer $jwt" \
             -H "Content-Type: application/json"
+          
+          # Check curl exit status
+          CURL_EXIT_CODE=$?
+          if [ $CURL_EXIT_CODE -ne 0 ]; then
+            echo "❌ Final curl command failed with exit code $CURL_EXIT_CODE"
+            exit $CURL_EXIT_CODE
+          else
+            echo "✅ Final curl command succeeded."
+          fi
+
