@@ -1,27 +1,29 @@
-name: Deploy to Portainer
+name: Trigger Portainer Build
 
 on:
   push:
-    branches: [ main ]
-  workflow_dispatch:  # Permite ejecutar el workflow manualmente desde GitHub
+    branches: [main]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy to Portainer
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.HOST }}
-          username: ${{ secrets.USERNAME }}
-          key: ${{ secrets.SSH_KEY }}
-          script: |
-            # Ir al directorio del proyecto
-            cd /home/lucasalvador/Reportes/TableroGeneral
-            
-            # Obtener los últimos cambios
-            git pull
-            
-            # Reconstruir y reiniciar el contenedor directamente
-            docker-compose build
-            docker-compose up -d
+      - name: Trigger Portainer Stack Update
+        env:
+          PORTAINER_URL: 'https://5.161.118.67:9443' 
+          PORTAINER_USER: ${{ secrets.PORTAINER_USER }}
+          PORTAINER_PASS: ${{ secrets.PORTAINER_PASS }}
+          STACK_ID: ${{ secrets.PORTAINER_STACK_ID }}
+          ENDPOINT_ID: ${{ secrets.PORTAINER_ENDPOINT_ID }}
+        run: |
+          # Get JWT token
+          JWT=$(curl -k -s -X POST "$PORTAINER_URL/api/auth" \
+            -H "Content-Type: application/json" \
+            -d "{\"Username\":\"$PORTAINER_USER\",\"Password\":\"$PORTAINER_PASS\"}" \
+            | jq -r '.jwt')
+
+          # Trigger stack update
+          curl -k -X POST \
+            "$PORTAINER_URL/api/stacks/$STACK_ID/git/redeploy?endpointId=$ENDPOINT_ID" \
+            -H "Authorization: Bearer $JWT" \
+            -H "Content-Type: application/json"
