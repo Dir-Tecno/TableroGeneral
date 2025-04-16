@@ -39,6 +39,8 @@ jobs:
             exit 1
           fi
           
+          # ... (previous parts of the script remain the same) ...
+          
           # If we reach here, authentication was successful
           echo "✅ Successfully obtained JWT token"
 
@@ -49,8 +51,12 @@ jobs:
           fi
           
           echo "Triggering redeploy of stack $STACK_ID..."
+          # --- Add this line to print the constructed URL ---
+          echo "Constructed URL: $PORTAINER_URL/api/stacks/$STACK_ID/git/redeploy?endpointId=$ENDPOINT_ID"
+          # ----------------------------------------------------
           # Added -v for verbose output on the redeploy step too
           curl -k -v -X POST \  
             "$PORTAINER_URL/api/stacks/$STACK_ID/git/redeploy?endpointId=$ENDPOINT_ID" \
             -H "Authorization: Bearer $jwt" \
             -H "Content-Type: application/json"
+
