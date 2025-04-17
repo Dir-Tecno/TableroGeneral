@@ -279,16 +279,12 @@ def render_filters(df_inscriptos):
 def render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has_empresas, has_geojson):
     """
     Renderiza el dashboard principal con los datos procesados.
-    
-    Args:
-        df_inscriptos: DataFrame con los datos de inscripciones
-        df_empresas: DataFrame con los datos de empresas
-        df_poblacion: DataFrame con los datos de población
-        geojson_data: Datos GeoJSON para visualizaciones geográficas
-        has_empresas: Booleano que indica si hay datos de empresas disponibles
-        has_geojson: Booleano que indica si hay datos geojson disponibles
     """
     with st.spinner("Generando visualizaciones..."):
+        # Mostrar columnas de df_inscriptos para depuración
+        st.markdown("### Columnas de df_inscriptos")
+        st.write(df_inscriptos.columns.tolist())
+
         # Calcular KPIs importantes antes de aplicar filtros
         total_beneficiarios = df_inscriptos[df_inscriptos['N_ESTADO_FICHA'] == "BENEFICIARIO"].shape[0]
         total_beneficiarios_cti = df_inscriptos[df_inscriptos['N_ESTADO_FICHA'] == "BENEFICIARIO- CTI"].shape[0]
@@ -619,40 +615,36 @@ def render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has
                     return
                 
                 # Contar beneficiarios por departamento
-                # Verificar si existe la columna ID_DPTO para relacionar con el GeoJSON
                 if 'ID_DPTO' in df_beneficiarios.columns:
-                    # Usar ID_DPTO para agrupar
                     df_mapa = df_beneficiarios.groupby('ID_DPTO').size().reset_index(name='Cantidad')
-                    
-                    # Convertir ID_DPTO a entero y luego a string para eliminar decimales
-                    df_mapa['ID_DPTO'] = df_mapa['ID_DPTO'].astype(int).astype(str)
-                    
+                    df_mapa['ID_DPTO'] = df_mapa['ID_DPTO'].astype(str)
                     id_field = 'ID_DPTO'
                 else:
-                    # Usar N_DEPARTAMENTO como alternativa
                     df_mapa = df_beneficiarios.groupby('N_DEPARTAMENTO').size().reset_index(name='Cantidad')
                     id_field = 'N_DEPARTAMENTO'
-                
-                # Mostrar tabla de datos para el mapa
-                st.write(f"Datos para el mapa (agrupados por {id_field}):")
-                st.dataframe(df_mapa)
-                
+
+                # Mostrar tabla de datos para el mapa antes de renderizar el mapa
+                st.markdown(f"### Vista previa de df_mapa (agrupado por {id_field})")
+                st.dataframe(df_mapa, use_container_width=True)
+
                 # Verificar si los módulos de mapeo están disponibles
                 if not is_mapping_available():
                     st.warning("La visualización de mapas no está disponible. Para habilitar esta función, instale los paquetes: folium, streamlit-folium y geopandas")
                     return
-                
-                # Crear y mostrar el mapa usando las funciones del módulo map_utils
+
+                # Crear y mostrar el mapa usando Plotly
                 with st.spinner("Generando mapa..."):
-                    fig = create_choropleth_map(
-                        df=df_mapa,
-                        geojson_data=geojson_data,
-                        location_field=id_field,
-                        color_field='Cantidad',
-                        title="Distribución de Beneficiarios por Departamento",
-                        center={"lat": -31.4, "lon": -64.2}  # Córdoba, Argentina
+                    fig = px.choropleth(
+                        df_mapa,
+                        geojson=geojson_data,
+                        locations='ID_DPTO',
+                        color='Cantidad',
+                        featureidkey="properties.CODDEPTO",
+                        projection="mercator",
+                        title="Distribución de Beneficiarios por Departamento"
                     )
-                    display_map(fig)
+                    fig.update_geos(fitbounds="locations", visible=False)
+                    st.plotly_chart(fig, use_container_width=True)
         
         with tab_empresas:
             if has_empresas:

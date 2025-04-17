@@ -76,44 +76,35 @@ def create_choropleth_map(df, geojson_data, location_field, color_field, title=N
         return None
         
     try:
-        # Cargar GeoJSON de manera segura
         geojson_dict = load_geojson(geojson_data)
         if geojson_dict is None:
             return None
-            
-        # Verificar que el DataFrame no esté vacío
+
         if df.empty:
             st.warning("No hay datos para mostrar en el mapa.")
             return None
-            
-        # Determinar la clave de relación en el GeoJSON
+
+        # Forzar el uso de ID_DPTO <-> CODDEPTO si ambos existen
+        feature_id_key = None
         if 'features' in geojson_dict and geojson_dict['features']:
             sample_props = geojson_dict['features'][0]['properties']
-            
-            # Buscar la clave que mejor coincida con location_field
-            feature_id_key = None
-            
-            # Primero intentar con CODDEPTO que es común en GeoJSON de Argentina
-            if 'CODDEPTO' in sample_props:
+            if 'CODDEPTO' in sample_props and 'ID_DPTO' in df.columns:
                 feature_id_key = 'properties.CODDEPTO'
-            # Luego intentar con otras claves comunes
-            elif 'ID' in sample_props:
-                feature_id_key = 'properties.ID'
-            elif 'id' in sample_props:
-                feature_id_key = 'properties.id'
-            elif 'NOMBRE' in sample_props and location_field == 'N_DEPARTAMENTO':
-                feature_id_key = 'properties.NOMBRE'
-            # Si no se encuentra ninguna clave, usar la primera clave disponible
+                location_field = 'ID_DPTO'
+                # Asegurar que ambos sean string
+                df['ID_DPTO'] = df['ID_DPTO'].astype(str)
+                for f in geojson_dict['features']:
+                    f['properties']['CODDEPTO'] = str(f['properties']['CODDEPTO'])
             else:
+                # Fallback automático (como antes)
                 first_key = list(sample_props.keys())[0]
                 feature_id_key = f'properties.{first_key}'
-                
-            st.info(f"Usando {feature_id_key} para relacionar con {location_field}")
-            
-            # Crear el mapa
+
+            st.info(f"Relacionando {location_field} (df) con {feature_id_key} (GeoJSON)")
+
             if center is None:
-                center = {"lat": -31.4, "lon": -64.2}  # Córdoba, Argentina
-                
+                center = {"lat": -31.4, "lon": -64.2}
+
             fig = px.choropleth_mapbox(
                 df,
                 geojson=geojson_dict,
@@ -127,10 +118,10 @@ def create_choropleth_map(df, geojson_data, location_field, color_field, title=N
                 opacity=0.7,
                 labels={color_field: color_field}
             )
-            
+
             if title:
                 fig.update_layout(title=title)
-                
+
             return fig
         else:
             st.error("El GeoJSON no tiene la estructura esperada (features).")
