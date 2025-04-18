@@ -19,7 +19,8 @@ repo_id = "Dir-Tecno/Repositorio-Reportes"
 branch = "main"
 
 # Ruta local para desarrollo
-local_path = "F:\desarrollo\ReporteSistemas\TableroGeneral\Repositorio-Reportes-main"
+local_path = "D:\DESARROLLO\DIRTECNO\EMPLEO\REPORTES\TableroGeneral\Repositorio-Reportes-main"
+#local_path = "F:\desarrollo\ReporteSistemas\TableroGeneral\Repositorio-Reportes-main"
 
 # Determinar el modo de carga (local o GitLab)
 # En un entorno de producción, esta variable podría configurarse mediante una variable de entorno

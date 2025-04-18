@@ -130,15 +130,28 @@ def load_and_preprocess_data(data, dates=None):
             return None, None, None, None, False, False, False, False
         
         # Filtrar para excluir el estado "ADHERIDO"
-        if 'N_ESTADO_FICHA' in df_inscriptos_raw.columns:
-            df_inscriptos = df_inscriptos_raw[df_inscriptos_raw['N_ESTADO_FICHA'] != "ADHERIDO"].copy()
-            # No mostrar información sobre los registros filtrados
-            total_registros = len(df_inscriptos_raw)
-            registros_adheridos = total_registros - len(df_inscriptos)
-        else:
-            df_inscriptos = df_inscriptos_raw.copy()
-            st.warning("No se encontró la columna 'N_ESTADO_FICHA' para filtrar el estado 'ADHERIDO'.")
-            
+        df_inscriptos = df_inscriptos_raw[df_inscriptos_raw['N_ESTADO_FICHA'] != "ADHERIDO"].copy()
+
+        # Convertir campos numéricos a enteros para eliminar decimales (.0)
+        integer_columns = [
+            "ID_DEPARTAMENTO_GOB", 
+            "ID_LOCALIDAD_GOB",
+            "ID_FICHA",
+            "IDETAPA",
+            "CUPO",
+            "ID_MOD_CONT_AFIP",
+            "EDAD"
+        ]
+        
+        # Convertir solo las columnas que existen en el DataFrame
+        for col in integer_columns:
+            if col in df_inscriptos.columns:
+                # Primero convertir a float para manejar posibles NaN, luego a int
+                df_inscriptos[col] = df_inscriptos[col].fillna(-1)  # Reemplazar NaN con -1 temporalmente
+                df_inscriptos[col] = df_inscriptos[col].astype(int)
+                # Opcional: volver a convertir -1 a NaN si es necesario
+                df_inscriptos.loc[df_inscriptos[col] == -1, col] = pd.NA
+        
         # Corregir localidades del departamento CAPITAL a "CORDOBA"
         if 'N_DEPARTAMENTO' in df_inscriptos.columns and 'N_LOCALIDAD' in df_inscriptos.columns:
             # Crear una máscara para identificar registros del departamento CAPITAL
@@ -190,15 +203,6 @@ def load_and_preprocess_data(data, dates=None):
         else:
             df['PROGRAMA'] = "No especificado"
             
-        # Asegúrate de que las columnas necesarias existan
-        required_columns = ['N_DEPARTAMENTO', 'N_LOCALIDAD', 'ID_FICHA', 'N_ESTADO_FICHA', 'IDETAPA']
-        missing_columns = [col for col in required_columns if col not in df.columns]
-        
-        if missing_columns:
-            st.warning(f"Faltan las siguientes columnas en los datos: {', '.join(missing_columns)}")
-            st.write("Columnas disponibles:", df.columns.tolist())
-            return None, None, None, None, False, False, False, False
-        
         has_fichas = True  # Si llegamos hasta aquí, tenemos datos de fichas
         
         return df, df_empresas, df_poblacion, geojson_data, has_fichas, has_empresas, has_poblacion, has_geojson
@@ -615,16 +619,19 @@ def render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has
                     return
                 
                 # Contar beneficiarios por departamento
-                if 'ID_DPTO' in df_beneficiarios.columns:
-                    df_mapa = df_beneficiarios.groupby('ID_DPTO').size().reset_index(name='Cantidad')
-                    df_mapa['ID_DPTO'] = df_mapa['ID_DPTO'].astype(str)
-                    id_field = 'ID_DPTO'
-                else:
-                    df_mapa = df_beneficiarios.groupby('N_DEPARTAMENTO').size().reset_index(name='Cantidad')
-                    id_field = 'N_DEPARTAMENTO'
-
+                df_beneficiarios['ID_DEPARTAMENTO_GOB'] = df_beneficiarios['ID_DEPARTAMENTO_GOB'].fillna(-1).astype(int)
+                
+                # Agrupar y contar
+                df_mapa = df_beneficiarios.groupby('ID_DEPARTAMENTO_GOB').size().reset_index(name='Cantidad')
+                
+                # Convertir a string para el mapa (sin decimales porque ya es entero)
+                df_mapa['ID_DEPARTAMENTO_GOB'] = df_mapa['ID_DEPARTAMENTO_GOB'].astype(str)
+                
+                # Reemplazar "-1" con un valor adecuado para NaN si es necesario
+                df_mapa.loc[df_mapa['ID_DEPARTAMENTO_GOB'] == "-1", 'ID_DEPARTAMENTO_GOB'] = "Sin asignar"
+                
                 # Mostrar tabla de datos para el mapa antes de renderizar el mapa
-                st.markdown(f"### Vista previa de df_mapa (agrupado por {id_field})")
+                st.markdown(f"### Vista previa de df_mapa (agrupado por ID_DEPARTAMENTO_GOB)")
                 st.dataframe(df_mapa, use_container_width=True)
 
                 # Verificar si los módulos de mapeo están disponibles
@@ -634,16 +641,37 @@ def render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has
 
                 # Crear y mostrar el mapa usando Plotly
                 with st.spinner("Generando mapa..."):
-                    fig = px.choropleth(
+                    fig = px.choropleth_mapbox(
                         df_mapa,
                         geojson=geojson_data,
-                        locations='ID_DPTO',
+                        locations='ID_DEPARTAMENTO_GOB',
                         color='Cantidad',
                         featureidkey="properties.CODDEPTO",
-                        projection="mercator",
+                        center={"lat": -31.4, "lon": -64.2},  # Coordenadas aproximadas de Córdoba
+                        zoom=6,  # Nivel de zoom
+                        opacity=0.7,  # Opacidad de los polígonos
+                        mapbox_style="carto-positron",  # Estilo de mapa más limpio
+                        color_continuous_scale="Blues",
+                        labels={'Cantidad': 'Beneficiarios'},
                         title="Distribución de Beneficiarios por Departamento"
                     )
-                    fig.update_geos(fitbounds="locations", visible=False)
+                    
+                    # Ajustar el diseño
+                    fig.update_layout(
+                        margin={"r":0,"t":50,"l":0,"b":0},
+                        coloraxis_colorbar={
+                            "title": "Cantidad",
+                            "tickformat": ",d"
+                        },
+                        title={
+                            'text': "Distribución de Beneficiarios por Departamento",
+                            'y':0.97,
+                            'x':0.5,
+                            'xanchor': 'center',
+                            'yanchor': 'top'
+                        }
+                    )
+                    
                     st.plotly_chart(fig, use_container_width=True)
         
         with tab_empresas:
