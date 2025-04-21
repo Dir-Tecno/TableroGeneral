@@ -29,9 +29,12 @@ jobs:
           echo "✅ Autenticación exitosa."
           echo "🚀 Disparando redeploy de stack conectado a Git..."
 
-          RESPONSE=$(curl -sk -o /dev/null -w "%{http_code}" -X POST \
+          # Modificado: Agregado el encabezado Content-Type y cambiado a PUT
+          RESPONSE=$(curl -sk -o /dev/null -w "%{http_code}" -X PUT \
             "$PORTAINER_URL/api/stacks/$STACK_ID/git/redeploy?endpointId=$ENDPOINT_ID" \
-            -H "Authorization: Bearer $TOKEN")
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{}")
 
           if [ "$RESPONSE" -ne 200 ]; then
             echo "❌ Redeploy fallido. Código HTTP: $RESPONSE"
@@ -39,5 +42,4 @@ jobs:
           fi
 
           echo "✅ Stack actualizado exitosamente desde Git."
-
 
