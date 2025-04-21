@@ -440,7 +440,8 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
                 st.markdown(html_table_linea, unsafe_allow_html=True)
         except Exception as e:
             st.warning(f"Error al generar la tabla de conteo por línea: {str(e)}")
-    # prueba de torta
+
+    # torta
     with col_torta:
         try:
             # Asumimos que categorias_mostrar = ["A Pagar - Convocatoria", "Pagados", "En proceso de pago"]
@@ -482,6 +483,7 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
                  st.plotly_chart(fig_torta, use_container_width=True)
         except Exception as e:
             st.warning(f"Error al generar la torta de conteo por línea: {str(e)}")
+            
     # Tabla de estados de préstamos agrupados
     st.subheader("Estados de Préstamos por Categoría")
     try: #Tabla de estados de préstamos agrupados por categoría
@@ -608,171 +610,116 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
                 height=400
             )
             
-            # Línea divisoria en gris claro
-            st.markdown("<hr style='border: 1px solid #f0f0f0;'>", unsafe_allow_html=True)
+           
     except Exception as e:
         st.warning(f"Error al generar la tabla de estados: {str(e)}")
-    # Línea divisoria en gris claro
+
+
+     # Línea divisoria en gris claro
     st.markdown("<hr style='border: 2px solid #cccccc;'>", unsafe_allow_html=True)
 
-    # Serie Histórica y gráfico de torta
-    try: #Serie Histórica y gráfico de torta
-        st.subheader("Serie Histórica de Préstamos")
-        # Verificar si existe df_recupero y las columnas necesarias
+    # Serie Histórica
+    st.subheader("Serie Histórica de Préstamos")
+
+    try:
         if df_recupero is None or df_recupero.empty:
-            st.info("No hay datos disponibles para la serie histórica.")
-        elif 'NRO_SOLICITUD' not in df_recupero.columns or 'FEC_FORM' not in df_recupero.columns:
-            st.info("No hay datos disponibles para la serie histórica.")
+            st.info("No hay datos de recupero disponibles para la serie histórica.")
+        elif 'FEC_FORM' not in df_recupero.columns:
+            st.warning("La columna 'FEC_FORM' necesaria para la serie histórica no se encuentra en los datos de recupero.")
         else:
-            df_fechas = df_recupero.copy()
-
-            if 'FEC_FORM' not in df_fechas.columns:
-                st.error("DEBUG: 'FEC_FORM' no encontrada en df_fechas!")
-                return # Salir si falta la columna clave
-
-            # Convertir la columna a datetime si no lo es
-            if not pd.api.types.is_datetime64_any_dtype(df_fechas['FEC_FORM']):
-                df_fechas['FEC_FORM'] = pd.to_datetime(df_fechas['FEC_FORM'], errors='coerce')
-
-            # Eliminar filas con fechas inválidas
-            df_fechas = df_fechas.dropna(subset=['FEC_FORM'])
-
-            # Filtrar fechas futuras (posteriores a la fecha actual)
+            df_fechas = df_recupero[['FEC_FORM']].copy()
+            df_fechas['FEC_FORM'] = pd.to_datetime(df_fechas['FEC_FORM'], errors='coerce')
+            df_fechas.dropna(subset=['FEC_FORM'], inplace=True)
             fecha_actual = datetime.now()
             df_fechas = df_fechas[df_fechas['FEC_FORM'] <= fecha_actual]
+            fecha_min_valida = pd.to_datetime('1678-01-01')
+            df_fechas_filtrado_rango = df_fechas[df_fechas['FEC_FORM'] >= fecha_min_valida].copy()
 
-            if df_fechas.empty:
-                st.info("No hay datos disponibles para la serie histórica.")
+            if df_fechas_filtrado_rango.empty:
+                st.info("No hay datos disponibles dentro del rango de fechas válido para la serie histórica.")
             else:
-                # Mostrar rango de fechas disponibles       
-                fecha_min = df_fechas['FEC_FORM'].min().strftime('%d/%m/%Y')
-                fecha_max = df_fechas['FEC_FORM'].max().strftime('%d/%m/%Y')
-                st.caption(f"Rango de fechas disponibles: {fecha_min} - {fecha_max}")
+                fecha_min = df_fechas_filtrado_rango['FEC_FORM'].min().date()
+                fecha_max = df_fechas_filtrado_rango['FEC_FORM'].max().date()
+                st.caption(f"Rango de fechas disponibles: {fecha_min.strftime('%d/%m/%Y')} - {fecha_max.strftime('%d/%m/%Y')}")
 
-                # --- Filtro de Fechas para Serie Histórica ---
-                min_date_recupero = df_fechas['FEC_FORM'].min()
-                max_date_recupero = df_fechas['FEC_FORM'].max()
-                
-                # Convertir a datetime.date si son Timestamps para el widget
-                min_value_dt = min_date_recupero.date() if isinstance(min_date_recupero, pd.Timestamp) else min_date_recupero
-                max_value_dt = max_date_recupero.date() if isinstance(max_date_recupero, pd.Timestamp) else max_date_recupero
+                start_date = st.date_input("Fecha de inicio:", min_value=fecha_min, max_value=fecha_max, value=fecha_min)
+                end_date = st.date_input("Fecha de fin:", min_value=fecha_min, max_value=fecha_max, value=fecha_max)
 
-                # Valor por defecto: últimos 2 años si es posible, sino todo el rango
-                # Convertir a Timestamp para calcular la fecha de hace 2 años
-                min_value_ts = pd.Timestamp(min_value_dt)
-                max_value_ts = pd.Timestamp(max_value_dt)
-                two_years_ago_ts = max_value_ts - pd.DateOffset(years=2)
-                # Comparar Timestamps y obtener el Timestamp de inicio por defecto
-                default_start_ts = max(min_value_ts, two_years_ago_ts) 
-                # Convertir de nuevo a date para el valor del widget st.date_input
-                default_start_dt = default_start_ts.date()
-
-                # Generar opciones para el slider (inicio de cada mes)
-                date_range = pd.date_range(start=min_value_dt, end=max_value_dt, freq='MS') # MS: Month Start
-                options = [date.date() for date in date_range] # Convertir a lista de datetime.date
-
-                # Si no hay opciones (rango muy corto), no mostrar slider
-                if not options:
-                    st.warning("No hay suficiente rango de fechas para mostrar el slider.")
-                    start_date, end_date = min_value_dt, max_value_dt # Usar el rango completo
+                if start_date > end_date:
+                    st.error("La fecha de inicio debe ser anterior a la fecha de fin.")
                 else:
-                    # Calcular valor por defecto para el slider
-                    default_end_slider = options[-1] # Último mes disponible
-                    # Encontrar el inicio de mes de hace 2 años
-                    two_years_ago_month_start = (pd.Timestamp(max_value_dt).replace(day=1) - pd.DateOffset(years=2)).date()
-                    # Encontrar la opción más cercana a hace 2 años (o la primera si todo es más reciente)
-                    default_start_slider = min(options, key=lambda date: abs(date - two_years_ago_month_start))
-                    # Asegurarse que el inicio por defecto no sea posterior al fin por defecto
-                    if default_start_slider > default_end_slider:
-                        default_start_slider = default_end_slider
-                    
-                    # Si solo hay una opción, seleccionarla como inicio y fin
-                    if len(options) == 1:
-                         default_start_slider = options[0]
-                         default_end_slider = options[0]
-                    
-                    start_date, end_date = st.select_slider(
-                        'Seleccionar período de la serie histórica:',
-                        options=options,
-                        value=(default_start_slider, default_end_slider),
-                        format_func=lambda date: date.strftime("%b %Y"), # Formato Mes Año
-                        key='slider_fecha_serie_historica'
-                    )
+                    df_fechas_seleccionado = df_fechas_filtrado_rango[
+                        (df_fechas_filtrado_rango['FEC_FORM'].dt.date >= start_date) &
+                        (df_fechas_filtrado_rango['FEC_FORM'].dt.date <= end_date)
+                    ].copy()
 
-                # ----------------------------------------------
+                    if df_fechas_seleccionado.empty:
+                        st.info("No hay datos de formularios para el período seleccionado.")
+                    else:
+                        df_fechas_seleccionado['AÑO_MES'] = df_fechas_seleccionado['FEC_FORM'].dt.to_period('M')
+                        serie_historica = df_fechas_seleccionado.groupby('AÑO_MES').size().reset_index(name='Cantidad')
+                        serie_historica['FECHA'] = serie_historica['AÑO_MES'].dt.to_timestamp()
+                        serie_historica = serie_historica.sort_values('FECHA')
 
-                # Filtrar df_fechas según el rango seleccionado
-                # Convertir start_date y end_date a Timestamp para comparación
-                start_ts = pd.Timestamp(start_date)
-                # El end_date del slider es el *inicio* del último mes seleccionado.
-                # Para incluir todo ese mes, vamos al inicio del *siguiente* mes.
-                end_ts = pd.Timestamp(end_date) + pd.offsets.MonthBegin(1)
-                 
-                df_fechas_filtrado = df_fechas[(df_fechas['FEC_FORM'] >= start_ts) & (df_fechas['FEC_FORM'] < end_ts)]
-
-                # --- Generar Serie Histórica solo si hay datos después de filtrar ---
-                if df_fechas_filtrado.empty:
-                    st.info("No hay datos de formularios para el período seleccionado.")
-                    # Asegurarse de que col_serie exista aunque esté vacía para que col_torta funcione
-                    col_serie, col_torta = st.columns([3, 1])
-                    with col_serie:
-                        st.write("") # Platzhalter
-                else:
-                    # Agrupar por mes y año, y contar NRO_SOLICITUD
-                    df_fechas_filtrado['AÑO_MES'] = df_fechas_filtrado['FEC_FORM'].dt.strftime('%Y-%m')
-                    serie_historica = df_fechas_filtrado.groupby('AÑO_MES').size().reset_index(name='Cantidad')
-                    serie_historica['FECHA'] = pd.to_datetime(serie_historica['AÑO_MES'] + '-01')
-                    serie_historica = serie_historica.sort_values('FECHA')
-
-                    fig_historia = px.line(
-                        serie_historica, 
-                        x='FECHA', 
-                        y='Cantidad', 
-                        title='Evolución de Formularios por Mes (Período Seleccionado)',
-                        labels={'Cantidad': 'Cantidad de Formularios', 'FECHA': 'Mes'},
-                        markers=True
-                    )
-                    fig_historia.update_layout(
-                        xaxis=dict(
-                            title='Fecha',
-                            title_font_size=14,
-                            tickfont_size=12,
-                            gridcolor='lightgray',
-                            tickformat='%b %Y'  # Formato de mes y año
-                        ),
-                        yaxis=dict(
-                            title='Cantidad de Formularios',
-                            title_font_size=14,
-                            tickfont_size=12,
-                            gridcolor='lightgray'
-                        ),
-                        plot_bgcolor='white'
-                    )
-
-                    # Mostrar el gráfico y la serie histórica en columnas (serie: 3/4, torta: 1/4)
-                    try:
-                        st.plotly_chart(fig_historia, use_container_width=True)
-                        with st.expander("Ver datos de la serie histórica"):
-                            tabla_data = serie_historica.copy()
-                            tabla_data['Mes-Año'] = tabla_data['FECHA'].dt.strftime('%b %Y')
-                            tabla_data_sorted = tabla_data.sort_values('FECHA', ascending=False)
-                            st.dataframe(
-                                tabla_data_sorted[['Mes-Año', 'Cantidad']],
-                                hide_index=True
-                            )
-                    except Exception as e:
-                        st.warning(f"Error en la serie histórica: {e}")
-                        # Mostrar tabla_data solo si existe
                         try:
-                            if 'tabla_data' in locals():
-                                st.dataframe(tabla_data)
-                        except Exception:
-                            st.error("No se pudo mostrar la tabla de datos")
+                            fig_historia = px.line(
+                                serie_historica,
+                                x='FECHA',
+                                y='Cantidad',
+                                title='Evolución de Formularios por Mes (Período Seleccionado)',
+                                labels={'Cantidad': 'Cantidad de Formularios', 'FECHA': 'Mes'},
+                                markers=True
+                            )
+                            fig_historia.update_layout(
+                                xaxis_title='Fecha',
+                                yaxis_title='Cantidad de Formularios',
+                                xaxis_tickformat='%b %Y',
+                                plot_bgcolor='white'
+                            )
+                            st.plotly_chart(fig_historia, use_container_width=True)
 
+                            with st.expander("Ver datos de la serie histórica"):
+                                tabla_data = serie_historica[['FECHA', 'Cantidad']].copy()
+                                tabla_data['Año'] = tabla_data['FECHA'].dt.year
+                                tabla_data_agrupada = tabla_data.groupby('Año', as_index=False)['Cantidad'].sum()
+                                tabla_data_agrupada = tabla_data_agrupada.sort_values('Año', ascending=False)
+
+                                # Custom HTML table (like the others)
+                                html_table = """
+                                    <style>
+                                        .serie-table {
+                                            width: 100%;
+                                            border-collapse: collapse;
+                                            margin-bottom: 20px;
+                                            font-size: 14px;
+                                        }
+                                        .serie-table th, .serie-table td {
+                                            padding: 8px;
+                                            border: 1px solid #ddd;
+                                            text-align: right;
+                                        }
+                                        .serie-table th {
+                                            background-color: #0072bb;
+                                            color: white;
+                                            text-align: center;
+                                        }
+                                        .serie-table td:first-child {
+                                            text-align: left;
+                                        }
+                                    </style>
+                                """
+                                html_table += '<table class="serie-table"><thead><tr>'
+                                html_table += '<th>Año</th><th>Cantidad</th></tr></thead><tbody>'
+                                for _, row in tabla_data_agrupada.iterrows():
+                                    html_table += f'<tr><td>{row["Año"]}</td><td>{int(row["Cantidad"])}</td></tr>'
+                                html_table += '</tbody></table>'
+                                st.markdown(html_table, unsafe_allow_html=True)
+
+                        except Exception as e:
+                            st.warning(f"Error al generar el gráfico de la serie histórica: {e}")
     except Exception as e:
-        st.warning(f"Error al procesar sección Serie Histórica/Torta: {str(e)}")
-    # Línea divisoria en gris claro
-    st.markdown("<hr style='border: 2px solid #cccccc;'>", unsafe_allow_html=True)
+        st.error(f"Error inesperado en la sección Serie Histórica: {e}")
+
 
 
 
