@@ -202,8 +202,7 @@ def show_bco_gente_dashboard(data, dates, is_development=False):
         dates: Diccionario con fechas de actualización.
         is_development (bool): True si se está en modo desarrollo.
     """
-    st.write("Ejecutando show_bco_gente_dashboard") # Mensaje de depuración
-    
+   
     # Mostrar columnas en modo desarrollo
     if is_development:
         st.markdown("***")
@@ -271,8 +270,6 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
         tooltips_categorias: Diccionario con tooltips para cada categoría
         df_recupero: DataFrame con datos de recupero para la serie histórica
     """
-   
-
     # Crear el conteo de estados
     try:
         conteo_estados = (
