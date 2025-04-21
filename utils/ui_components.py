@@ -46,24 +46,17 @@ def create_kpi_card(title, value, color_class="kpi-primary", delta=None, delta_c
     html += "</div>"
     return html
 
-def create_bco_gente_kpis(resultados):
+def create_bco_gente_kpis(resultados, tooltips):
     """
     Crea los KPIs específicos para el módulo Banco de la Gente.
     
     Args:
         resultados (dict): Diccionario con los resultados de conteo por categoría
+        tooltips (dict): Diccionario con los tooltips para cada KPI
         
     Returns:
         list: Lista de diccionarios con datos de KPI para Banco de la Gente
     """
-    # Definir descripciones para los tooltips
-    tooltips = {
-        "En Evaluación": "Formularios en proceso de evaluación técnica o administrativa (CREADO, EVALUACIÓN TÉCNICA, COMENZADO)",
-        "A Pagar - Convocatoria": "Formularios aprobados listos para pago o en proceso de convocatoria (A PAGAR, A PAGAR CON LOTE, A PAGAR CON BANCO, etc.)",
-        "Pagados": "Formularios con préstamos ya pagados, finalizados o con plan de cuotas (PAGADO, FINALIZADO, CON PLAN DE CUOTAS, etc.)",
-        "En proceso de pago": "Formularios con pago emitido o en estado de impago (PAGO EMITIDO, IMPAGO)"
-    }
-    
     return [
         {
             "title": "FORMULARIOS EN EVALUACIÓN",
@@ -72,7 +65,7 @@ def create_bco_gente_kpis(resultados):
             "tooltip": tooltips.get("En Evaluación")
         },
         {
-            "title": "FORMULARIOS A PAGAR",
+            "title": "FORMULARIOS A PAGAR / CONVOCATORIA",
             "value": resultados.get("A Pagar - Convocatoria", 0),
             "color_class": "kpi-accent-3",
             "tooltip": tooltips.get("A Pagar - Convocatoria")
@@ -84,11 +77,11 @@ def create_bco_gente_kpis(resultados):
             "tooltip": tooltips.get("Pagados")
         },
         {
-            "title": "EN PROCESO DE PAGO",
+            "title": "FORMULARIOS EN PROCESO DE PAGO",
             "value": resultados.get("En proceso de pago", 0),
-            "color_class": "kpi-accent-4",
+            "color_class": "kpi-accent-1",
             "tooltip": tooltips.get("En proceso de pago")
-        }
+        },
     ]
 
 def display_kpi_row(kpi_data, num_columns=4):

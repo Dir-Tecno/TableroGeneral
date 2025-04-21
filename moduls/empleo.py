@@ -285,10 +285,6 @@ def render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has
     Renderiza el dashboard principal con los datos procesados.
     """
     with st.spinner("Generando visualizaciones..."):
-        # Mostrar columnas de df_inscriptos para depuración
-        st.markdown("### Columnas de df_inscriptos")
-        st.write(df_inscriptos.columns.tolist())
-
         # Calcular KPIs importantes antes de aplicar filtros
         total_beneficiarios = df_inscriptos[df_inscriptos['N_ESTADO_FICHA'] == "BENEFICIARIO"].shape[0]
         total_beneficiarios_cti = df_inscriptos[df_inscriptos['N_ESTADO_FICHA'] == "BENEFICIARIO- CTI"].shape[0]
@@ -621,8 +617,8 @@ def render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has
                 # Contar beneficiarios por departamento
                 df_beneficiarios['ID_DEPARTAMENTO_GOB'] = df_beneficiarios['ID_DEPARTAMENTO_GOB'].fillna(-1).astype(int)
                 
-                # Agrupar y contar
-                df_mapa = df_beneficiarios.groupby('ID_DEPARTAMENTO_GOB').size().reset_index(name='Cantidad')
+                # Agrupar por ID_DEPARTAMENTO_GOB y N_DEPARTAMENTO
+                df_mapa = df_beneficiarios.groupby(['ID_DEPARTAMENTO_GOB', 'N_DEPARTAMENTO']).size().reset_index(name='Cantidad')
                 
                 # Convertir a string para el mapa (sin decimales porque ya es entero)
                 df_mapa['ID_DEPARTAMENTO_GOB'] = df_mapa['ID_DEPARTAMENTO_GOB'].astype(str)
@@ -647,6 +643,7 @@ def render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has
                         locations='ID_DEPARTAMENTO_GOB',
                         color='Cantidad',
                         featureidkey="properties.CODDEPTO",
+                        hover_data=['N_DEPARTAMENTO', 'Cantidad'],  # <-- aquí defines lo que aparece al pasar el mouse
                         center={"lat": -31.4, "lon": -64.2},  # Coordenadas aproximadas de Córdoba
                         zoom=6,  # Nivel de zoom
                         opacity=0.7,  # Opacidad de los polígonos
@@ -664,7 +661,7 @@ def render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has
                             "tickformat": ",d"
                         },
                         title={
-                            'text': "Distribución de Beneficiarios por Departamento",
+                            'text': "Distribución de Beneficiarios (EL + CTI) por Departamento",
                             'y':0.97,
                             'x':0.5,
                             'xanchor': 'center',
@@ -1092,14 +1089,30 @@ def show_inscriptions(df_inscriptos, df_poblacion, geojson_data, file_date):
             </div>
         """, unsafe_allow_html=True)
 
-def show_empleo_dashboard(data, dates=None):
+def show_empleo_dashboard(data, dates=None, is_development=False):
     """
     Muestra el dashboard de programas de empleo.
     
     Args:
-        data: Diccionario de dataframes cargados desde GitLab
-        dates: Diccionario de fechas de actualización de los archivos
+        data: Diccionario de dataframes.
+        dates: Diccionario con fechas de actualización.
+        is_development (bool): True si se está en modo desarrollo.
     """
+    # Mostrar columnas en modo desarrollo
+    if is_development:
+        st.markdown("***")
+        st.caption("Información de Desarrollo (Columnas de DataFrames - Empleo)")
+        if isinstance(data, dict):
+            for name, df in data.items():
+                if df is not None:
+                    with st.expander(f"Columnas en: `{name}`"):
+                        st.write(df.columns.tolist())
+                else:
+                    st.warning(f"DataFrame '{name}' no cargado o vacío.")
+        else:
+            st.warning("Formato de datos inesperado para Empleo.")
+        st.markdown("***")
+        
     try:
         # Cargar y preprocesar datos
         df_inscriptos, df_empresas, df_poblacion, geojson_data, has_fichas, has_empresas, has_poblacion, has_geojson = load_and_preprocess_data(data, dates)

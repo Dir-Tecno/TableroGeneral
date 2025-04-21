@@ -28,9 +28,9 @@ is_development = os.path.exists(local_path)
 
 # Mostrar información sobre el modo de carga
 if is_development:
-    st.sidebar.success("Modo de desarrollo: Cargando datos desde carpeta local")
+    st.success("Modo de desarrollo: Cargando datos desde carpeta local")
 else:
-    st.sidebar.info("Modo de producción: Cargando datos desde GitLab")
+    pass
 
 # Obtener token desde secrets (solo necesario en modo producción)
 token = None
@@ -45,22 +45,15 @@ if not is_development:
 modules = {
     'bco_gente': ['vt_nomina_rep_dpto_localidad.parquet', 'VT_NOMINA_REP_RECUPERO_X_ANIO.parquet', 
                    'Detalle_recupero.csv', 'capa_departamentos_2010.geojson', 'LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt'],
-    'cba_capacita': ['ALUMNOS_X_LOCALIDAD.parquet', 'capa_departamentos_2010.geojson'],
+    'cba_capacita': ['VT_INSCRIPCIONES_PRG129.parquet', 'VT_CURSOS_SEDES_GEO.parquet', 'capa_departamentos_2010.geojson'],
     'empleo': ['VT_REPORTES_PPP_MAS26.parquet', 'vt_empresas_adheridas.parquet','vt_empresas_ARCA.parquet', 'VT_PUESTOS_X_FICHAS.parquet','capa_departamentos_2010.geojson', 'VT_REPORTE_LIQUIDACION_LOCALIDAD.parquet']
 }
 
-def load_module_data(module_key):
-    all_data, all_dates = load_data_from_gitlab(
-        repo_id, branch, token, 
-        use_local=is_development, 
-        local_path=local_path if is_development else None
-    )
-    data = {k: all_data.get(k) for k in modules[module_key] if k in all_data}
-    dates = {k: all_dates.get(k) for k in modules[module_key] if k in all_dates}
-    return data, dates
+
 
 # Crear pestañas
-tabs = st.tabs(["Banco de la Gente", "CBA Me Capacita", "Programas de Empleo"])
+tab_names = ["Banco de la Gente", "CBA Me Capacita", "Programas de Empleo"]
+tabs = st.tabs(tab_names)
 tab_keys = ['bco_gente', 'cba_capacita', 'empleo']
 tab_functions = [
     bco_gente.show_bco_gente_dashboard,
@@ -72,7 +65,7 @@ for idx, tab in enumerate(tabs):
     with tab:
         module_key = tab_keys[idx]
         show_func = tab_functions[idx]
-        st.markdown(f'<div class="tab-subheader">{tab.label}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="tab-subheader">{tab_names[idx]}</div>', unsafe_allow_html=True)
         data_key = f"{module_key}_data"
         dates_key = f"{module_key}_dates"
         if data_key not in st.session_state or dates_key not in st.session_state:
@@ -91,4 +84,7 @@ for idx, tab in enumerate(tabs):
                     data, dates = future.result()
                 st.session_state[data_key] = data
                 st.session_state[dates_key] = dates
-        show_func(st.session_state[data_key], st.session_state[dates_key])
+        st.markdown("***") # Separador visual
+
+        # Llamar a la función que muestra el dashboard de la pestaña actual, pasando is_development
+        show_func(st.session_state[data_key], st.session_state[dates_key], is_development)

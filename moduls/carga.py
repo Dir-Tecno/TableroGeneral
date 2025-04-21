@@ -335,9 +335,10 @@ def load_data_from_gitlab(repo_id, branch='main', token=None, use_local=False, l
                     
                     elif archivo_path.endswith('.txt'):
                         try:
-                            with open(archivo_path, 'r', encoding='utf-8') as f:
-                                contenido = f.read()
-                            all_data[nombre] = contenido
+                            df = pd.read_csv(archivo_path, sep=None, engine='python')
+                            # Convertir tipos numpy
+                            df = convert_numpy_types(df)
+                            all_data[nombre] = df
                             all_dates[nombre] = datetime.datetime.fromtimestamp(os.path.getmtime(archivo_path))
                         except Exception as e:
                             st.warning(f"Error al cargar {nombre}: {str(e)}")
@@ -408,8 +409,10 @@ def load_data_from_gitlab(repo_id, branch='main', token=None, use_local=False, l
                     
                     elif archivo.endswith('.txt'):
                         try:
-                            contenido_str = contenido.decode('utf-8')
-                            all_data[nombre] = contenido_str
+                            df = pd.read_csv(io.BytesIO(contenido), sep=None, engine='python')
+                            # Convertir tipos numpy
+                            df = convert_numpy_types(df)
+                            all_data[nombre] = df
                             all_dates[nombre] = datetime.datetime.now()
                         except Exception as e:
                             st.warning(f"Error al cargar {nombre}: {str(e)}")
