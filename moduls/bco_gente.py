@@ -5,7 +5,9 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 from utils.ui_components import display_kpi_row, create_bco_gente_kpis
 from utils.styles import COLORES_IDENTIDAD
-from utils.kpi_tooltips import ESTADO_CATEGORIAS, TOOLTIPS_DESCRIPTIVOS
+from utils.kpi_tooltips import ESTADO_CATEGORIAS
+from utils.ui_components import create_bco_gente_kpis
+
 
 # Crear diccionario para tooltips de categorías (técnico, lista de estados)
 tooltips_categorias = {k: ", ".join(v) for k, v in ESTADO_CATEGORIAS.items()}
@@ -52,13 +54,6 @@ def load_and_preprocess_data(data):
             if 'ID_LOCALIDAD' in df_global.columns:
                 df_global.loc[capital_mask, 'ID_LOCALIDAD'] = 1
         
-        # Asegurarse de que N_ESTADO_PRESTAMO sea string
-        if has_global_data and 'N_ESTADO_PRESTAMO' in df_global.columns:
-            try:
-                df_global['N_ESTADO_PRESTAMO'] = df_global['N_ESTADO_PRESTAMO'].astype(str)
-            except Exception as e:
-                st.error(f"Error al convertir N_ESTADO_PRESTAMO a string: {e}")
-        
         # Realizar el cruce entre df_global y df_recupero si ambos están disponibles
         if has_global_data and has_recupero_data and 'NRO_SOLICITUD' in df_recupero.columns:
             try:
@@ -93,6 +88,58 @@ def load_and_preprocess_data(data):
                     df_global['DEUDA_A_RECUPERAR'] = df_global['DEUDA_VENCIDA'] + df_global['DEUDA_NO_VENCIDA']
                     df_global['RECUPERADO'] = df_global['MONTO_OTORGADO'] - df_global['DEUDA_A_RECUPERAR']
                     
+                    # --- INICIO: Nuevo Merge con df_localidad_municipio ---
+                    if df_localidad_municipio is not None and not df_localidad_municipio.empty:
+                        # Definir columnas a traer desde df_localidad_municipio (incluyendo la clave)
+                        cols_to_merge = [
+                            'ID_LOCALIDAD', # Clave del merge (asumimos mismo nombre en ambos DFs)
+                            'TIPO', 
+                            'Gestion 2023-2027', 
+                            'FUERZAS', 
+                            'ESTADO', 
+                            'LEGISLADOR DEPARTAMENTAL', 
+                            'LATITUD', 
+                            'LONGITUD'
+                        ]
+                        
+                        # Verificar que la columna clave 'ID_LOCALIDAD' exista en ambos DataFrames
+                        key_col = 'ID_LOCALIDAD'
+                        if key_col not in df_global.columns:
+                             st.warning(f"No se encontró la columna clave '{key_col}' en df_global para el cruce con df_localidad_municipio.")
+                             can_merge = False
+                        elif key_col not in df_localidad_municipio.columns:
+                             st.warning(f"No se encontró la columna clave '{key_col}' en df_localidad_municipio para el cruce.")
+                             can_merge = False
+                        else:
+                             can_merge = True
+
+                        # Verificar que todas las columnas *a traer* existan en df_localidad_municipio
+                        # (Excluimos la clave que ya verificamos)
+                        missing_loc_cols = [col for col in cols_to_merge if col != key_col and col not in df_localidad_municipio.columns]
+                        if missing_loc_cols:
+                            st.warning(f"No se pudo realizar el cruce con df_localidad_municipio. Faltan columnas en df_localidad_municipio: {', '.join(missing_loc_cols)}")
+                            can_merge = False
+                        
+                        if can_merge:
+                            try:
+                                # Seleccionar solo las columnas necesarias (incluida la clave)
+                                df_localidad_subset = df_localidad_municipio[cols_to_merge].copy()
+                                
+                                # Realizar el segundo merge (left join) usando la misma clave
+                                df_global = pd.merge(
+                                    df_global,
+                                    df_localidad_subset,
+                                    on=key_col, # Usar 'on' ya que la clave tiene el mismo nombre
+                                    how='left'
+                                )
+                                
+                            except Exception as e_merge2:
+                                st.warning(f"Error durante el segundo merge con df_localidad_municipio: {str(e_merge2)}")
+                        # No es necesario un 'else' aquí, las advertencias ya se mostraron si can_merge es False
+                    else:
+                         st.info("df_localidad_municipio no está disponible o está vacío, se omite el segundo cruce.")
+                    # --- FIN: Nuevo Merge con df_localidad_municipio ---
+                    
                 else:
                     st.warning(f"No se pudo realizar el cruce con datos de recupero. Faltan columnas: {', '.join(missing_columns)}")
             except Exception as e:
@@ -121,14 +168,18 @@ def load_and_preprocess_data(data):
         
         # Filtrar líneas de préstamo que no deben ser consideradas
         if has_global_data and 'N_LINEA_PRESTAMO' in df_global.columns:
-            # Lista de líneas de préstamo a excluir
-            lineas_a_excluir = ["L1", "L3", "L4", "L6"]
+            # Lista de líneas de préstamo a agrupar como 'Otras Lineas'
+            lineas_a_agrupar = ["L1", "L3", "L4", "L6"]
             
-            # Filtrar el DataFrame para excluir estas líneas
-            df_global = df_global[~df_global['N_LINEA_PRESTAMO'].isin(lineas_a_excluir)]
+            # Crear una máscara para identificar las filas con estas líneas
+            mask_otras_lineas = df_global['N_LINEA_PRESTAMO'].isin(lineas_a_agrupar)
             
-            # Verificar si todavía hay datos después del filtrado
-            has_global_data = not df_global.empty
+            # Renombrar el valor en la columna 'N_LINEA_PRESTAMO' para esas filas
+            df_global.loc[mask_otras_lineas, 'N_LINEA_PRESTAMO'] = "Otras Lineas"
+            
+            # Ya no se eliminan filas, así que no es necesario re-evaluar has_global_data aquí
+            # # Verificar si todavía hay datos después del filtrado
+            # has_global_data = not df_global.empty
 
         return df_global, df_recupero, geojson_data, df_localidad_municipio, has_global_data, has_recupero_data, has_geojson_data, has_localidad_municipio_data
 
@@ -224,6 +275,10 @@ def show_bco_gente_dashboard(data, dates, is_development=False):
     # Cargar y preprocesar datos
     df_global, df_recupero, geojson_data, df_localidad_municipio, has_global_data, has_recupero_data, has_geojson_data, has_localidad_municipio_data = load_and_preprocess_data(data)
     
+    if is_development:
+        st.write("Datos Globales ya cruzados")
+        st.dataframe(df_global)
+
     # Verificar que los datos globales existan antes de continuar
     if not has_global_data:
         st.error("No se pudieron cargar los datos globales de Banco de la Gente. Verifique que el archivo 'vt_nomina_rep_dpto_localidad.parquet' exista en el repositorio.")
@@ -289,14 +344,14 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
         resultados = {categoria: 0 for categoria in ESTADO_CATEGORIAS.keys()}
     
     # Usar la función de ui_components para crear y mostrar KPIs
-    from utils.ui_components import create_bco_gente_kpis
     kpi_data = create_bco_gente_kpis(resultados, tooltips_categorias)
     display_kpi_row(kpi_data)
 
     # Línea divisoria en gris claro
     st.markdown("<hr style='border: 2px solid #cccccc;'>", unsafe_allow_html=True)
      # Nueva tabla: Conteo de Préstamos por Línea y Estado
-    st.subheader("Conteo de Préstamos por Línea y Estado")
+    st.subheader("Conteo de Préstamos por Línea y Estado", 
+                 help="Muestra el conteo de préstamos por línea y estado, basado en los datos filtrados.")
     col_tabla, col_torta = st.columns([3,1])
     with col_tabla:
         try:
@@ -308,7 +363,7 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
                 st.warning(f"No se pueden mostrar el conteo de préstamos por línea. Faltan columnas: {', '.join(missing_columns)}")
             else:
                 # Definir las categorías a mostrar
-                categorias_mostrar = ["A Pagar - Convocatoria", "Pagados", "En proceso de pago"]
+                categorias_mostrar = ["A Pagar - Convocatoria", "Pagados", "En proceso de pago", "Pagados-Finalizados"]
 
                 # Usar @st.cache_data para evitar recalcular si los datos no cambian
                 @st.cache_data
@@ -485,7 +540,9 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
             st.warning(f"Error al generar la torta de conteo por línea: {str(e)}")
             
     # Tabla de estados de préstamos agrupados
-    st.subheader("Estados de Préstamos por Categoría")
+    st.subheader("Estados de Préstamos por Categoría", 
+                 help="Muestra el conteo de préstamos agrupados por categorías de estado, "
+                      "basado en los datos filtrados. Las categorías agrupa estados del sistema. No considera formularios de baja ni lineas antiguas históricas.")
     try: #Tabla de estados de préstamos agrupados por categoría
         # Verificar que las columnas necesarias existan en el DataFrame
         required_columns = ['N_DEPARTAMENTO', 'N_LOCALIDAD', 'N_ESTADO_PRESTAMO', 'NRO_SOLICITUD']
@@ -619,8 +676,9 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
     st.markdown("<hr style='border: 2px solid #cccccc;'>", unsafe_allow_html=True)
 
     # Serie Histórica
-    st.subheader("Serie Histórica de Préstamos")
-
+    st.subheader("Serie Histórica de Préstamos", 
+                 help="Muestra la cantidad total de solicitud de préstamos, agrupados por mes, dentro del rango de fechas seleccionado. "
+                      "Formularios presentados.")
     try:
         if df_recupero is None or df_recupero.empty:
             st.info("No hay datos de recupero disponibles para la serie histórica.")
@@ -720,9 +778,6 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
     except Exception as e:
         st.error(f"Error inesperado en la sección Serie Histórica: {e}")
 
-
-
-
 def mostrar_recupero(df_filtrado, df_localidad_municipio, geojson_data):
     """
     Muestra la sección de recupero de deudas, utilizando datos ya filtrados.
@@ -741,7 +796,7 @@ def mostrar_recupero(df_filtrado, df_localidad_municipio, geojson_data):
     # --- Nueva Sección: Tabla Agrupada de Pagados (usando datos ya filtrados) ---
     st.subheader("Detalle de Préstamos Pagados por Localidad (Según Filtros Aplicados)")
     
-    # Asegurarse de que las columnas necesarias existen en el df_filtrado
+    # Asegurarse de que las columnas necesarias existan en el df_filtrado
     # 'N_LINEA_PRESTAMO' ya está implícitamente filtrada por render_filters, pero la necesitamos para la verificación
     required_cols = ['N_DEPARTAMENTO', 'N_LOCALIDAD', 'N_LINEA_PRESTAMO', 
                      'CATEGORIA', 'NRO_SOLICITUD', 'DEUDA_VENCIDA', 

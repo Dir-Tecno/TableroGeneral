@@ -57,7 +57,7 @@ def create_bco_gente_kpis(resultados, tooltips):
     Returns:
         list: Lista de diccionarios con datos de KPI para Banco de la Gente
     """
-    return [
+    kpis = [
         {
             "title": "FORMULARIOS EN EVALUACIÓN",
             "value": resultados.get("En Evaluación", 0),
@@ -82,9 +82,21 @@ def create_bco_gente_kpis(resultados, tooltips):
             "color_class": "kpi-accent-1",
             "tooltip": tooltips.get("En proceso de pago")
         },
+        {
+            "title": "FORMULARIOS PAGADOS - FINALIZADOS",
+            "value": resultados.get("Pagados-Finalizados", 0),
+            "color_class": "kpi-success",
+            "tooltip": tooltips.get("Pagados-Finalizados")
+        }
+       
     ]
+    
+    # Opcional: Filtrar KPIs con valor 0 si no quieres mostrarlos
+    # kpis = [kpi for kpi in kpis if kpi['value'] > 0]
+    
+    return kpis
 
-def display_kpi_row(kpi_data, num_columns=4):
+def display_kpi_row(kpi_data, num_columns=5):
     """
     Muestra una fila de tarjetas KPI.
     
