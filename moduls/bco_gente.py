@@ -513,86 +513,77 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
         # Línea divisoria para separar secciones
     st.markdown("<hr style='border: 2px solid #cccccc;'>", unsafe_allow_html=True)
     
-    # NUEVA SECCIÓN: Gráficos de Torta Demográficos
-    st.subheader("Distribucion de Creditos", help="Distribución demográfica de los beneficiarios")
-
+        # NUEVA SECCIÓN: Gráficos de Torta Demográficos
+    st.subheader("Distribución de Créditos", help="Distribución demográfica de los beneficiarios")
+    
     # Crear dos columnas para los gráficos de torta
     col_torta_cat, col_torta_sexo = st.columns(2)
     
-    # torta categoria
-    with col_torta_cat, col_torta_sexo:
-                try:
-                    # Asumimos que categorias_mostrar = ["A Pagar - Convocatoria", "Pagados", "En proceso de pago"]
-                    # Filtrar el DataFrame ANTES de agrupar, usando la columna de estado
-                    # st.dataframe(df_filtrado_global)
-                    df_filtrado_torta = df_filtrado_global[df_filtrado_global['CATEGORIA'].isin(categorias_mostrar)]
-                    
-                    # Agrupar el DataFrame filtrado por línea de préstamo
-                    grafico_torta = df_filtrado_torta.groupby('N_LINEA_PRESTAMO').size().reset_index(name='Cantidad')
-                    
-                    # Si el dataframe resultante está vacío, mostrar mensaje
-                    if grafico_torta.empty:
-                        st.info("No hay datos en las categorías seleccionadas para mostrar en el gráfico.")
-                    else:
-                        colores_identidad = COLORES_IDENTIDAD
-                        fig_torta = px.pie(
-                            grafico_torta, 
-                            names='N_LINEA_PRESTAMO', 
-                            values='Cantidad', 
-                            color_discrete_sequence=colores_identidad
+    # Gráfico de torta por categoría
+    with col_torta_cat:
+        try:
+            df_filtrado_torta = df_filtrado_global[df_filtrado_global['CATEGORIA'].isin(categorias_mostrar)]
+            
+            # Agrupar el DataFrame filtrado por línea de préstamo
+            grafico_torta = df_filtrado_torta.groupby('N_LINEA_PRESTAMO').size().reset_index(name='Cantidad')
+            
+            if grafico_torta.empty:
+                st.info("No hay datos en las categorías seleccionadas para mostrar en el gráfico.")
+            else:
+                colores_identidad = COLORES_IDENTIDAD
+                fig_torta = px.pie(
+                    grafico_torta,
+                    names='N_LINEA_PRESTAMO',
+                    values='Cantidad',
+                    color_discrete_sequence=colores_identidad
+                )
+                fig_torta.update_traces(
+                    textposition='inside',
+                    textinfo='percent+label',
+                    marker=dict(line=dict(color='#FFFFFF', width=1))
+                )
+                fig_torta.update_layout(
+                            title="Distribución por Linea",
+                            margin=dict(l=20, r=20, t=30, b=20)
                         )
-                        fig_torta.update_traces(
+                st.plotly_chart(fig_torta, use_container_width=True)
+        except Exception as e:
+            st.error(f"Error al generar el gráfico de categoría: {e}")
+
+    # Gráfico de torta por sexo
+    with col_torta_sexo:
+        try:
+            if 'N_SEXO' in df_filtrado_global.columns:
+                df_sexo = df_filtrado_global.dropna(subset=['N_SEXO']).copy()
+                if df_sexo.empty:
+                    st.warning("No hay datos disponibles para el gráfico de sexo después de filtrar NaNs.")
+                else:
+                    sexo_counts = df_sexo['N_SEXO'].value_counts().reset_index()
+                    sexo_counts.columns = ['Sexo', 'Cantidad']
+                    if sexo_counts.empty:
+                        st.warning("No hay datos para mostrar en el gráfico de sexo.")
+                    else:
+                        fig_sexo = px.pie(
+                            sexo_counts,
+                            values='Cantidad',
+                            names='Sexo',
+                            color_discrete_sequence=px.colors.qualitative.Set3
+                        )
+                        fig_sexo.update_traces(
                             textposition='inside',
                             textinfo='percent+label',
-                            marker=dict(line=dict(color='#FFFFFF', width=1))
-                            
+                            hoverinfo='label+percent+value'
                         )
-                        fig_torta.update_layout(
-                            legend_title="Líneas de Préstamo",
-                            font=dict(size=12),
-                            uniformtext_minsize=10,
-                            uniformtext_mode='hide',
-                            legend_orientation="h", # Orientación horizontal
-                            legend_yanchor="bottom",
-                            legend_y=-0.1, # Ajustar posición vertical (debajo del gráfico)
-                            legend_xanchor="center",
-                            legend_x=0.5 # Centrar horizontalmente
+                        fig_sexo.update_layout(
+                            title="Distribución por Sexo",
+                            margin=dict(l=20, r=20, t=30, b=20)
                         )
-                        # --- AJUSTE DE MÁRGENES ---
-                        fig_torta.update_layout(margin=dict(l=20, r=20, t=30, b=20))
-                        st.plotly_chart(fig_torta, use_container_width=True)
-                except Exception as e:
-
-        # Gráfico de torta por sexo 
-                    with col_torta_sexo: 
-                        st.write("Distribución por Sexo") 
-                        if 'N_SEXO' in df_filtrado_global.columns: 
-                            df_sexo = df_filtrado_global.dropna(subset=['N_SEXO']).copy() 
-                            if df_sexo.empty: 
-                                st.warning("No hay datos disponibles para el gráfico de sexo después de filtrar NaNs.") 
-                            else: 
-                                sexo_counts = df_sexo['N_SEXO'].value_counts().reset_index() 
-                                sexo_counts.columns = ['Sexo', 'Cantidad'] 
-                                if sexo_counts.empty: 
-                                    st.warning("No hay datos para mostrar en el gráfico de sexo.") 
-                                else: 
-                                    fig_sexo = px.pie( 
-                                        sexo_counts, 
-                                        values='Cantidad', 
-                                        names='Sexo', 
-                                        title='Distribución por Sexo', 
-                                        color_discrete_sequence=px.colors.qualitative.Set3 
-                                    ) 
-                                    fig_sexo.update_traces( 
-                                        textposition='inside', 
-                                        textinfo='percent+label', 
-                                        hoverinfo='label+percent+value' 
-                                    ) 
-                                    fig_sexo.update_layout(margin=dict(l=20, r=20, t=30, b=20)) 
-                                    st.plotly_chart(fig_sexo, use_container_width=True) 
-                        else: 
-                            st.write("Columnas disponibles:", df_filtrado_global.columns.tolist())
-        
+                        st.plotly_chart(fig_sexo, use_container_width=True)
+            else:
+                st.write("Columnas disponibles:", df_filtrado_global.columns.tolist())
+                st.warning("La columna 'N_SEXO' no está presente en el DataFrame.")
+        except Exception as e:
+            st.error(f"Error al generar el gráfico de sexo: {e}")
 
     # Línea divisoria para separar secciones
     st.markdown("<hr style='border: 2px solid #cccccc;'>", unsafe_allow_html=True)
