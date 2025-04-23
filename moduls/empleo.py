@@ -6,25 +6,14 @@ import plotly.graph_objects as go
 import json
 from datetime import datetime, timedelta
 from utils.ui_components import display_kpi_row
-from utils.map_utils import is_mapping_available, create_choropleth_map, display_map
-
-# Importación condicional para Altair
-try:
-    import altair as alt
-    ALTAIR_AVAILABLE = True
-except ImportError:
-    ALTAIR_AVAILABLE = False
-    st.warning("Algunas visualizaciones de gráficos no estarán disponibles. Para habilitar todas las funciones, instale el paquete: altair")
-
-# Importaciones condicionales para manejar posibles errores
-try:
-    import folium
-    from streamlit_folium import folium_static
-    import geopandas as gpd
-    MAPPING_AVAILABLE = True
-except ImportError:
-    MAPPING_AVAILABLE = False
-    st.warning("Algunas funcionalidades de mapas no estarán disponibles. Para habilitar todas las funciones, instale los paquetes: folium, streamlit-folium y geopandas")
+from utils.map_utils import create_choropleth_map, display_map
+import altair as alt
+import folium
+from streamlit_folium import folium_static
+import geopandas as gpd
+import math
+import requests
+from utils.data_cleaning import clean_thousand_separator
 
 def enviar_a_slack(mensaje, valoracion):
     """
@@ -105,9 +94,36 @@ def load_and_preprocess_data(data, dates=None):
         df_inscriptos_raw = data.get('VT_REPORTES_PPP_MAS26.parquet')
         geojson_data = data.get('capa_departamentos_2010.geojson')
         
+        # Crear df_emp_ben: cantidad de beneficiarios por empresa (CUIT)
+        df_emp_ben = (
+            df_inscriptos_raw[
+                (df_inscriptos_raw["IDETAPA"].isin([51, 53, 54, 55])) &
+                (df_inscriptos_raw["N_ESTADO_FICHA"] == "BENEFICIARIO")
+            ]
+            .assign(CUIT=lambda df: df["EMP_CUIT"].astype(str).str.replace("-", ""))
+            .groupby("CUIT", as_index=False)
+            .agg(BENEF=("ID_FICHA", "count"))
+        )
+        
         # Cargar el dataset de empresas
         df_empresas = data.get('vt_empresas_adheridas.parquet')
         has_empresas = df_empresas is not None and not df_empresas.empty
+
+        # --- NUEVO: Cruce con ARCA ---
+        df_arca = data.get('vt_empresas_ARCA.parquet')
+        if has_empresas and df_arca is not None and not df_arca.empty:
+            # Limpiar CUIT en ambos DataFrames (quitar guiones y asegurar string)
+            df_empresas['CUIT'] = df_empresas['CUIT'].astype(str).str.replace('-', '', regex=False)
+            df_arca['CUIT'] = df_arca['CUIT'].astype(str).str.replace('-', '', regex=False)
+            # Seleccionar solo las columnas de interés de ARCA
+            cols_arca = ['CUIT', 'IMP_GANANCIAS', 'IMP_IVA', 'MONOTRIBUTO', 'INTEGRANTE_SOC', 'EMPLEADOR', 'ACTIVIDAD_MONOTRIBUTO','NOMBRE_TIPO_EMPRESA']
+            df_arca_sel = df_arca[cols_arca].copy()
+            # Merge left
+            df_empresas = df_empresas.merge(df_arca_sel, on='CUIT', how='left')
+
+        # Cruce de df_display con df_emp_ben por CUIT
+        if "CUIT" in df_empresas.columns:
+            df_empresas = df_empresas.merge(df_emp_ben, on="CUIT", how="left")
         
         # Cargar el nuevo dataset de liquidación por localidad
         df_liquidacion = data.get('VT_REPORTE_LIQUIDACION_LOCALIDAD.parquet')
@@ -129,6 +145,11 @@ def load_and_preprocess_data(data, dates=None):
             st.error("No se pudieron cargar los datos de inscripciones.")
             return None, None, None, None, False, False, False, False
         
+        # Limpiar separador de miles en los DataFrames principales
+        df_empresas = clean_thousand_separator(df_empresas)
+        df_inscriptos_raw = clean_thousand_separator(df_inscriptos_raw)
+        df_poblacion = clean_thousand_separator(df_poblacion)
+
         # Filtrar para excluir el estado "ADHERIDO"
         df_inscriptos = df_inscriptos_raw[df_inscriptos_raw['N_ESTADO_FICHA'] != "ADHERIDO"].copy()
 
@@ -187,7 +208,7 @@ def load_and_preprocess_data(data, dates=None):
         
         # Preparar datos para los filtros
         # Limpiar y preparar los datos
-        df = df_inscriptos.copy()
+        df_inscriptos_sin_adherido = df_inscriptos.copy()
         
         # Mapeo de programas según IDETAPA
         programas = {
@@ -198,14 +219,14 @@ def load_and_preprocess_data(data, dates=None):
         }
         
         # Crear columna con nombres de programas
-        if 'IDETAPA' in df.columns:
-            df['PROGRAMA'] = df['IDETAPA'].map(lambda x: programas.get(x, f"Programa {x}"))
+        if 'IDETAPA' in df_inscriptos_sin_adherido.columns:
+            df_inscriptos_sin_adherido['PROGRAMA'] = df_inscriptos_sin_adherido['IDETAPA'].map(lambda x: programas.get(x, f"Programa {x}"))
         else:
-            df['PROGRAMA'] = "No especificado"
+            df_inscriptos_sin_adherido['PROGRAMA'] = "No especificado"
             
         has_fichas = True  # Si llegamos hasta aquí, tenemos datos de fichas
         
-        return df, df_empresas, df_poblacion, geojson_data, has_fichas, has_empresas, has_poblacion, has_geojson
+        return df_inscriptos_sin_adherido, df_empresas, df_poblacion, geojson_data, has_fichas, has_empresas, has_poblacion, has_geojson
 
 def render_filters(df_inscriptos):
     """
@@ -630,11 +651,6 @@ def render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has
                 st.markdown(f"### Vista previa de df_mapa (agrupado por ID_DEPARTAMENTO_GOB)")
                 st.dataframe(df_mapa, use_container_width=True)
 
-                # Verificar si los módulos de mapeo están disponibles
-                if not is_mapping_available():
-                    st.warning("La visualización de mapas no está disponible. Para habilitar esta función, instale los paquetes: folium, streamlit-folium y geopandas")
-                    return
-
                 # Crear y mostrar el mapa usando Plotly
                 with st.spinner("Generando mapa..."):
                     fig = px.choropleth_mapbox(
@@ -682,10 +698,6 @@ def render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has
                 """, unsafe_allow_html=True)
 
 def show_companies(df_empresas, geojson_data):
-    # Verificar si los módulos de mapeo están disponibles
-    if not is_mapping_available() and geojson_data is not None:
-        st.warning("La visualización de mapas no está disponible. Para habilitar esta función, instale los paquetes: folium, streamlit-folium y geopandas")
-
     # Asegúrate de que las columnas numéricas sean del tipo correcto
     if 'CANTIDAD_EMPLEADOS' in df_empresas.columns:
         df_empresas['CANTIDAD_EMPLEADOS'] = pd.to_numeric(df_empresas['CANTIDAD_EMPLEADOS'], errors='coerce')
@@ -709,103 +721,20 @@ def show_companies(df_empresas, geojson_data):
     columns_to_select = [col for col in ['N_LOCALIDAD', 'N_DEPARTAMENTO', 'CUIT', 'N_EMPRESA', 
                                        'NOMBRE_TIPO_EMPRESA', 'ADHERIDO', 'CANTIDAD_EMPLEADOS', 
                                        'VACANTES', 'CUPO', 'IMP_GANANCIAS', 'IMP_IVA', 'MONOTRIBUTO',
-                                       'INTEGRANTE_SOC', 'EMPLEADOR', 'ACTIVIDAD_MONOTRIBUTO'] 
+                                       'INTEGRANTE_SOC', 'EMPLEADOR', 'ACTIVIDAD_MONOTRIBUTO', 'BENEF'] 
                        if col in df_empresas.columns]
+
+    if 'CUIT' in df_empresas.columns and 'ADHERIDO' in df_empresas.columns:
+        df_empresas['ADHERIDO'] = df_empresas.groupby('CUIT')['ADHERIDO'].transform(lambda x: ', '.join(sorted(set(x))))
     
+    # Usar columns_to_select para crear df_display correctamente
     df_display = df_empresas[columns_to_select].drop_duplicates(subset='CUIT')
     df_display = df_display.sort_values(by='CUPO', ascending=False).reset_index(drop=True)
 
-    # Filtrar empresas adheridas al PPP 2024
-    if 'ADHERIDO' in df_empresas.columns:
-        df_empresas_puestos = df_empresas[df_empresas['ADHERIDO'] == 'PPP - PROGRAMA PRIMER PASO [2024]'].copy()
-    else:
-        df_empresas_puestos = pd.DataFrame()
-    
-    # Improved section title
-    st.markdown('<div class="section-title">Programa Primer Paso - PERFIL de la demanda por categorías</div>', unsafe_allow_html=True)
-    
-    # Resto del código de visualización con mejoras visuales
-    if not df_empresas_puestos.empty and 'N_DEPARTAMENTO' in df_empresas_puestos.columns:
-        with st.expander("Selecciona los departamentos (haz clic para expandir)"):
-            departamentos_unicos = df_empresas_puestos['N_DEPARTAMENTO'].unique()
-            departamentos_seleccionados = st.multiselect(
-                label="Selecciona departamentos",
-                options=departamentos_unicos,
-                default=departamentos_unicos.tolist(),
-                help='Mantén presionada la tecla Ctrl (o Cmd en Mac) para seleccionar múltiples opciones.',
-                label_visibility="collapsed",
-                key="departamentos_multiselect"  # Added unique key
-            )
 
-        df_empresas_puestos = df_empresas_puestos[df_empresas_puestos['N_DEPARTAMENTO'].isin(departamentos_seleccionados)]
-        
-        if all(col in df_empresas_puestos.columns for col in ['N_CATEGORIA_EMPLEO', 'NOMBRE_TIPO_EMPRESA', 'CUIT']):
-            df_puesto_agg = df_empresas_puestos.groupby(['N_CATEGORIA_EMPLEO', 'NOMBRE_TIPO_EMPRESA']).agg({'CUIT': 'nunique'}).reset_index()
-            top_10_categorias = df_puesto_agg.groupby('N_CATEGORIA_EMPLEO')['CUIT'].nunique().nlargest(10).index
-            df_puesto_agg_top10 = df_puesto_agg[df_puesto_agg['N_CATEGORIA_EMPLEO'].isin(top_10_categorias)]
+            
 
-            st.markdown("""<div class="info-box">Este gráfico representa las empresas adheridas al programa PPP, que cargaron el PERFIL de su demanda, expresado en categorias.</div>""", unsafe_allow_html=True)
             
-            # Improved chart with better colors and styling
-            st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-            
-            if ALTAIR_AVAILABLE:
-                chart_cat = alt.Chart(df_puesto_agg_top10).mark_bar(
-                    cornerRadiusTopRight=5,
-                    cornerRadiusBottomRight=5
-                ).encode( 
-                    x=alt.X('CUIT:Q', title=''),  
-                    y=alt.Y('N_CATEGORIA_EMPLEO:N', title=''), 
-                    tooltip=['N_CATEGORIA_EMPLEO', 'NOMBRE_TIPO_EMPRESA', 'CUIT'],
-                    text=alt.Text('CUIT', format=',d'),
-                    color=alt.value('#4e73df')  # Consistent color scheme
-                ).properties(
-                    width=600,
-                    height=400
-                )
-                
-                # Agregar las labels al gráfico
-                text = alt.Chart(df_puesto_agg_top10).mark_text(
-                    align='left',
-                    baseline='middle',
-                    dx=3,
-                    color='white'  # Better contrast for text
-                ).encode(
-                    x=alt.X('CUIT:Q', title=''),  
-                    y=alt.Y('N_CATEGORIA_EMPLEO:N', title=''), 
-                    text='CUIT'
-                )
-    
-                # Primero combinar los gráficos con layer
-                combined_chart = alt.layer(chart_cat, text)
-                
-                # Luego aplicar la configuración al gráfico combinado
-                combined_chart = combined_chart.configure_axisY(labels=False, domain=False, ticks=False)
-                
-                # Mostrar el gráfico combinado
-                st.altair_chart(combined_chart, use_container_width=True)
-            else:
-                # Alternativa usando Plotly si Altair no está disponible
-                fig = px.bar(
-                    df_puesto_agg_top10, 
-                    x='CUIT', 
-                    y='N_CATEGORIA_EMPLEO',
-                    text='CUIT',
-                    labels={'CUIT': '', 'N_CATEGORIA_EMPLEO': ''},
-                    height=400,
-                    color_discrete_sequence=['#4e73df']
-                )
-                fig.update_layout(
-                    yaxis={'categoryorder': 'total ascending'},
-                    showlegend=False
-                )
-                fig.update_traces(
-                    textposition='inside',
-                    textfont_color='white'
-                )
-                st.plotly_chart(fig, use_container_width=True)
-                
-            st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown("<hr style='border: 1px solid #e0e0e0; margin: 20px 0;'>", unsafe_allow_html=True)
 
@@ -819,7 +748,7 @@ def show_companies(df_empresas, geojson_data):
         </div>
     """.format(empresas_adh), unsafe_allow_html=True)
 
-    st.markdown("""<div class="info-box">Las empresas en esta tabla se encuentran adheridas a uno o más programas de empleo, han cumplido con los requisitos establecidos y han proporcionado sus datos a través de los registros de programasempleo.cba.gov.ar</div>""", unsafe_allow_html=True)
+    st.markdown("""<div class="info-box">Las empresas (Empresas y Monotributistas) en esta tabla se encuentran adheridas a uno o más programas de empleo, han cumplido con los requisitos establecidos por los programas en su momento y salvo omisiones, han proporcionado sus datos a través de los registros de programasempleo.cba.gov.ar</div>""", unsafe_allow_html=True)
 
     # Mostrar el DataFrame con mejor estilo
     st.dataframe(df_display, hide_index=True, use_container_width=True)
@@ -879,7 +808,7 @@ def show_companies(df_empresas, geojson_data):
             else:
                 df_cat_count_final = df_cat_count.copy()
 
-            if ALTAIR_AVAILABLE:
+            if True:
                 chart_cat = alt.Chart(df_cat_count_final).mark_bar(
                     cornerRadiusTopRight=5,
                     cornerRadiusBottomRight=5
@@ -948,10 +877,6 @@ def show_inscriptions(df_inscriptos, df_poblacion, geojson_data, file_date):
         file_date: Fecha de actualización de los archivos
     """
     
-    # Verificar si los módulos de mapeo están disponibles cuando se intenta usar geojson_data
-    if not is_mapping_available() and geojson_data is not None:
-        st.warning("La visualización de mapas no está disponible. Para habilitar esta función, instale los paquetes: folium, streamlit-folium y geopandas")
-
     # Verificar que los DataFrames no estén vacíos
     if df_inscriptos is None:
         st.markdown("""
@@ -1107,6 +1032,9 @@ def show_empleo_dashboard(data, dates=None, is_development=False):
                 if df is not None:
                     with st.expander(f"Columnas en: `{name}`"):
                         st.write(df.columns.tolist())
+                        st.write("Primeras 5 filas:")
+                        st.dataframe(df.head())
+                        st.write(f"Total de registros: {len(df)}")
                 else:
                     st.warning(f"DataFrame '{name}' no cargado o vacío.")
         else:
@@ -1117,6 +1045,7 @@ def show_empleo_dashboard(data, dates=None, is_development=False):
         # Cargar y preprocesar datos
         df_inscriptos, df_empresas, df_poblacion, geojson_data, has_fichas, has_empresas, has_poblacion, has_geojson = load_and_preprocess_data(data, dates)
         
+        st.dataframe(df_empresas)
         # Verificar si hay datos de fichas
         if not has_fichas:
             return

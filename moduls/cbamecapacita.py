@@ -2,8 +2,33 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from utils.ui_components import display_kpi_row
+from utils.data_cleaning import clean_thousand_separator
 import geopandas as gpd
 import json
+
+def load_and_preprocess_data(data):
+    """
+    Carga y preprocesa los datos principales del dashboard CBA ME CAPACITA.
+    - Limpia separadores de miles en columnas numéricas.
+    - Devuelve los DataFrames listos para usar.
+    """
+    # Cargar DataFrames principales
+    df_postulantes = None
+    df_cursos = None
+    if isinstance(data, dict):
+        df_postulantes = data.get("VT_INSCRIPCIONES_PRG129.parquet")
+        df_cursos = data.get("VT_CURSOS_SEDES_GEO.parquet")
+    elif isinstance(data, list):
+        for df in data:
+            if "CUIL" in df.columns:
+                df_postulantes = df
+            if "ID_PLANIFICACION" in df.columns and "N_CURSO" in df.columns:
+                df_cursos = df
+    # Limpieza de separador de miles en ambos DataFrames
+    df_postulantes = clean_thousand_separator(df_postulantes)
+    df_cursos = clean_thousand_separator(df_cursos)
+
+    return df_postulantes, df_cursos
 
 def show_cba_capacita_dashboard(data, dates, is_development=False):
     """
@@ -28,11 +53,17 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                     if df is not None:
                         with st.expander(f"Columnas en: `{name}`"):
                             st.write(df.columns.tolist())
+                            st.write("Primeras 5 filas:")
+                            st.dataframe(df.head())
+                            st.write(f"Total de registros: {len(df)}")
                     else:
                         st.warning(f"DataFrame '{name}' no cargado o vacío.")
             else:
                 st.warning("Formato de datos inesperado para CBA Me Capacita.")
             st.markdown("***")
+
+        # --- Usar función de carga y preprocesamiento ---
+        df_postulantes, df_cursos = load_and_preprocess_data(data)
 
         # Marcador de posición para la implementación real
         st.info("Dashboard de CBA ME CAPACITA en desarrollo.")
@@ -44,17 +75,6 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                 st.caption(f"Última actualización de datos: {latest_date}")
         
         # KPIs reales usando VT_INSCRIPCIONES_PRG129.parquet (postulantes) y VT_CURSOS_SEDES_GEO.parquet (cursos)
-        df_postulantes = None
-        df_cursos = None
-        if isinstance(data, dict):
-            df_postulantes = data.get("VT_INSCRIPCIONES_PRG129.parquet")
-            df_cursos = data.get("VT_CURSOS_SEDES_GEO.parquet")
-        elif isinstance(data, list):
-            for df in data:
-                if "CUIL" in df.columns:
-                    df_postulantes = df
-                if "ID_PLANIFICACION" in df.columns and "N_CURSO" in df.columns:
-                    df_cursos = df
         total_postulantes = df_postulantes["CUIL"].nunique() if df_postulantes is not None else 0
         cursos_activos = df_cursos["ID_PLANIFICACION"].nunique() if df_cursos is not None else 0
         total_capacitaciones = df_postulantes["ID_CAPACITACION"].nunique() if df_postulantes is not None and "ID_CAPACITACION" in df_postulantes.columns else 0

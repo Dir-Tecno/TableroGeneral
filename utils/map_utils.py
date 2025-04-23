@@ -3,19 +3,10 @@ import pandas as pd
 import json
 import io
 
-# Importaciones condicionales para manejar posibles errores
-try:
-    import geopandas as gpd
-    import plotly.express as px
-    import folium
-    from streamlit_folium import folium_static
-    MAPPING_AVAILABLE = True
-except ImportError:
-    MAPPING_AVAILABLE = False
-
-def is_mapping_available():
-    """Verifica si las bibliotecas de mapeo están disponibles"""
-    return MAPPING_AVAILABLE
+import geopandas as gpd
+import plotly.express as px
+import folium
+from streamlit_folium import folium_static
 
 def load_geojson(geojson_data):
     """
@@ -27,10 +18,6 @@ def load_geojson(geojson_data):
     Returns:
         dict: Datos GeoJSON en formato diccionario
     """
-    if not MAPPING_AVAILABLE:
-        st.warning("Las bibliotecas de mapeo no están disponibles. Instale geopandas, folium y streamlit-folium.")
-        return None
-        
     try:
         # Si es un GeoDataFrame, convertirlo a diccionario GeoJSON
         if isinstance(geojson_data, gpd.GeoDataFrame):
@@ -53,7 +40,7 @@ def load_geojson(geojson_data):
             st.error(f"Formato de datos GeoJSON no reconocido: {type(geojson_data)}")
             return None
     except Exception as e:
-        st.error(f"Error al cargar datos GeoJSON: {str(e)}")
+        st.warning(f"Error al cargar datos GeoJSON: {e}")
         return None
 
 def create_choropleth_map(df, geojson_data, location_field, color_field, title=None, center=None):
@@ -71,10 +58,6 @@ def create_choropleth_map(df, geojson_data, location_field, color_field, title=N
     Returns:
         fig: Figura de Plotly o None si hay un error
     """
-    if not MAPPING_AVAILABLE:
-        st.warning("Las bibliotecas de mapeo no están disponibles. Instale geopandas, folium y streamlit-folium.")
-        return None
-        
     try:
         geojson_dict = load_geojson(geojson_data)
         if geojson_dict is None:
