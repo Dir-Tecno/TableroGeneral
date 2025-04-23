@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 from utils.ui_components import display_kpi_row, create_bco_gente_kpis
 from utils.styles import COLORES_IDENTIDAD
-from utils.kpi_tooltips import ESTADO_CATEGORIAS
+from utils.kpi_tooltips import ESTADO_CATEGORIAS, TOOLTIPS_DESCRIPTIVOS
 from utils.ui_components import create_bco_gente_kpis
 
 
@@ -292,8 +292,20 @@ def show_bco_gente_dashboard(data, dates, is_development=False):
     
     if is_development:
         st.write("Datos Globales ya cruzados")
-        st.dataframe(df_global)
-
+        if 'geometry' in df_global.columns:
+            st.dataframe(df_global.drop(columns=['geometry']))
+            df_to_download = df_global.drop(columns=['geometry'])
+        else:
+            st.dataframe(df_global)
+            df_to_download = df_global
+        import io
+        csv = df_to_download.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="Descargar CSV de Datos Globales",
+            data=csv,
+            file_name="datos_globales.csv",
+            mime="text/csv"
+        )
     # Verificar que los datos globales existan antes de continuar
     if not has_global_data:
         st.error("No se pudieron cargar los datos globales de Banco de la Gente. Verifique que el archivo 'vt_nomina_rep_dpto_localidad.parquet' exista en el repositorio.")
@@ -312,24 +324,34 @@ def show_bco_gente_dashboard(data, dates, is_development=False):
             st.caption(f"Última actualización de datos: {latest_date}")
     
     # Crear pestañas para las diferentes vistas
-    tab_global, tab_recupero = st.tabs(["GLOBAL", "RECUPERO"])
-    
-    with tab_global:
-        # Mostrar los datos filtrados en la pestaña GLOBAL
-        if has_global_data:
-            with st.spinner("Cargando visualizaciones globales..."):
-                mostrar_global(df_filtrado, tooltips_categorias, df_recupero)
-        else:
-            st.warning("No hay datos globales disponibles para mostrar.")
-    
-    with tab_recupero:
-        # Mostrar los datos de recupero en la pestaña RECUPERO
-        if has_global_data and df_global is not None and not df_global.empty:
-            with st.spinner("Cargando visualizaciones de recupero..."):
-                # Pasar el DataFrame ya filtrado por render_filters
-                mostrar_recupero(df_filtrado, df_localidad_municipio, geojson_data)
-        else:
-            st.info("No hay datos de recupero disponibles para mostrar.")
+    if 'bco_gente_tab' not in st.session_state:
+        st.session_state['bco_gente_tab'] = 0
+    tab_labels = ["GLOBAL", "RECUPERO"]
+    tabs = st.tabs(tab_labels)
+
+    # Detectar cambio de pestaña manualmente (Streamlit no lo hace nativo)
+    # Usamos un selectbox invisible para forzar el index
+    tab_index = st.selectbox(
+        "_tab_selector_bco_gente", options=list(range(len(tab_labels))), format_func=lambda i: tab_labels[i],
+        index=st.session_state['bco_gente_tab'], key="bco_gente_tab_selector", label_visibility="collapsed"
+    )
+    st.session_state['bco_gente_tab'] = tab_index
+
+    with tabs[tab_index]:
+        if tab_index == 0:
+            # Mostrar los datos filtrados en la pestaña GLOBAL
+            if has_global_data:
+                with st.spinner("Cargando visualizaciones globales..."):
+                    mostrar_global(df_filtrado, TOOLTIPS_DESCRIPTIVOS, df_recupero)
+            else:
+                st.warning("No hay datos globales disponibles para mostrar.")
+        elif tab_index == 1:
+            # Mostrar los datos de recupero en la pestaña RECUPERO
+            if has_global_data and df_global is not None and not df_global.empty:
+                with st.spinner("Cargando visualizaciones de recupero..."):
+                    mostrar_recupero(df_filtrado, df_localidad_municipio, geojson_data)
+            else:
+                st.info("No hay datos de recupero disponibles para mostrar.")
 
 def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
     """
@@ -469,13 +491,7 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
                 # Agregar encabezados para cada categoría
             for categoria in categorias_mostrar:
                     # Usar tooltips_categorias si está disponible, de lo contrario crear uno básico
-                    tooltip_text = ""
-                    if 'tooltips_categorias' in locals() or 'tooltips_categorias' in globals():
-                        tooltip_text = tooltips_categorias.get(categoria, "")
-                    else:
-                        # Crear tooltip básico con los estados de la categoría
-                        tooltip_text = ", ".join(ESTADO_CATEGORIAS.get(categoria, []))
-
+                    tooltip_text = TOOLTIPS_DESCRIPTIVOS.get(categoria, "")
                     html_table_linea += f'<th class="value-header" title="{tooltip_text}">{categoria}</th>'
 
                 # Encabezado para la columna de total
@@ -512,8 +528,8 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
 
         # Línea divisoria para separar secciones
     st.markdown("<hr style='border: 2px solid #cccccc;'>", unsafe_allow_html=True)
-    
-        # NUEVA SECCIÓN: Gráficos de Torta Demográficos
+
+         # NUEVA SECCIÓN: Gráficos de Torta Demográficos
     st.subheader("Distribución de Créditos", help="Distribución demográfica de los beneficiarios")
     
     # Crear dos columnas para los gráficos de torta
@@ -685,7 +701,7 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
             
             # Crear objeto Styler
             styled_df = pivot_df_filtered.style \
-                .map(highlight_totals, subset=['N_DEPARTAMENTO', 'N_LOCALIDAD'])
+                .applymap(highlight_totals, subset=['N_DEPARTAMENTO', 'N_LOCALIDAD'])
             
             # Aplicar formato a las columnas numéricas
             numeric_columns = selected_categorias + ['Total']
@@ -909,6 +925,96 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
                         
     except Exception as e:
         st.error(f"Error inesperado en la sección Serie Histórica: {e}")
+
+    # --- NUEVA SECCIÓN: Mapa de Monto Otorgado por Localidad (Pagados) ---
+    st.markdown("<hr style='border: 2px solid #cccccc;'>", unsafe_allow_html=True)
+    st.subheader("Mapa de Monto Otorgado por Localidad (solo préstamos Pagados)")
+    try:
+        # Filtro interactivo por línea de préstamo
+        lineas_disponibles = df_filtrado_global["N_LINEA_PRESTAMO"].dropna().unique().tolist()
+        lineas_disponibles.sort()
+        selected_lineas = st.multiselect(
+            "Filtrar por Línea de Préstamo:",
+            options=lineas_disponibles,
+            default=lineas_disponibles,
+            key="filtro_linea_prestamo_mapa"
+        )
+        # Filtrar por CATEGORIA == "Pagados" y por línea seleccionada
+        df_map = df_filtrado_global[
+            (df_filtrado_global["CATEGORIA"] == "Pagados") &
+            (df_filtrado_global["N_LINEA_PRESTAMO"].isin(selected_lineas))
+        ].copy()
+        # Agrupar por localidad y sumar monto otorgado
+        df_map_grouped = df_map.groupby([
+            "N_LOCALIDAD", "N_DEPARTAMENTO", "LATITUD", "LONGITUD"
+        ], dropna=True)["MONTO_OTORGADO"].sum().reset_index()
+        # Limpiar y convertir LATITUD y LONGITUD a float
+        for col in ["LATITUD", "LONGITUD"]:
+            df_map_grouped[col] = (
+                df_map_grouped[col]
+                .astype(str)
+                .str.replace(",", ".", regex=False)
+                .str.extract(r"(-?\d+\.\d+)")
+                .astype(float)
+            )
+        df_map_grouped = df_map_grouped.dropna(subset=["LATITUD", "LONGITUD", "MONTO_OTORGADO"])
+        if df_map_grouped.empty:
+            st.info("No hay datos de préstamos pagados con coordenadas para mostrar en el mapa.")
+        else:
+            import plotly.express as px
+            col_mapa, col_tabla = st.columns([1, 3])
+            with col_mapa:
+                st.markdown("#### Mapa de Localidades")
+                fig = px.scatter_mapbox(
+                    df_map_grouped,
+                    lat="LATITUD",
+                    lon="LONGITUD",
+                    color="MONTO_OTORGADO",
+                    size="MONTO_OTORGADO",
+                    size_max=40,
+                    hover_name="N_LOCALIDAD",
+                    hover_data=None,
+                    zoom=6,
+                    mapbox_style="carto-positron",
+                    color_continuous_scale="Viridis",
+                    labels={
+                        "N_LOCALIDAD": "Localidad",
+                        "N_DEPARTAMENTO": "Departamento",
+                        "MONTO_OTORGADO": "Monto Otorgado"
+                    },
+                    custom_data=[
+                        "N_LOCALIDAD",
+                        "N_DEPARTAMENTO",
+                        "MONTO_OTORGADO",
+                        "LATITUD",
+                        "LONGITUD"
+                    ]
+                )
+                fig.update_traces(
+                    hovertemplate=
+                        "<b>%{customdata[0]}</b><br>" +
+                        "Departamento: %{customdata[1]}<br>" +
+                        "Monto Otorgado: $%{customdata[2]:,.0f}<br>" +
+                        "Lat: %{customdata[3]:.3f} | Lon: %{customdata[4]:.3f}<extra></extra>"
+                )
+                fig.update_layout(mapbox_center={"lat": -31.4167, "lon": -64.1833})
+                st.plotly_chart(fig, use_container_width=True)
+            with col_tabla:
+                st.markdown("#### Tabla de Monto Otorgado por Localidad")
+                styled_table = (
+                    df_map_grouped[["N_LOCALIDAD", "N_DEPARTAMENTO", "MONTO_OTORGADO"]]
+                    .sort_values("MONTO_OTORGADO", ascending=False)
+                    .style
+                    .background_gradient(cmap="Blues", subset=["MONTO_OTORGADO"])
+                    .format({"MONTO_OTORGADO": "{:,.0f}"})
+                )
+                st.dataframe(
+                    styled_table,
+                    use_container_width=True,
+                    hide_index=True
+                )
+    except Exception as e:
+        st.warning(f"Error al generar el mapa de monto otorgado: {e}")
 
 def mostrar_recupero(df_filtrado, df_localidad_municipio, geojson_data):
     """

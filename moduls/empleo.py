@@ -763,22 +763,48 @@ def show_companies(df_empresas, geojson_data):
     # Métricas y tabla final con mejor diseño
     empresas_adh = df_display['CUIT'].nunique()
     
-    st.markdown("""
-        <div class="metric-card">
-            <div class="metric-label">Empresas Adheridas</div>
-            <div class="metric-value">{:,}</div>
-        </div>
-    """.format(empresas_adh), unsafe_allow_html=True)
+    # Calcular empresas con y sin beneficiarios
+    empresas_con_benef = df_display[df_display['BENEF'] > 0]['CUIT'].nunique()
+    empresas_sin_benef = df_display[pd.isna(df_display['BENEF'])]['CUIT'].nunique()
+    
+    # Layout para los KPIs - 3 columnas
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.markdown("""
+            <div class="metric-card">
+                <div class="metric-label">Empresas Adheridas</div>
+                <div class="metric-value">{:,}</div>
+            </div>
+        """.format(empresas_adh), unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown("""
+            <div class="metric-card">
+                <div class="metric-label">Empresas con Beneficiarios</div>
+                <div class="metric-value">{:,}</div>
+            </div>
+        """.format(empresas_con_benef), unsafe_allow_html=True)
+        
+    with col3:
+        st.markdown("""
+            <div class="metric-card">
+                <div class="metric-label">Empresas sin Beneficiarios</div>
+                <div class="metric-value">{:,}</div>
+            </div>
+        """.format(empresas_sin_benef), unsafe_allow_html=True)
 
     st.markdown("""<div class="info-box">Las empresas (Empresas y Monotributistas) en esta tabla se encuentran adheridas a uno o más programas de empleo, han cumplido con los requisitos establecidos por los programas en su momento y salvo omisiones, han proporcionado sus datos a través de los registros de programasempleo.cba.gov.ar</div>""", unsafe_allow_html=True)
 
-    # Mostrar el DataFrame con mejor estilo
-    st.dataframe(df_display, hide_index=True, use_container_width=True)
+    # Mostrar el DataFrame con mejor estilo, dentro de un expander
+    with st.expander("Ver tabla de empresas adheridas", expanded=False):
+        st.dataframe(df_display, hide_index=True, use_container_width=True)
 
     st.markdown("<hr style='border: 1px solid #e0e0e0; margin: 20px 0;'>", unsafe_allow_html=True)
 
     # --- Nuevo apartado: Perfil de Demanda con mejor estilo ---
     st.markdown('<div class="section-title">Perfil de Demanda</div>', unsafe_allow_html=True)
+
 
     # Filtrar solo los datos que tengan información de puesto y categoría
     required_columns = ['N_EMPRESA', 'CUIT', 'N_PUESTO_EMPLEO', 'N_CATEGORIA_EMPLEO']
