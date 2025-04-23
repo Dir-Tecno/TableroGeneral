@@ -95,7 +95,7 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                 "delta_color": "#d4f7d4"
             },
             {
-                "title": "Capacitaciones Elejidas",
+                "title": "Capacitaciones Elegidas",
                 "value": f"{total_capacitaciones:,}",
                 "color_class": "kpi-accent-2",
                 "delta": "",
@@ -233,56 +233,6 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                     )
             else:
                 st.warning("No se encontró el DataFrame de cursos con la estructura esperada.")
-
-            st.subheader("Análisis de Cursos")
-            # Gráfico de ejemplo
-            course_data = pd.DataFrame({
-                "Categoría": ["Tecnología", "Oficios", "Administración", "Idiomas", "Otros"],
-                "Cursos": [15, 12, 8, 5, 2],
-                "Alumnos": [2200, 1800, 1000, 500, 178]
-            })
-            fig = px.bar(course_data, x="Categoría", y=["Cursos", "Alumnos"], 
-                        barmode="group", title="Cursos y Alumnos por Categoría")
-            st.plotly_chart(fig)
             
-            # Serie histórica de inscripciones (ejemplo)
-            try:
-                st.subheader("Evolución de Inscripciones")
-                # Datos de ejemplo para la serie histórica
-                dates = pd.date_range(start='1/1/2023', periods=12, freq='M')
-                historical_data = pd.DataFrame({
-                    "Fecha": dates,
-                    "Inscripciones": [120, 150, 180, 210, 190, 220, 250, 280, 310, 290, 320, 350]
-                })
-                
-                fig_historia = px.line(
-                    historical_data, 
-                    x='Fecha', 
-                    y='Inscripciones', 
-                    title='Evolución de Inscripciones por Mes',
-                    labels={'Inscripciones': 'Cantidad de Inscripciones', 'Fecha': 'Mes'},
-                    markers=True
-                )
-                
-                # Personalizar el diseño del gráfico
-                fig_historia.update_layout(
-                    xaxis=dict(
-                        title='Fecha',
-                        titlefont_size=14,
-                        tickfont_size=12,
-                        gridcolor='lightgray'
-                    ),
-                    yaxis=dict(
-                        title='Cantidad de Inscripciones',
-                        titlefont_size=14,
-                        tickfont_size=12,
-                        gridcolor='lightgray'
-                    ),
-                    plot_bgcolor='white'
-                )
-                
-                st.plotly_chart(fig_historia)
-            except Exception as e:
-                st.warning(f"Error al generar la serie histórica de inscripciones: {str(e)}")
     except Exception as e:
         st.error(f"Error al mostrar el dashboard de CBA ME CAPACITA: {str(e)}")

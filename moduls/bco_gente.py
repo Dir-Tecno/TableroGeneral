@@ -53,6 +53,18 @@ def load_and_preprocess_data(data):
             # Si existe la columna ID_LOCALIDAD, corregirla también
             if 'ID_LOCALIDAD' in df_global.columns:
                 df_global.loc[capital_mask, 'ID_LOCALIDAD'] = 1
+            
+            # Añadir columna de ZONA FAVORECIDA
+            zonas_favorecidas = [
+                'PRESIDENTE ROQUE SAENZ PEÑA', 'GENERAL ROCA', 'RIO SECO', 'TULUMBA', 
+                'POCHO', 'SAN JAVIER', 'SAN ALBERTO', 'MINAS', 'CRUZ DEL EJE', 
+                'TOTORAL', 'SOBREMONTE', 'ISCHILIN'
+            ]
+            
+            # Crear la columna ZONA
+            df_global['ZONA'] = df_global['N_DEPARTAMENTO'].apply(
+                lambda x: 'ZONA FAVORECIDA' if x in zonas_favorecidas else 'ZONA REGULAR'
+            )
         
         # Realizar el cruce entre df_global y df_recupero si ambos están disponibles
         if has_global_data and has_recupero_data and 'NRO_SOLICITUD' in df_recupero.columns:
@@ -355,22 +367,20 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
      # Nueva tabla: Conteo de Préstamos por Línea y Estado
     st.subheader("Conteo de Préstamos por Línea y Estado", 
                  help="Muestra el conteo de préstamos por línea y estado, basado en los datos filtrados.")
-    col_tabla, col_torta = st.columns([3,1])
-    with col_tabla:
-        try:
-            # Verificar que las columnas necesarias existan en el DataFrame
-            required_columns = ['N_LINEA_PRESTAMO', 'N_ESTADO_PRESTAMO', 'NRO_SOLICITUD']
-            missing_columns = [col for col in required_columns if col not in df_filtrado_global.columns]
-        
-            if missing_columns:
-                st.warning(f"No se pueden mostrar el conteo de préstamos por línea. Faltan columnas: {', '.join(missing_columns)}")
-            else:
-                # Definir las categorías a mostrar
-                categorias_mostrar = ["A Pagar - Convocatoria", "Pagados", "En proceso de pago", "Pagados-Finalizados"]
+    try:
+        # Verificar que las columnas necesarias existan en el DataFrame
+        required_columns = ['N_LINEA_PRESTAMO', 'N_ESTADO_PRESTAMO', 'NRO_SOLICITUD']
+        missing_columns = [col for col in required_columns if col not in df_filtrado_global.columns]
+    
+        if missing_columns:
+            st.warning(f"No se pueden mostrar el conteo de préstamos por línea. Faltan columnas: {', '.join(missing_columns)}")
+        else:
+            # Definir las categorías a mostrar
+            categorias_mostrar = ["A Pagar - Convocatoria", "Pagados", "En proceso de pago", "Pagados-Finalizados"]
 
-                # Usar @st.cache_data para evitar recalcular si los datos no cambian
-                @st.cache_data
-                def prepare_linea_data(df, categorias_mostrar):
+            # Usar @st.cache_data para evitar recalcular si los datos no cambian
+            @st.cache_data
+            def prepare_linea_data(df, categorias_mostrar):
                     # Crear copia del DataFrame para manipulación
                     df_conteo = df.copy()
 
@@ -409,10 +419,10 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
                     return pd.concat([pivot_linea, totales_row], ignore_index=True)
 
                 # Obtener el DataFrame procesado usando caché
-                pivot_df = prepare_linea_data(df_filtrado_global, categorias_mostrar)
+            pivot_df = prepare_linea_data(df_filtrado_global, categorias_mostrar)
 
                 # Crear HTML personalizado para la tabla de conteo por línea
-                html_table_linea = """
+            html_table_linea = """
                     <style>
                         .linea-table {
                             width: 100%;
@@ -453,11 +463,11 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
                 """
 
                 # Crear tabla HTML
-                html_table_linea += '<table class="linea-table"><thead><tr>'
-                html_table_linea += '<th class="group-header">Línea de Préstamo</th>'
+            html_table_linea += '<table class="linea-table"><thead><tr>'
+            html_table_linea += '<th class="group-header">Línea de Préstamo</th>'
 
                 # Agregar encabezados para cada categoría
-                for categoria in categorias_mostrar:
+            for categoria in categorias_mostrar:
                     # Usar tooltips_categorias si está disponible, de lo contrario crear uno básico
                     tooltip_text = ""
                     if 'tooltips_categorias' in locals() or 'tooltips_categorias' in globals():
@@ -469,11 +479,11 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
                     html_table_linea += f'<th class="value-header" title="{tooltip_text}">{categoria}</th>'
 
                 # Encabezado para la columna de total
-                html_table_linea += '<th class="total-header">Total</th>'
-                html_table_linea += '</tr></thead><tbody>'
+            html_table_linea += '<th class="total-header">Total</th>'
+            html_table_linea += '</tr></thead><tbody>'
 
                 # Agregar filas para cada línea de préstamo
-                for idx, row in pivot_df.iterrows():
+            for idx, row in pivot_df.iterrows():
                     # Formato especial para la fila de totales
                     if row['N_LINEA_PRESTAMO'] == 'Total':
                         html_table_linea += '<tr class="total-row">'
@@ -492,55 +502,91 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
                     html_table_linea += f'<td class="total-col">{int(row["Total"])}</td>'
                     html_table_linea += '</tr>'
 
-                html_table_linea += '</tbody></table>'
+            html_table_linea += '</tbody></table>'
 
                 # Mostrar la tabla
-                st.markdown(html_table_linea, unsafe_allow_html=True)
-        except Exception as e:
+            st.markdown(html_table_linea, unsafe_allow_html=True)
+        
+    except Exception as e:
             st.warning(f"Error al generar la tabla de conteo por línea: {str(e)}")
 
-    # torta
-    with col_torta:
+        # Línea divisoria para separar secciones
+    st.markdown("<hr style='border: 2px solid #cccccc;'>", unsafe_allow_html=True)
+    
+        # NUEVA SECCIÓN: Gráficos de Torta Demográficos
+    st.subheader("Distribución de Créditos", help="Distribución demográfica de los beneficiarios")
+    
+    # Crear dos columnas para los gráficos de torta
+    col_torta_cat, col_torta_sexo = st.columns(2)
+    
+    # Gráfico de torta por categoría
+    with col_torta_cat:
         try:
-            # Asumimos que categorias_mostrar = ["A Pagar - Convocatoria", "Pagados", "En proceso de pago"]
-            # Filtrar el DataFrame ANTES de agrupar, usando la columna de estado
-            # st.dataframe(df_filtrado_global)
             df_filtrado_torta = df_filtrado_global[df_filtrado_global['CATEGORIA'].isin(categorias_mostrar)]
             
             # Agrupar el DataFrame filtrado por línea de préstamo
             grafico_torta = df_filtrado_torta.groupby('N_LINEA_PRESTAMO').size().reset_index(name='Cantidad')
             
-            # Si el dataframe resultante está vacío, mostrar mensaje
             if grafico_torta.empty:
-                 st.info("No hay datos en las categorías seleccionadas para mostrar en el gráfico.")
+                st.info("No hay datos en las categorías seleccionadas para mostrar en el gráfico.")
             else:
-                 colores_identidad = COLORES_IDENTIDAD
-                 fig_torta = px.pie(
-                     grafico_torta, 
-                     names='N_LINEA_PRESTAMO', 
-                     values='Cantidad', 
-                     color_discrete_sequence=colores_identidad
-                 )
-                 fig_torta.update_traces(
-                     textposition='inside',
-                     textinfo='percent+label',
-                     marker=dict(line=dict(color='#FFFFFF', width=1))
-                     
-                 )
-                 fig_torta.update_layout(
-                     legend_title="Líneas de Préstamo",
-                     font=dict(size=12),
-                     uniformtext_minsize=10,
-                     uniformtext_mode='hide',
-                     legend_orientation="h", # Orientación horizontal
-                     legend_yanchor="bottom",
-                     legend_y=-0.1, # Ajustar posición vertical (debajo del gráfico)
-                     legend_xanchor="center",
-                     legend_x=0.5 # Centrar horizontalmente
-                 )
-                 st.plotly_chart(fig_torta, use_container_width=True)
+                colores_identidad = COLORES_IDENTIDAD
+                fig_torta = px.pie(
+                    grafico_torta,
+                    names='N_LINEA_PRESTAMO',
+                    values='Cantidad',
+                    color_discrete_sequence=colores_identidad
+                )
+                fig_torta.update_traces(
+                    textposition='inside',
+                    textinfo='percent+label',
+                    marker=dict(line=dict(color='#FFFFFF', width=1))
+                )
+                fig_torta.update_layout(
+                            title="Distribución por Linea",
+                            margin=dict(l=20, r=20, t=30, b=20)
+                        )
+                st.plotly_chart(fig_torta, use_container_width=True)
         except Exception as e:
-            st.warning(f"Error al generar la torta de conteo por línea: {str(e)}")
+            st.error(f"Error al generar el gráfico de categoría: {e}")
+
+    # Gráfico de torta por sexo
+    with col_torta_sexo:
+        try:
+            if 'N_SEXO' in df_filtrado_global.columns:
+                df_sexo = df_filtrado_global.dropna(subset=['N_SEXO']).copy()
+                if df_sexo.empty:
+                    st.warning("No hay datos disponibles para el gráfico de sexo después de filtrar NaNs.")
+                else:
+                    sexo_counts = df_sexo['N_SEXO'].value_counts().reset_index()
+                    sexo_counts.columns = ['Sexo', 'Cantidad']
+                    if sexo_counts.empty:
+                        st.warning("No hay datos para mostrar en el gráfico de sexo.")
+                    else:
+                        fig_sexo = px.pie(
+                            sexo_counts,
+                            values='Cantidad',
+                            names='Sexo',
+                            color_discrete_sequence=px.colors.qualitative.Set3
+                        )
+                        fig_sexo.update_traces(
+                            textposition='inside',
+                            textinfo='percent+label',
+                            hoverinfo='label+percent+value'
+                        )
+                        fig_sexo.update_layout(
+                            title="Distribución por Sexo",
+                            margin=dict(l=20, r=20, t=30, b=20)
+                        )
+                        st.plotly_chart(fig_sexo, use_container_width=True)
+            else:
+                st.write("Columnas disponibles:", df_filtrado_global.columns.tolist())
+                st.warning("La columna 'N_SEXO' no está presente en el DataFrame.")
+        except Exception as e:
+            st.error(f"Error al generar el gráfico de sexo: {e}")
+
+    # Línea divisoria para separar secciones
+    st.markdown("<hr style='border: 2px solid #cccccc;'>", unsafe_allow_html=True)
             
     # Tabla de estados de préstamos agrupados
     st.subheader("Estados de Préstamos por Categoría", 
@@ -639,7 +685,7 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
             
             # Crear objeto Styler
             styled_df = pivot_df_filtered.style \
-                .applymap(highlight_totals, subset=['N_DEPARTAMENTO', 'N_LOCALIDAD'])
+                .map(highlight_totals, subset=['N_DEPARTAMENTO', 'N_LOCALIDAD'])
             
             # Aplicar formato a las columnas numéricas
             numeric_columns = selected_categorias + ['Total']
@@ -678,67 +724,151 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
      # Línea divisoria en gris claro
     st.markdown("<hr style='border: 2px solid #cccccc;'>", unsafe_allow_html=True)
 
-    # Serie Histórica
+    # Serie Histórica 
     st.subheader("Serie Histórica de Préstamos", 
-                 help="Muestra la cantidad total de solicitud de préstamos, agrupados por mes, dentro del rango de fechas seleccionado. "
-                      "Formularios presentados.")
-    try:
-        if df_recupero is None or df_recupero.empty:
-            st.info("No hay datos de recupero disponibles para la serie histórica.")
-        elif 'FEC_FORM' not in df_recupero.columns:
-            st.warning("La columna 'FEC_FORM' necesaria para la serie histórica no se encuentra en los datos de recupero.")
-        else:
-            df_fechas = df_recupero[['FEC_FORM']].copy()
-            df_fechas['FEC_FORM'] = pd.to_datetime(df_fechas['FEC_FORM'], errors='coerce')
-            df_fechas.dropna(subset=['FEC_FORM'], inplace=True)
-            fecha_actual = datetime.now()
-            df_fechas = df_fechas[df_fechas['FEC_FORM'] <= fecha_actual]
-            fecha_min_valida = pd.to_datetime('1678-01-01')
-            df_fechas_filtrado_rango = df_fechas[df_fechas['FEC_FORM'] >= fecha_min_valida].copy()
-
-            if df_fechas_filtrado_rango.empty:
-                st.info("No hay datos disponibles dentro del rango de fechas válido para la serie histórica.")
-            else:
-                fecha_min = df_fechas_filtrado_rango['FEC_FORM'].min().date()
-                fecha_max = df_fechas_filtrado_rango['FEC_FORM'].max().date()
-                st.caption(f"Rango de fechas disponibles: {fecha_min.strftime('%d/%m/%Y')} - {fecha_max.strftime('%d/%m/%Y')}")
-
-                start_date = st.date_input("Fecha de inicio:", min_value=fecha_min, max_value=fecha_max, value=fecha_min)
-                end_date = st.date_input("Fecha de fin:", min_value=fecha_min, max_value=fecha_max, value=fecha_max)
-
-                if start_date > end_date:
-                    st.error("La fecha de inicio debe ser anterior a la fecha de fin.")
+                    help="Muestra la cantidad total de solicitud de préstamos, agrupados por mes, dentro del rango de fechas seleccionado. " 
+                        "Formularios presentados.") 
+    try: 
+            if df_recupero is None or df_recupero.empty: 
+                st.info("No hay datos de recupero disponibles para la serie histórica.") 
+            elif 'FEC_FORM' not in df_recupero.columns: 
+                st.warning("La columna 'FEC_FORM' necesaria para la serie histórica no se encuentra en los datos de recupero.") 
+            else: 
+                # Verificar si existe la columna FEC_INICIO_PAGO
+                tiene_fecha_inicio_pago = 'FEC_INICIO_PAGO' in df_recupero.columns
+                
+                # Preparar DataFrame de fechas de formulario
+                df_fechas = df_recupero[['FEC_FORM']].copy()
+                df_fechas['FEC_FORM'] = pd.to_datetime(df_fechas['FEC_FORM'], errors='coerce')
+                df_fechas.dropna(subset=['FEC_FORM'], inplace=True)
+                fecha_actual = datetime.now()
+                df_fechas = df_fechas[df_fechas['FEC_FORM'] <= fecha_actual]
+                fecha_min_valida = pd.to_datetime('1678-01-01')
+                df_fechas_filtrado_rango = df_fechas[df_fechas['FEC_FORM'] >= fecha_min_valida].copy()
+                
+                # Preparar DataFrame de fechas de inicio de pago si existe la columna
+                if tiene_fecha_inicio_pago:
+                    df_fechas_pago = df_recupero[['FEC_INICIO_PAGO']].copy()
+                    df_fechas_pago['FEC_INICIO_PAGO'] = pd.to_datetime(df_fechas_pago['FEC_INICIO_PAGO'], errors='coerce')
+                    df_fechas_pago.dropna(subset=['FEC_INICIO_PAGO'], inplace=True)
+                    df_fechas_pago = df_fechas_pago[df_fechas_pago['FEC_INICIO_PAGO'] <= fecha_actual]
+                    df_fechas_pago = df_fechas_pago[df_fechas_pago['FEC_INICIO_PAGO'] >= fecha_min_valida].copy()
+                    tiene_datos_pago = not df_fechas_pago.empty
                 else:
-                    df_fechas_seleccionado = df_fechas_filtrado_rango[
-                        (df_fechas_filtrado_rango['FEC_FORM'].dt.date >= start_date) &
-                        (df_fechas_filtrado_rango['FEC_FORM'].dt.date <= end_date)
-                    ].copy()
+                    tiene_datos_pago = False
+                    st.info("La columna 'FEC_INICIO_PAGO' no está disponible para mostrar la segunda serie.")
 
-                    if df_fechas_seleccionado.empty:
-                        st.info("No hay datos de formularios para el período seleccionado.")
+                if df_fechas_filtrado_rango.empty:
+                    st.info("No hay datos disponibles dentro del rango de fechas válido para la serie histórica.")
+                else:
+                    fecha_min = df_fechas_filtrado_rango['FEC_FORM'].min().date()
+                    fecha_max = df_fechas_filtrado_rango['FEC_FORM'].max().date()
+                    
+                    # Ajustar rango de fechas si hay datos de inicio de pago
+                    if tiene_datos_pago:
+                        fecha_min_pago = df_fechas_pago['FEC_INICIO_PAGO'].min().date()
+                        fecha_max_pago = df_fechas_pago['FEC_INICIO_PAGO'].max().date()
+                        fecha_min = min(fecha_min, fecha_min_pago)
+                        fecha_max = max(fecha_max, fecha_max_pago)
+                    
+                    st.caption(f"Rango de fechas disponibles: {fecha_min.strftime('%d/%m/%Y')} - {fecha_max.strftime('%d/%m/%Y')}")
+
+                    start_date = st.date_input("Fecha de inicio:", min_value=fecha_min, max_value=fecha_max, value=fecha_min)
+                    end_date = st.date_input("Fecha de fin:", min_value=fecha_min, max_value=fecha_max, value=fecha_max)
+
+                    if start_date > end_date:
+                        st.error("La fecha de inicio debe ser anterior a la fecha de fin.")
                     else:
-                        df_fechas_seleccionado['AÑO_MES'] = df_fechas_seleccionado['FEC_FORM'].dt.to_period('M')
-                        serie_historica = df_fechas_seleccionado.groupby('AÑO_MES').size().reset_index(name='Cantidad')
-                        serie_historica['FECHA'] = serie_historica['AÑO_MES'].dt.to_timestamp()
-                        serie_historica = serie_historica.sort_values('FECHA')
+                        # Filtrar datos de formularios por rango de fechas
+                        df_fechas_seleccionado = df_fechas_filtrado_rango[
+                            (df_fechas_filtrado_rango['FEC_FORM'].dt.date >= start_date) &
+                            (df_fechas_filtrado_rango['FEC_FORM'].dt.date <= end_date)
+                        ].copy()
+                        
+                        # Filtrar datos de inicio de pago por rango de fechas (si existen)
+                        if tiene_datos_pago:
+                            df_fechas_pago_seleccionado = df_fechas_pago[
+                                (df_fechas_pago['FEC_INICIO_PAGO'].dt.date >= start_date) &
+                                (df_fechas_pago['FEC_INICIO_PAGO'].dt.date <= end_date)
+                            ].copy()
+                            tiene_datos_pago_filtrados = not df_fechas_pago_seleccionado.empty
+                        else:
+                            tiene_datos_pago_filtrados = False
 
-                        try:
-                            fig_historia = px.line(
-                                serie_historica,
-                                x='FECHA',
-                                y='Cantidad',
-                                title='Evolución de Formularios por Mes (Período Seleccionado)',
-                                labels={'Cantidad': 'Cantidad de Formularios', 'FECHA': 'Mes'},
-                                markers=True
-                            )
-                            fig_historia.update_layout(
-                                xaxis_title='Fecha',
-                                yaxis_title='Cantidad de Formularios',
-                                xaxis_tickformat='%b %Y',
-                                plot_bgcolor='white'
-                            )
-                            st.plotly_chart(fig_historia, use_container_width=True)
+                        if df_fechas_seleccionado.empty and (not tiene_datos_pago_filtrados):
+                            st.info("No hay datos para el período seleccionado.")
+                        else:
+                            # Preparar serie histórica de formularios
+                            if not df_fechas_seleccionado.empty:
+                                df_fechas_seleccionado['AÑO_MES'] = df_fechas_seleccionado['FEC_FORM'].dt.to_period('M')
+                                serie_historica = df_fechas_seleccionado.groupby('AÑO_MES').size().reset_index(name='Cantidad')
+                                serie_historica['FECHA'] = serie_historica['AÑO_MES'].dt.to_timestamp()
+                                serie_historica = serie_historica.sort_values('FECHA')
+                            
+                            # Preparar serie histórica de inicio de pagos
+                            if tiene_datos_pago_filtrados:
+                                df_fechas_pago_seleccionado['AÑO_MES'] = df_fechas_pago_seleccionado['FEC_INICIO_PAGO'].dt.to_period('M')
+                                serie_historica_pago = df_fechas_pago_seleccionado.groupby('AÑO_MES').size().reset_index(name='Cantidad')
+                                serie_historica_pago['FECHA'] = serie_historica_pago['AÑO_MES'].dt.to_timestamp()
+                                serie_historica_pago = serie_historica_pago.sort_values('FECHA')
 
+                            try:
+                                # Crear figura con Plotly Graph Objects para mayor control
+                                fig_historia = go.Figure()
+                                
+                                # Definir colores (con manejo seguro para evitar el error)
+                                color_azul = '#1f77b4'  # Color azul por defecto
+                                color_rojo = '#d62728'  # Color rojo por defecto
+                                
+                                # Verificar si COLORES_IDENTIDAD es un diccionario antes de usar .get()
+                                if isinstance(COLORES_IDENTIDAD, dict):
+                                    color_azul = COLORES_IDENTIDAD.get('azul', color_azul)
+                                    color_rojo = COLORES_IDENTIDAD.get('rojo', color_rojo)
+                                
+                                # Añadir línea de formularios si hay datos
+                                if not df_fechas_seleccionado.empty:
+                                    fig_historia.add_trace(go.Scatter(
+                                        x=serie_historica['FECHA'],
+                                        y=serie_historica['Cantidad'],
+                                        mode='lines+markers',
+                                        name='Formularios Presentados',
+                                        line=dict(color=color_azul, width=3),
+                                        marker=dict(size=8)
+                                    ))
+                                
+                                # Añadir línea de inicio de pagos si hay datos
+                                if tiene_datos_pago_filtrados:
+                                    fig_historia.add_trace(go.Scatter(
+                                        x=serie_historica_pago['FECHA'],
+                                        y=serie_historica_pago['Cantidad'],
+                                        mode='lines+markers',
+                                        name='Inicio de Pagos',
+                                        line=dict(color=color_rojo, width=3),
+                                        marker=dict(size=8)
+                                    ))
+                                
+                                # Configurar layout
+                                fig_historia.update_layout(
+                                    title='Evolución por Mes (Período Seleccionado)',
+                                    xaxis_title='Fecha',
+                                    yaxis_title='Cantidad',
+                                    xaxis_tickformat='%b %Y',
+                                    plot_bgcolor='white',
+                                    legend=dict(
+                                        orientation="h",
+                                        yanchor="bottom",
+                                        y=1.02,
+                                        xanchor="right",
+                                        x=1
+                                    ),
+                                    hovermode='x unified'
+                                )
+                                
+                                st.plotly_chart(fig_historia, use_container_width=True)
+                            except Exception as e:
+                                st.error(f"Error al generar el gráfico de serie histórica: {str(e)}")
+                                st.exception(e)  # Muestra el traceback completo para depuración
+    
                             with st.expander("Ver datos de la serie histórica"):
                                 tabla_data = serie_historica[['FECHA', 'Cantidad']].copy()
                                 tabla_data['Año'] = tabla_data['FECHA'].dt.year
@@ -776,8 +906,7 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
                                 html_table += '</tbody></table>'
                                 st.markdown(html_table, unsafe_allow_html=True)
 
-                        except Exception as e:
-                            st.warning(f"Error al generar el gráfico de la serie histórica: {e}")
+                        
     except Exception as e:
         st.error(f"Error inesperado en la sección Serie Histórica: {e}")
 
