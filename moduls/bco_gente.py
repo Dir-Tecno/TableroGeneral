@@ -263,6 +263,9 @@ def show_bco_gente_dashboard(data, dates, is_development=False):
                 if df is not None:
                     with st.expander(f"Columnas en: `{name}`"):
                         st.write(df.columns.tolist())
+                        st.write("Primeras 5 filas:")
+                        st.dataframe(df.head())
+                        st.write(f"Total de registros: {len(df)}")
                 else:
                     st.warning(f"DataFrame '{name}' no cargado o vacío.")
         else:
