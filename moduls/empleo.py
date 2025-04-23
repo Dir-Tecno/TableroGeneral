@@ -242,14 +242,20 @@ def render_filters(df_inscriptos):
     st.markdown('<div class="filter-container">', unsafe_allow_html=True)
     st.markdown('<h3 style="font-size: 18px; margin-top: 0;">Filtros</h3>', unsafe_allow_html=True)
     
-    # Crear dos columnas para los filtros
-    col1, col2 = st.columns(2)
+    # Crear tres columnas para los filtros
+    col1, col2, col3 = st.columns(3)
     
     # Filtro de departamento en la primera columna
     with col1:
         departamentos = sorted(df_inscriptos['N_DEPARTAMENTO'].dropna().unique())
         all_dpto_option = "Todos los departamentos"
         selected_dpto = st.selectbox("Departamento:", [all_dpto_option] + list(departamentos))
+    
+    # Filtro de zona favorecida en la segunda columna
+    with col2:
+        zonas = sorted(df_inscriptos['ZONA'].dropna().unique())
+        all_zona_option = "Todas las zonas"
+        selected_zona = st.selectbox("Zona:", [all_zona_option] + list(zonas))
     
     # Filtrar por departamento seleccionado
     if selected_dpto != all_dpto_option:
@@ -258,30 +264,34 @@ def render_filters(df_inscriptos):
         localidades = sorted(df_filtered['N_LOCALIDAD'].dropna().unique())
         all_loc_option = "Todas las localidades"
         
-        # Mostrar filtro de localidad en la segunda columna
-        with col2:
+        # Mostrar filtro de localidad en la tercera columna
+        with col3:
             selected_loc = st.selectbox("Localidad:", [all_loc_option] + list(localidades))
         
         if selected_loc != all_loc_option:
-                if isinstance(selected_loc, str) and selected_loc.isdigit():
-                    # Si la localidad seleccionada es un número en formato string
-                    selected_loc_int = int(selected_loc)
-                    df_filtered = df_filtered[df_filtered['N_LOCALIDAD'].fillna(-1).astype(int) == selected_loc_int]
-                else:
-                    # Si la localidad seleccionada es un string no numérico
-                    df_filtered = df_filtered[df_filtered['N_LOCALIDAD'].fillna('').astype(str) == str(selected_loc)]
+            if isinstance(selected_loc, str) and selected_loc.isdigit():
+                # Si la localidad seleccionada es un número en formato string
+                selected_loc_int = int(selected_loc)
+                df_filtered = df_filtered[df_filtered['N_LOCALIDAD'].fillna(-1).astype(int) == selected_loc_int]
+            else:
+                # Si la localidad seleccionada es un string no numérico
+                df_filtered = df_filtered[df_filtered['N_LOCALIDAD'].fillna('').astype(str) == str(selected_loc)]
     else:
         df_filtered = df_inscriptos
         # Si no se seleccionó departamento, mostrar todas las localidades
         localidades = sorted(df_inscriptos['N_LOCALIDAD'].dropna().unique())
         all_loc_option = "Todas las localidades"
         
-        # Mostrar filtro de localidad en la segunda columna
-        with col2:
+        # Mostrar filtro de localidad en la tercera columna
+        with col3:
             selected_loc = st.selectbox("Localidad:", [all_loc_option] + list(localidades))
         
         if selected_loc != all_loc_option:
             df_filtered = df_filtered[df_filtered['N_LOCALIDAD'] == selected_loc]
+    
+    # Aplicar filtro de zona favorecida
+    if selected_zona != all_zona_option:
+        df_filtered = df_filtered[df_filtered['ZONA'] == selected_zona]
     
     st.markdown('</div>', unsafe_allow_html=True)
     
@@ -291,6 +301,8 @@ def render_filters(df_inscriptos):
         filtros_aplicados.append(f"Departamento: {selected_dpto}")
     if selected_loc != all_loc_option:
         filtros_aplicados.append(f"Localidad: {selected_loc}")
+    if selected_zona != all_zona_option:
+        filtros_aplicados.append(f"Zona: {selected_zona}")
         
     if filtros_aplicados:
         st.markdown(f"""
@@ -364,7 +376,7 @@ def render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has
             
             # Definir el orden de las columnas por grupos
             grupo1 = ["POSTULANTE APTO", "INSCRIPTO", "BENEFICIARIO"]
-            grupo2 = ["INSCRIPTO - CTI", "RETENIDO - CTI", "VALIDADO - CTI", "BENEFICIARIO- CTI", "EX BENEFICARIO", "BAJA - CTI"]
+            grupo2 = ["INSCRIPTO - CTI", "RETENIDO - CTI", "VALIDADO - CTI", "BENEFICIARIO- CTI", "BAJA - CTI"]
             grupo3 = ["POSTULANTE SIN EMPRESA", "FUERA CUPO DE EMPRESA", "RECHAZO FORMAL", "INSCRIPTO NO ACEPTADO", "DUPLICADO", "EMPRESA NO APTA"]
             
             # Crear una lista con todas las columnas en el orden deseado
@@ -378,7 +390,7 @@ def render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has
             pivot_table = pivot_table.reindex(columns=columnas_ordenadas + [col for col in pivot_table.columns if col not in columnas_ordenadas and col != 'Total'] + ['Total'])
             
             # Mostrar tabla con estilo mejorado
-            st.markdown('<div class="section-title">Conteo de Fichas por Programa y Estado</div>', unsafe_allow_html=True)
+            st.markdown('<div class="section-title">Conteo de personas por Programa y Estado</div>', unsafe_allow_html=True)
             
             # Convertir pivot table a DataFrame para mejor visualización
             pivot_df = pivot_table.reset_index()
@@ -389,15 +401,20 @@ def render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has
             grupo3_cols = [col for col in grupo3 if col in pivot_table.columns]
             otros_cols = [col for col in pivot_table.columns if col not in grupo1 and col not in grupo2 and col not in grupo3 and col != 'Total' and col != 'PROGRAMA']
             
-            # Crear HTML personalizado para mostrar la tabla principal (grupos 1 y 2)
+            # Quitar columna EX BENEFICIARIO y añadir columna Sub total
+            cols_to_sum = [col for col in pivot_table.columns if col in ("BENEFICIARIO", "BENEFICIARIO- CTI")]
+            columns_no_ex = [col for col in pivot_table.columns if col != "EX BENEFICARIO"]
+            columns_final = columns_no_ex + ["Sub total"]
+
             html_table_main = """
             <div style="overflow-x: auto; margin-bottom: 20px;">
                 <table class="styled-table">
                     <thead>
                         <tr>
                             <th rowspan="2">PROGRAMA</th>
-                            <th colspan="{}" style="background-color: var(--color-primary); border-right: 2px solid white;">Grupo 1</th>
-                            <th colspan="{}" style="background-color: var(--color-secondary); border-right: 2px solid white;">Grupo 2</th>
+                            <th colspan="{}" style="background-color: var(--color-primary); border-right: 2px solid white;">Beneficiarios EL (Entrenamiento Laboral)</th>
+                            <th colspan="{}" style="background-color: var(--color-secondary); border-right: 2px solid white;">Beneficiarios CTI (Contratados)</th>
+                            <th rowspan="2" style="background-color: #e6f0f7; color: #333;">Totales Beneficiario</th>
                         </tr>
                         <tr>
             """.format(
@@ -458,6 +475,12 @@ def render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has
                     
                     html_table_main += f'<td {cell_style}>{int(row[col])}</td>'
                 
+                # Celda Sub total
+                val1 = int(row['BENEFICIARIO']) if 'BENEFICIARIO' in row and not pd.isnull(row['BENEFICIARIO']) else 0
+                val2 = int(row['BENEFICIARIO- CTI']) if 'BENEFICIARIO- CTI' in row and not pd.isnull(row['BENEFICIARIO- CTI']) else 0
+                cell_value = val1 + val2
+                cell_style = 'style="background-color: #e6f0f7; text-align: right; font-weight: bold;"'
+                html_table_main += f'<td {cell_style}>{cell_value}</td>'
                 html_table_main += '</tr>'
             
             html_table_main += """
@@ -471,7 +494,7 @@ def render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has
             
             # Crear un botón desplegable para mostrar la tabla del grupo 3 y otros
             if grupo3_cols or otros_cols:  # Solo mostrar si hay columnas del grupo 3 u otros
-                with st.expander("Ver casos especiales (Grupo 3) y otros estados"):
+                with st.expander("Ver casos especiales (Bajas y Rechazos) y otros estados"):
                     # Crear HTML para la tabla del grupo 3 y otros
                     html_table_grupo3 = """
                     <div style="overflow-x: auto; margin-bottom: 20px;">
@@ -591,9 +614,8 @@ def render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has
                 
                 # Añadir columna de total
                 df_pivot['TOTAL'] = df_pivot['BENEFICIARIO'] + df_pivot['BENEFICIARIO- CTI']
-                
-                # Ordenar por departamento y total (descendente)
-                df_pivot_sorted = df_pivot.sort_values(['N_DEPARTAMENTO', 'TOTAL'], ascending=[True, False])
+                # Ordenar por 'TOTAL' descendente (y N_DEPARTAMENTO como criterio secundario)
+                df_pivot_sorted = df_pivot.sort_values(['TOTAL', 'N_DEPARTAMENTO'], ascending=[False, True])
                 
                 # Aplicar formato y estilo a la tabla
                 styled_df = df_pivot_sorted.style \
@@ -1045,8 +1067,7 @@ def show_empleo_dashboard(data, dates=None, is_development=False):
         # Cargar y preprocesar datos
         df_inscriptos, df_empresas, df_poblacion, geojson_data, has_fichas, has_empresas, has_poblacion, has_geojson = load_and_preprocess_data(data, dates)
         
-        st.dataframe(df_empresas)
-        # Verificar si hay datos de fichas
+
         if not has_fichas:
             return
         
