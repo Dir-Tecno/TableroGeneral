@@ -723,101 +723,18 @@ def show_companies(df_empresas, geojson_data):
                                        'VACANTES', 'CUPO', 'IMP_GANANCIAS', 'IMP_IVA', 'MONOTRIBUTO',
                                        'INTEGRANTE_SOC', 'EMPLEADOR', 'ACTIVIDAD_MONOTRIBUTO', 'BENEF'] 
                        if col in df_empresas.columns]
+
+    if 'CUIT' in df_empresas.columns and 'ADHERIDO' in df_empresas.columns:
+        df_empresas['ADHERIDO'] = df_empresas.groupby('CUIT')['ADHERIDO'].transform(lambda x: ', '.join(sorted(set(x))))
     
+    # Usar columns_to_select para crear df_display correctamente
     df_display = df_empresas[columns_to_select].drop_duplicates(subset='CUIT')
     df_display = df_display.sort_values(by='CUPO', ascending=False).reset_index(drop=True)
 
-    # Filtrar empresas adheridas al PPP 2024
-    if 'ADHERIDO' in df_empresas.columns:
-        df_empresas_puestos = df_empresas[df_empresas['ADHERIDO'] == 'PPP - PROGRAMA PRIMER PASO [2024]'].copy()
-    else:
-        df_empresas_puestos = pd.DataFrame()
-    
-    # Improved section title
-    st.markdown('<div class="section-title">Programa Primer Paso - PERFIL de la demanda por categorías</div>', unsafe_allow_html=True)
-    
-    # Resto del código de visualización con mejoras visuales
-    if not df_empresas_puestos.empty and 'N_DEPARTAMENTO' in df_empresas_puestos.columns:
-        with st.expander("Selecciona los departamentos (haz clic para expandir)"):
-            departamentos_unicos = df_empresas_puestos['N_DEPARTAMENTO'].unique()
-            departamentos_seleccionados = st.multiselect(
-                label="Selecciona departamentos",
-                options=departamentos_unicos,
-                default=departamentos_unicos.tolist(),
-                help='Mantén presionada la tecla Ctrl (o Cmd en Mac) para seleccionar múltiples opciones.',
-                label_visibility="collapsed",
-                key="departamentos_multiselect"  # Added unique key
-            )
 
-        df_empresas_puestos = df_empresas_puestos[df_empresas_puestos['N_DEPARTAMENTO'].isin(departamentos_seleccionados)]
-        
-        if all(col in df_empresas_puestos.columns for col in ['N_CATEGORIA_EMPLEO', 'NOMBRE_TIPO_EMPRESA', 'CUIT']):
-            df_puesto_agg = df_empresas_puestos.groupby(['N_CATEGORIA_EMPLEO', 'NOMBRE_TIPO_EMPRESA']).agg({'CUIT': 'nunique'}).reset_index()
-            top_10_categorias = df_puesto_agg.groupby('N_CATEGORIA_EMPLEO')['CUIT'].nunique().nlargest(10).index
-            df_puesto_agg_top10 = df_puesto_agg[df_puesto_agg['N_CATEGORIA_EMPLEO'].isin(top_10_categorias)]
+            
 
-            st.markdown("""<div class="info-box">Este gráfico representa las empresas adheridas al programa PPP, que cargaron el PERFIL de su demanda, expresado en categorias.</div>""", unsafe_allow_html=True)
             
-            # Improved chart with better colors and styling
-            st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-            
-            if True:
-                chart_cat = alt.Chart(df_puesto_agg_top10).mark_bar(
-                    cornerRadiusTopRight=5,
-                    cornerRadiusBottomRight=5
-                ).encode( 
-                    x=alt.X('CUIT:Q', title=''),  
-                    y=alt.Y('N_CATEGORIA_EMPLEO:N', title=''), 
-                    tooltip=['N_CATEGORIA_EMPLEO', 'NOMBRE_TIPO_EMPRESA', 'CUIT'],
-                    text=alt.Text('CUIT', format=',d'),
-                    color=alt.value('#4e73df')  # Consistent color scheme
-                ).properties(
-                    width=600,
-                    height=400
-                )
-                
-                # Agregar las labels al gráfico
-                text = alt.Chart(df_puesto_agg_top10).mark_text(
-                    align='left',
-                    baseline='middle',
-                    dx=3,
-                    color='white'  # Better contrast for text
-                ).encode(
-                    x=alt.X('CUIT:Q', title=''),  
-                    y=alt.Y('N_CATEGORIA_EMPLEO:N', title=''), 
-                    text='CUIT'
-                )
-    
-                # Primero combinar los gráficos con layer
-                combined_chart = alt.layer(chart_cat, text)
-                
-                # Luego aplicar la configuración al gráfico combinado
-                combined_chart = combined_chart.configure_axisY(labels=False, domain=False, ticks=False)
-                
-                # Mostrar el gráfico combinado
-                st.altair_chart(combined_chart, use_container_width=True)
-            else:
-                # Alternativa usando Plotly si Altair no está disponible
-                fig = px.bar(
-                    df_puesto_agg_top10, 
-                    x='CUIT', 
-                    y='N_CATEGORIA_EMPLEO',
-                    text='CUIT',
-                    labels={'CUIT': '', 'N_CATEGORIA_EMPLEO': ''},
-                    height=400,
-                    color_discrete_sequence=['#4e73df']
-                )
-                fig.update_layout(
-                    yaxis={'categoryorder': 'total ascending'},
-                    showlegend=False
-                )
-                fig.update_traces(
-                    textposition='inside',
-                    textfont_color='white'
-                )
-                st.plotly_chart(fig, use_container_width=True)
-                
-            st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown("<hr style='border: 1px solid #e0e0e0; margin: 20px 0;'>", unsafe_allow_html=True)
 
