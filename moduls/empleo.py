@@ -7,13 +7,14 @@ import json
 from datetime import datetime, timedelta
 from utils.ui_components import display_kpi_row
 from utils.map_utils import create_choropleth_map, display_map
-import altair as alt
+from utils.styles import COLORES_IDENTIDAD
+from utils.data_cleaning import clean_thousand_separator, convert_decimal_separator
 import folium
 from streamlit_folium import folium_static
 import geopandas as gpd
 import math
 import requests
-from utils.data_cleaning import clean_thousand_separator
+import altair as alt
 
 def enviar_a_slack(mensaje, valoracion):
     """
@@ -93,6 +94,10 @@ def load_and_preprocess_data(data, dates=None):
         # Extraer los dataframes necesarios
         df_inscriptos_raw = data.get('VT_REPORTES_PPP_MAS26.parquet')
         geojson_data = data.get('capa_departamentos_2010.geojson')
+        
+        # Cargar datos de circuitos electorales
+        df_circuitos = data.get('LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt')
+        has_circuitos = df_circuitos is not None and not df_circuitos.empty
         
         # Crear df_emp_ben: cantidad de beneficiarios por empresa (CUIT)
         df_emp_ben = (
@@ -193,6 +198,12 @@ def load_and_preprocess_data(data, dates=None):
             lambda x: 'ZONA FAVORECIDA' if x in zonas_favorecidas else 'ZONA REGULAR'
         )
         
+        # Añadir la columna ZONA también al dataframe de empresas
+        if has_empresas and 'N_DEPARTAMENTO' in df_empresas.columns:
+            df_empresas['ZONA'] = df_empresas['N_DEPARTAMENTO'].apply(
+                lambda x: 'ZONA FAVORECIDA' if x in zonas_favorecidas else 'ZONA REGULAR'
+            )
+        
         # Obtener la fecha de última actualización
         if dates:
             file_dates = [dates.get(k) for k in dates.keys() if 'VT_REPORTES_PPP_MAS26.parquet' in k]
@@ -226,9 +237,44 @@ def load_and_preprocess_data(data, dates=None):
             
         has_fichas = True  # Si llegamos hasta aquí, tenemos datos de fichas
         
+        # Preprocesar el dataframe de circuitos electorales si está disponible
+        if has_circuitos:
+            try:
+                # Asegurarse de que las columnas estén correctamente tipadas
+                if 'ID_LOCALIDAD' in df_circuitos.columns:
+                    df_circuitos['ID_LOCALIDAD'] = pd.to_numeric(df_circuitos['ID_LOCALIDAD'], errors='coerce')
+                
+                # Limpiar datos si es necesario
+                df_circuitos = clean_thousand_separator(df_circuitos)
+                df_circuitos = convert_decimal_separator(df_circuitos)
+                
+                # Si hay datos de inscriptos y circuitos, intentar cruzarlos
+                if df_inscriptos is not None and not df_inscriptos.empty:
+                    # Verificar columnas comunes para el cruce
+                    common_cols = set(df_inscriptos.columns) & set(df_circuitos.columns)
+                    join_cols = [col for col in ['ID_LOCALIDAD', 'COD_LOCALIDAD'] if col in common_cols]
+                    
+                    if join_cols:
+                        # Realizar el cruce si hay columnas comunes
+                        join_col = join_cols[0]  # Usar la primera columna común encontrada
+                        df_inscriptos = pd.merge(
+                            df_inscriptos,
+                            df_circuitos,
+                            on=join_col,
+                            how='left',
+                            suffixes=('', '_circuito')
+                        )
+                        st.success(f"Datos de circuitos electorales integrados correctamente usando la columna {join_col}")
+                    else:
+                        st.warning("No se encontraron columnas comunes para cruzar los datos de inscriptos con circuitos electorales")
+            except Exception as e:
+                st.error(f"Error al procesar datos de circuitos electorales: {str(e)}")
+                has_circuitos = False
+        
+        # Retornar los dataframes procesados y los flags de disponibilidad
         return df_inscriptos_sin_adherido, df_empresas, df_poblacion, geojson_data, has_fichas, has_empresas, has_poblacion, has_geojson
 
-def render_filters(df_inscriptos):
+def render_filters(df_inscriptos, key_prefix=""):
     """
     Renderiza los filtros de la interfaz de usuario.
     
@@ -238,78 +284,76 @@ def render_filters(df_inscriptos):
     Returns:
         Tupla con el DataFrame filtrado y los filtros seleccionados
     """
-    # Contenedor para filtros
-    st.markdown('<div class="filter-container">', unsafe_allow_html=True)
-    st.markdown('<h3 style="font-size: 18px; margin-top: 0;">Filtros</h3>', unsafe_allow_html=True)
+    # Mantener una copia del DataFrame original para no modificarlo
+    df_filtered = df_inscriptos.copy()
     
-    # Crear tres columnas para los filtros
-    col1, col2, col3 = st.columns(3)
-    
-    # Filtro de departamento en la primera columna
-    with col1:
-        departamentos = sorted(df_inscriptos['N_DEPARTAMENTO'].dropna().unique())
-        all_dpto_option = "Todos los departamentos"
-        selected_dpto = st.selectbox("Departamento:", [all_dpto_option] + list(departamentos))
-    
-    # Filtro de zona favorecida en la segunda columna
-    with col2:
-        zonas = sorted(df_inscriptos['ZONA'].dropna().unique())
-        all_zona_option = "Todas las zonas"
-        selected_zona = st.selectbox("Zona:", [all_zona_option] + list(zonas))
-    
-    # Filtrar por departamento seleccionado
-    if selected_dpto != all_dpto_option:
-        df_filtered = df_inscriptos[df_inscriptos['N_DEPARTAMENTO'] == selected_dpto]
-        # Filtro de localidad (dependiente del departamento)
-        localidades = sorted(df_filtered['N_LOCALIDAD'].dropna().unique())
-        all_loc_option = "Todas las localidades"
+    with st.container():
+        # Contenedor de filtros con 3 columnas
+        col1, col2, col3 = st.columns(3)
         
-        # Mostrar filtro de localidad en la tercera columna
-        with col3:
-            selected_loc = st.selectbox("Localidad:", [all_loc_option] + list(localidades))
-        
-        if selected_loc != all_loc_option:
-            if isinstance(selected_loc, str) and selected_loc.isdigit():
-                # Si la localidad seleccionada es un número en formato string
-                selected_loc_int = int(selected_loc)
-                df_filtered = df_filtered[df_filtered['N_LOCALIDAD'].fillna(-1).astype(int) == selected_loc_int]
+        # Filtro de departamento en la primera columna
+        with col1:
+            # Filtro de departamento
+            dptos = sorted(df_filtered['N_DEPARTAMENTO'].dropna().unique())
+            all_dpto_option = "Todos los departamentos"
+            selected_dpto = st.selectbox("Departamento:", [all_dpto_option] + list(dptos), key=f"{key_prefix}_dpto_filter")
+            
+            # Filtrar por departamento si se seleccionó uno
+            if selected_dpto != all_dpto_option:
+                df_filtered = df_filtered[df_filtered['N_DEPARTAMENTO'] == selected_dpto]
+                
+                # Si se seleccionó un departamento, mostrar filtro de localidad
+                if 'N_LOCALIDAD' in df_filtered.columns:
+                    localidades = sorted(df_filtered['N_LOCALIDAD'].dropna().unique())
+                    all_loc_option = "Todas las localidades"
+                    selected_loc = st.selectbox("Localidad:", [all_loc_option] + list(localidades), key=f"{key_prefix}_loc_filter")
+                    
+                    # Filtrar por localidad si se seleccionó una
+                    if selected_loc != all_loc_option:
+                        df_filtered = df_filtered[df_filtered['N_LOCALIDAD'] == selected_loc]
+                else:
+                    all_loc_option = None
+                    selected_loc = None
             else:
-                # Si la localidad seleccionada es un string no numérico
-                df_filtered = df_filtered[df_filtered['N_LOCALIDAD'].fillna('').astype(str) == str(selected_loc)]
-    else:
-        df_filtered = df_inscriptos
-        # Si no se seleccionó departamento, mostrar todas las localidades
-        localidades = sorted(df_inscriptos['N_LOCALIDAD'].dropna().unique())
-        all_loc_option = "Todas las localidades"
+                all_loc_option = None
+                selected_loc = None
         
-        # Mostrar filtro de localidad en la tercera columna
+        # Filtro de zona favorecida en la segunda columna
+        with col2:
+            # Solo mostrar el filtro de ZONA si la columna existe en el dataframe
+            if 'ZONA' in df_filtered.columns:
+                zonas = sorted(df_filtered['ZONA'].dropna().unique())
+                all_zona_option = "Todas las zonas"
+                selected_zona = st.selectbox("Zona:", [all_zona_option] + list(zonas), key=f"{key_prefix}_zona_filter")
+            else:
+                all_zona_option = "Todas las zonas"
+                selected_zona = all_zona_option
+                
+        # Añadir más filtros en la tercera columna si es necesario
         with col3:
-            selected_loc = st.selectbox("Localidad:", [all_loc_option] + list(localidades))
-        
-        if selected_loc != all_loc_option:
-            df_filtered = df_filtered[df_filtered['N_LOCALIDAD'] == selected_loc]
-    
-    # Aplicar filtro de zona favorecida
-    if selected_zona != all_zona_option:
+            # Puedes añadir más filtros aquí si lo deseas
+            pass
+            
+    # Filtrar por zona si se seleccionó una y la columna existe
+    if 'ZONA' in df_filtered.columns and selected_zona != all_zona_option:
         df_filtered = df_filtered[df_filtered['ZONA'] == selected_zona]
-    
-    st.markdown('</div>', unsafe_allow_html=True)
     
     # Mostrar resumen de filtros aplicados
     filtros_aplicados = []
+    
     if selected_dpto != all_dpto_option:
         filtros_aplicados.append(f"Departamento: {selected_dpto}")
-    if selected_loc != all_loc_option:
-        filtros_aplicados.append(f"Localidad: {selected_loc}")
-    if selected_zona != all_zona_option:
+        if selected_loc is not None and selected_loc != all_loc_option:
+            filtros_aplicados.append(f"Localidad: {selected_loc}")
+            
+    if 'ZONA' in df_filtered.columns and selected_zona != all_zona_option:
         filtros_aplicados.append(f"Zona: {selected_zona}")
-        
+    
     if filtros_aplicados:
-        st.markdown(f"""
-            <div style="background-color:#e9ecef; padding:10px; border-radius:5px; margin-bottom:20px; font-size:0.9em;">
-                <strong>Filtros aplicados:</strong> {' | '.join(filtros_aplicados)}
-            </div>
-        """, unsafe_allow_html=True)
+        filtros_texto = ", ".join(filtros_aplicados)
+        st.markdown(f"**Filtros aplicados:** {filtros_texto}")
+    else:
+        st.markdown("**Mostrando todos los datos**")
     
     return df_filtered, selected_dpto, selected_loc, all_dpto_option, all_loc_option
 
@@ -334,22 +378,22 @@ def render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has
         kpi_data = [
             {
                 "title": "BENEFICIARIOS",
-                "value": total_beneficiarios,
+                "value": f"{total_beneficiarios:,}".replace(',', '.'),
                 "color_class": "kpi-primary"
             },
             {
                 "title": "BENEFICIARIOS CTI",
-                "value": total_beneficiarios_cti,
+                "value": f"{total_beneficiarios_cti:,}".replace(',', '.'),
                 "color_class": "kpi-secondary"
             },
             {
                 "title": "TOTAL BENEFICIARIOS",
-                "value": total_general,
+                "value": f"{total_general:,}".replace(',', '.'),
                 "color_class": "kpi-accent-3"
             },
             {
                 "title": "ZONA FAVORECIDA",
-                "value": beneficiarios_zona_favorecida,
+                "value": f"{beneficiarios_zona_favorecida:,}".replace(',', '.'),
                 "color_class": "kpi-accent-4"
             }
         ]
@@ -357,14 +401,14 @@ def render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has
         display_kpi_row(kpi_data, num_columns=4)
         st.markdown('</div>', unsafe_allow_html=True)
         
-        # Aplicar filtros a los datos
-        df_filtered, selected_dpto, selected_loc, all_dpto_option, all_loc_option = render_filters(df_inscriptos)
-        
         # Crear pestañas para organizar el contenido
         tab_beneficiarios, tab_empresas = st.tabs(["Beneficiarios", "Empresas"])
         
         # Contenido de la pestaña Beneficiarios
         with tab_beneficiarios:
+            # Filtros específicos para la pestaña Beneficiarios
+            df_filtered, selected_dpto, selected_loc, all_dpto_option, all_loc_option = render_filters(df_inscriptos, key_prefix="benef")
+            
             # Conteo de ID_FICHA por PROGRAMA y ESTADO_FICHA
             pivot_table = df_filtered.pivot_table(
                 index='PROGRAMA',
@@ -473,14 +517,14 @@ def render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has
                         else:
                             cell_style = 'style="text-align: right;"'
                     
-                    html_table_main += f'<td {cell_style}>{int(row[col])}</td>'
+                    html_table_main += f'<td {cell_style}>{int(row[col]):,}'.replace(',', '.')+'</td>'
                 
                 # Celda Sub total
                 val1 = int(row['BENEFICIARIO']) if 'BENEFICIARIO' in row and not pd.isnull(row['BENEFICIARIO']) else 0
                 val2 = int(row['BENEFICIARIO- CTI']) if 'BENEFICIARIO- CTI' in row and not pd.isnull(row['BENEFICIARIO- CTI']) else 0
                 cell_value = val1 + val2
                 cell_style = 'style="background-color: #e6f0f7; text-align: right; font-weight: bold;"'
-                html_table_main += f'<td {cell_style}>{cell_value}</td>'
+                html_table_main += f'<td {cell_style}>{cell_value:,}'.replace(',', '.')+'</td>'
                 html_table_main += '</tr>'
             
             html_table_main += """
@@ -563,7 +607,7 @@ def render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has
                                     cell_style = 'style="background-color: #e6f0f7; text-align: right;"'
                                 else:
                                     cell_style = 'style="text-align: right;"'
-                                html_table_grupo3 += f'<td {cell_style}>{int(row[col])}</td>'
+                                html_table_grupo3 += f'<td {cell_style}>{int(row[col]):,}'.replace(',', '.')+'</td>'
                             
                             # Columnas de datos para otros
                             for col in otros_cols:
@@ -574,7 +618,7 @@ def render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has
                                     cell_style = 'style="background-color: #e6f0f7; text-align: right;"'
                                 else:
                                     cell_style = 'style="text-align: right;"'
-                                html_table_grupo3 += f'<td {cell_style}>{int(row[col])}</td>'
+                                html_table_grupo3 += f'<td {cell_style}>{int(row[col]):,}'.replace(',', '.')+'</td>'
                             
                             html_table_grupo3 += '</tr>'
                     
@@ -590,7 +634,7 @@ def render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has
             # Mostrar tabla de beneficiarios por localidad
             st.subheader("Beneficiarios por Localidad")
             
-            # Filtrar solo beneficiarios del DataFrame ya filtrado por departamento/localidad
+            # Filtrar solo beneficiarios
             beneficiarios_estados = ["BENEFICIARIO", "BENEFICIARIO- CTI"]
             df_beneficiarios = df_filtered[df_filtered['N_ESTADO_FICHA'].isin(beneficiarios_estados)]
             
@@ -711,7 +755,11 @@ def render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has
         
         with tab_empresas:
             if has_empresas:
-                show_companies(df_empresas, geojson_data)
+                # Filtros específicos para la pestaña Empresas
+                df_filtered_empresas, selected_dpto_emp, selected_loc_emp, all_dpto_option_emp, all_loc_option_emp = render_filters(df_empresas, key_prefix="emp")
+                
+                # Mostrar los datos de empresas con los filtros aplicados
+                show_companies(df_filtered_empresas, geojson_data)
             else:
                 st.markdown("""
                     <div class="info-box status-warning">
@@ -774,7 +822,7 @@ def show_companies(df_empresas, geojson_data):
         st.markdown("""
             <div class="metric-card">
                 <div class="metric-label">Empresas Adheridas</div>
-                <div class="metric-value">{:,}</div>
+                <div class="metric-value">{:}</div>
             </div>
         """.format(empresas_adh), unsafe_allow_html=True)
     
@@ -782,7 +830,7 @@ def show_companies(df_empresas, geojson_data):
         st.markdown("""
             <div class="metric-card">
                 <div class="metric-label">Empresas con Beneficiarios</div>
-                <div class="metric-value">{:,}</div>
+                <div class="metric-value">{:}</div>
             </div>
         """.format(empresas_con_benef), unsafe_allow_html=True)
         
@@ -790,7 +838,7 @@ def show_companies(df_empresas, geojson_data):
         st.markdown("""
             <div class="metric-card">
                 <div class="metric-label">Empresas sin Beneficiarios</div>
-                <div class="metric-value">{:,}</div>
+                <div class="metric-value">{:}</div>
             </div>
         """.format(empresas_sin_benef), unsafe_allow_html=True)
 
@@ -1040,17 +1088,17 @@ def show_inscriptions(df_inscriptos, df_poblacion, geojson_data, file_date):
             st.markdown(f"""
                 <div class="metric-card status-info">
                      <div class="metric-label">Total Match {programa_seleccionado_nombre}</div>
-                     <div class="metric-value">{total_match:,}</div>
+                     <div class="metric-value">{total_match}</div>
                 </div>
-            """, unsafe_allow_html=True)
+            """)
         
         with col2:
             st.markdown(f"""
                 <div class="metric-card status-info">
                     <div class="metric-label">Total Beneficiarios {programa_seleccionado_nombre}</div>
-                    <div class="metric-value">{total_benef:,}</div>
+                    <div class="metric-value">{total_benef}</div>
                 </div>
-            """, unsafe_allow_html=True)
+            """)
         
         # Resto del código de visualización con mejoras visuales
         # Aquí puedes añadir más visualizaciones según sea necesario

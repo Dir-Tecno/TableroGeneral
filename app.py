@@ -86,5 +86,13 @@ for idx, tab in enumerate(tabs):
                 st.session_state[dates_key] = dates
         st.markdown("***") # Separador visual
 
-        # Llamar a la función que muestra el dashboard de la pestaña actual, pasando is_development
-        show_func(st.session_state[data_key], st.session_state[dates_key], is_development)
+        # Verificar que las claves existen en session_state antes de llamar a show_func
+        if data_key in st.session_state and dates_key in st.session_state:
+            # Llamar a la función que muestra el dashboard de la pestaña actual
+            try:
+                show_func(st.session_state[data_key], st.session_state[dates_key], is_development)
+            except Exception as e:
+                st.error(f"Error al mostrar el dashboard: {str(e)}")
+                st.exception(e)  # Muestra el traceback completo
+        else:
+            st.error(f"Error: Faltan datos necesarios. data_key: {data_key in st.session_state}, dates_key: {dates_key in st.session_state}")

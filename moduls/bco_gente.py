@@ -1,13 +1,12 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 from utils.ui_components import display_kpi_row, create_bco_gente_kpis
 from utils.styles import COLORES_IDENTIDAD
 from utils.kpi_tooltips import ESTADO_CATEGORIAS, TOOLTIPS_DESCRIPTIVOS
 from utils.ui_components import create_bco_gente_kpis
-
+from utils.data_cleaning import convert_decimal_separator
 
 # Crear diccionario para tooltips de categorías (técnico, lista de estados)
 tooltips_categorias = {k: ", ".join(v) for k, v in ESTADO_CATEGORIAS.items()}
@@ -314,9 +313,6 @@ def show_bco_gente_dashboard(data, dates, is_development=False):
     # Crear una copia del DataFrame para trabajar con él
     df_filtrado_global = df_global.copy()
     
-    # Renderizar filtros y obtener datos filtrados
-    df_filtrado, selected_dpto, selected_loc, selected_linea = render_filters(df_filtrado_global)
-    
     # Mostrar información de actualización de datos
     if dates and any(dates.values()):
         latest_date = max([d for d in dates.values() if d is not None], default=None)
@@ -324,34 +320,117 @@ def show_bco_gente_dashboard(data, dates, is_development=False):
             st.caption(f"Última actualización de datos: {latest_date}")
     
     # Crear pestañas para las diferentes vistas
-    if 'bco_gente_tab' not in st.session_state:
-        st.session_state['bco_gente_tab'] = 0
-    tab_labels = ["GLOBAL", "RECUPERO"]
-    tabs = st.tabs(tab_labels)
-
-    # Detectar cambio de pestaña manualmente (Streamlit no lo hace nativo)
-    # Usamos un selectbox invisible para forzar el index
-    tab_index = st.selectbox(
-        "_tab_selector_bco_gente", options=list(range(len(tab_labels))), format_func=lambda i: tab_labels[i],
-        index=st.session_state['bco_gente_tab'], key="bco_gente_tab_selector", label_visibility="collapsed"
-    )
-    st.session_state['bco_gente_tab'] = tab_index
-
-    with tabs[tab_index]:
-        if tab_index == 0:
+    [tab_global] = st.tabs(["GLOBAL"])
+    
+    with tab_global:
+        # Filtros específicos para la pestaña GLOBAL
+        if has_global_data:
+            st.markdown('<h3 style="font-size: 18px; margin-top: 0;">Filtros - GLOBAL</h3>', unsafe_allow_html=True)
+            
+            # Crear tres columnas para los filtros
+            col1, col2, col3 = st.columns(3)
+            
+            # Filtro de departamento en la primera columna
+            with col1:
+                departamentos = sorted(df_filtrado_global['N_DEPARTAMENTO'].dropna().unique())
+                all_dpto_option = "Todos los departamentos"
+                selected_dpto = st.selectbox("Departamento:", [all_dpto_option] + list(departamentos), key="global_dpto_filter")
+            
+            # Filtrar por departamento seleccionado
+            if selected_dpto != all_dpto_option:
+                df_filtrado_global_tab = df_filtrado_global[df_filtrado_global['N_DEPARTAMENTO'] == selected_dpto]
+                # Filtro de localidad (dependiente del departamento)
+                localidades = sorted(df_filtrado_global_tab['N_LOCALIDAD'].dropna().unique())
+                all_loc_option = "Todas las localidades"
+                
+                # Mostrar filtro de localidad en la segunda columna
+                with col2:
+                    selected_loc = st.selectbox("Localidad:", [all_loc_option] + list(localidades), key="global_loc_filter")
+                
+                if selected_loc != all_loc_option:
+                    df_filtrado_global_tab = df_filtrado_global_tab[df_filtrado_global_tab['N_LOCALIDAD'] == selected_loc]
+            else:
+                # Si no se seleccionó departamento, mostrar todas las localidades
+                localidades = sorted(df_filtrado_global['N_LOCALIDAD'].dropna().unique())
+                all_loc_option = "Todas las localidades"
+                df_filtrado_global_tab = df_filtrado_global
+                
+                # Mostrar filtro de localidad en la segunda columna
+                with col2:
+                    selected_loc = st.selectbox("Localidad:", [all_loc_option] + list(localidades), key="global_loc_filter")
+                
+                if selected_loc != all_loc_option:
+                    df_filtrado_global_tab = df_filtrado_global_tab[df_filtrado_global_tab['N_LOCALIDAD'] == selected_loc]
+            
+            # Filtro de línea de préstamo en la tercera columna
+            with col3:
+                lineas_prestamo = sorted(df_filtrado_global_tab['N_LINEA_PRESTAMO'].dropna().unique())
+                all_lineas_option = "Todas las líneas"
+                selected_linea = st.selectbox("Línea de préstamo:", [all_lineas_option] + list(lineas_prestamo), key="global_linea_filter")
+            
+            if selected_linea != all_lineas_option:
+                df_filtrado_global_tab = df_filtrado_global_tab[df_filtrado_global_tab['N_LINEA_PRESTAMO'] == selected_linea]
+            
             # Mostrar los datos filtrados en la pestaña GLOBAL
-            if has_global_data:
-                with st.spinner("Cargando visualizaciones globales..."):
-                    mostrar_global(df_filtrado, TOOLTIPS_DESCRIPTIVOS, df_recupero)
-            else:
-                st.warning("No hay datos globales disponibles para mostrar.")
-        elif tab_index == 1:
-            # Mostrar los datos de recupero en la pestaña RECUPERO
-            if has_global_data and df_global is not None and not df_global.empty:
-                with st.spinner("Cargando visualizaciones de recupero..."):
-                    mostrar_recupero(df_filtrado, df_localidad_municipio, geojson_data)
-            else:
-                st.info("No hay datos de recupero disponibles para mostrar.")
+            with st.spinner("Cargando visualizaciones globales..."):
+                mostrar_global(df_filtrado_global_tab, TOOLTIPS_DESCRIPTIVOS, df_recupero)
+        else:
+            st.warning("No hay datos globales disponibles para mostrar.")
+    
+    # with tab_recupero:
+    #     # Filtros específicos para la pestaña RECUPERO
+    #     if has_global_data and df_global is not None and not df_global.empty:
+    #         st.markdown('<h3 style="font-size: 18px; margin-top: 0;">Filtros - RECUPERO</h3>', unsafe_allow_html=True)
+            
+    #         # Crear tres columnas para los filtros
+    #         col1, col2, col3 = st.columns(3)
+            
+    #         # Filtro de departamento en la primera columna
+    #         with col1:
+    #             departamentos = sorted(df_filtrado_global['N_DEPARTAMENTO'].dropna().unique())
+    #             all_dpto_option = "Todos los departamentos"
+    #             selected_dpto_rec = st.selectbox("Departamento:", [all_dpto_option] + list(departamentos), key="recupero_dpto_filter")
+            
+    #         # Filtrar por departamento seleccionado
+    #         if selected_dpto_rec != all_dpto_option:
+    #             df_filtrado_recupero_tab = df_filtrado_global[df_filtrado_global['N_DEPARTAMENTO'] == selected_dpto_rec]
+    #             # Filtro de localidad (dependiente del departamento)
+    #             localidades = sorted(df_filtrado_recupero_tab['N_LOCALIDAD'].dropna().unique())
+    #             all_loc_option = "Todas las localidades"
+                
+    #             # Mostrar filtro de localidad en la segunda columna
+    #             with col2:
+    #                 selected_loc_rec = st.selectbox("Localidad:", [all_loc_option] + list(localidades), key="recupero_loc_filter")
+                
+    #             if selected_loc_rec != all_loc_option:
+    #                 df_filtrado_recupero_tab = df_filtrado_recupero_tab[df_filtrado_recupero_tab['N_LOCALIDAD'] == selected_loc_rec]
+    #         else:
+    #             # Si no se seleccionó departamento, mostrar todas las localidades
+    #             localidades = sorted(df_filtrado_global['N_LOCALIDAD'].dropna().unique())
+    #             all_loc_option = "Todas las localidades"
+    #             df_filtrado_recupero_tab = df_filtrado_global
+                
+    #             # Mostrar filtro de localidad en la segunda columna
+    #             with col2:
+    #                 selected_loc_rec = st.selectbox("Localidad:", [all_loc_option] + list(localidades), key="recupero_loc_filter")
+                
+    #             if selected_loc_rec != all_loc_option:
+    #                 df_filtrado_recupero_tab = df_filtrado_recupero_tab[df_filtrado_recupero_tab['N_LOCALIDAD'] == selected_loc_rec]
+            
+    #         # Filtro de línea de préstamo en la tercera columna
+    #         with col3:
+    #             lineas_prestamo = sorted(df_filtrado_recupero_tab['N_LINEA_PRESTAMO'].dropna().unique())
+    #             all_lineas_option = "Todas las líneas"
+    #             selected_linea_rec = st.selectbox("Línea de préstamo:", [all_lineas_option] + list(lineas_prestamo), key="recupero_linea_filter")
+            
+    #         if selected_linea_rec != all_lineas_option:
+    #             df_filtrado_recupero_tab = df_filtrado_recupero_tab[df_filtrado_recupero_tab['N_LINEA_PRESTAMO'] == selected_linea_rec]
+            
+    #         # Mostrar los datos de recupero en la pestaña RECUPERO
+    #         with st.spinner("Cargando visualizaciones de recupero..."):
+    #             mostrar_recupero(df_filtrado_recupero_tab, df_localidad_municipio, geojson_data)
+    #     else:
+    #         st.info("No hay datos de recupero disponibles para mostrar.")
 
 def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
     """
@@ -538,6 +617,8 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
     # Gráfico de torta por categoría
     with col_torta_cat:
         try:
+            import plotly.express as px  # Importación local para asegurar que px esté definido
+            
             df_filtrado_torta = df_filtrado_global[df_filtrado_global['CATEGORIA'].isin(categorias_mostrar)]
             
             # Agrupar el DataFrame filtrado por línea de préstamo
@@ -948,15 +1029,14 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
         df_map_grouped = df_map.groupby([
             "N_LOCALIDAD", "N_DEPARTAMENTO", "LATITUD", "LONGITUD"
         ], dropna=True)["MONTO_OTORGADO"].sum().reset_index()
-        # Limpiar y convertir LATITUD y LONGITUD a float
+        
+        # Limpiar y convertir LATITUD y LONGITUD a float usando la función centralizada
+        df_map_grouped = convert_decimal_separator(df_map_grouped, columns=["LATITUD", "LONGITUD"])
+        
+        # Extraer valores numéricos y convertir a float
         for col in ["LATITUD", "LONGITUD"]:
-            df_map_grouped[col] = (
-                df_map_grouped[col]
-                .astype(str)
-                .str.replace(",", ".", regex=False)
-                .str.extract(r"(-?\d+\.\d+)")
-                .astype(float)
-            )
+            df_map_grouped[col] = df_map_grouped[col].str.extract(r"(-?\d+\.\d+)").astype(float)
+            
         df_map_grouped = df_map_grouped.dropna(subset=["LATITUD", "LONGITUD", "MONTO_OTORGADO"])
         if df_map_grouped.empty:
             st.info("No hay datos de préstamos pagados con coordenadas para mostrar en el mapa.")
@@ -994,8 +1074,7 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
                     hovertemplate=
                         "<b>%{customdata[0]}</b><br>" +
                         "Departamento: %{customdata[1]}<br>" +
-                        "Monto Otorgado: $%{customdata[2]:,.0f}<br>" +
-                        "Lat: %{customdata[3]:.3f} | Lon: %{customdata[4]:.3f}<extra></extra>"
+                        "Monto Otorgado: $%{customdata[2]:,.0f}<extra></extra>"
                 )
                 fig.update_layout(mapbox_center={"lat": -31.4167, "lon": -64.1833})
                 st.plotly_chart(fig, use_container_width=True)

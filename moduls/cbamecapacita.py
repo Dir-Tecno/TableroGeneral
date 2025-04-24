@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from utils.ui_components import display_kpi_row
-from utils.data_cleaning import clean_thousand_separator
+from utils.data_cleaning import clean_thousand_separator, convert_decimal_separator
 import geopandas as gpd
 import json
 
@@ -133,11 +133,12 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                         break
 
             # Limpiar y convertir LATITUD y LONGITUD
+            df_cursos = convert_decimal_separator(df_cursos, columns=["LATITUD", "LONGITUD"])
+            
+            # Extraer valores numéricos y convertir a float
             for col in ["LATITUD", "LONGITUD"]:
                 df_cursos[col] = (
                     df_cursos[col]
-                        .astype(str)
-                        .str.replace(",", ".", regex=False)
                         .str.extract(r"(-?\d+\.\d+)")
                         .astype(float)
                     )
