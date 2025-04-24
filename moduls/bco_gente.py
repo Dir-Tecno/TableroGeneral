@@ -320,6 +320,7 @@ def show_bco_gente_dashboard(data, dates, is_development=False):
             st.caption(f"Última actualización de datos: {latest_date}")
     
     # Crear pestañas para las diferentes vistas
+    #    tab_global, tab_recupero = st.tabs(["GLOBAL", "RECUPERO"])
     [tab_global] = st.tabs(["GLOBAL"])
     
     with tab_global:

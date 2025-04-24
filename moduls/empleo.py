@@ -9,6 +9,7 @@ from utils.ui_components import display_kpi_row
 from utils.map_utils import create_choropleth_map, display_map
 from utils.styles import COLORES_IDENTIDAD
 from utils.data_cleaning import clean_thousand_separator, convert_decimal_separator
+from utils.kpi_tooltips import TOOLTIPS_DESCRIPTIVOS, ESTADO_TOOLTIPS
 import folium
 from streamlit_folium import folium_static
 import geopandas as gpd
@@ -293,36 +294,44 @@ def render_filters(df_inscriptos, key_prefix=""):
         
         # Filtro de departamento en la primera columna
         with col1:
-            # Filtro de departamento
-            dptos = sorted(df_filtered['N_DEPARTAMENTO'].dropna().unique())
-            all_dpto_option = "Todos los departamentos"
-            selected_dpto = st.selectbox("Departamento:", [all_dpto_option] + list(dptos), key=f"{key_prefix}_dpto_filter")
-            
-            # Filtrar por departamento si se seleccionó uno
-            if selected_dpto != all_dpto_option:
-                df_filtered = df_filtered[df_filtered['N_DEPARTAMENTO'] == selected_dpto]
+            # Solo mostrar el filtro de departamento si la columna existe en el dataframe
+            if 'N_DEPARTAMENTO' in df_inscriptos.columns:
+                departamentos = sorted(df_inscriptos['N_DEPARTAMENTO'].dropna().unique())
+                all_dpto_option = "Todos los departamentos"
+                selected_dpto = st.selectbox("Departamento:", [all_dpto_option] + list(departamentos), key=f"{key_prefix}_dpto_filter")
                 
-                # Si se seleccionó un departamento, mostrar filtro de localidad
-                if 'N_LOCALIDAD' in df_filtered.columns:
-                    localidades = sorted(df_filtered['N_LOCALIDAD'].dropna().unique())
-                    all_loc_option = "Todas las localidades"
-                    selected_loc = st.selectbox("Localidad:", [all_loc_option] + list(localidades), key=f"{key_prefix}_loc_filter")
-                    
-                    # Filtrar por localidad si se seleccionó una
-                    if selected_loc != all_loc_option:
-                        df_filtered = df_filtered[df_filtered['N_LOCALIDAD'] == selected_loc]
-                else:
-                    all_loc_option = None
-                    selected_loc = None
-            else:
-                all_loc_option = None
+                # Inicializar variables con valores por defecto
                 selected_loc = None
+                all_loc_option = None
+                
+                # Filtrar por departamento si se seleccionó uno
+                if selected_dpto != all_dpto_option:
+                    df_filtered = df_filtered[df_filtered['N_DEPARTAMENTO'] == selected_dpto]
+                    
+                    # Solo mostrar el filtro de localidad si la columna existe en el dataframe
+                    if 'N_LOCALIDAD' in df_inscriptos.columns:
+                        localidades = sorted(df_filtered['N_LOCALIDAD'].dropna().unique())
+                        all_loc_option = "Todas las localidades"
+                        selected_loc = st.selectbox("Localidad:", [all_loc_option] + list(localidades), key=f"{key_prefix}_loc_filter")
+                        
+                        # Filtrar por localidad si se seleccionó una
+                        if selected_loc != all_loc_option:
+                            df_filtered = df_filtered[df_filtered['N_LOCALIDAD'] == selected_loc]
+                    else:
+                        all_loc_option = None
+                        selected_loc = None
+            else:
+                # Si no existe la columna N_DEPARTAMENTO, establecer valores por defecto
+                selected_dpto = None
+                all_dpto_option = None
+                selected_loc = None
+                all_loc_option = None
         
         # Filtro de zona favorecida en la segunda columna
         with col2:
             # Solo mostrar el filtro de ZONA si la columna existe en el dataframe
-            if 'ZONA' in df_filtered.columns:
-                zonas = sorted(df_filtered['ZONA'].dropna().unique())
+            if 'ZONA' in df_inscriptos.columns:
+                zonas = sorted(df_inscriptos['ZONA'].dropna().unique())
                 all_zona_option = "Todas las zonas"
                 selected_zona = st.selectbox("Zona:", [all_zona_option] + list(zonas), key=f"{key_prefix}_zona_filter")
             else:
@@ -335,7 +344,7 @@ def render_filters(df_inscriptos, key_prefix=""):
             pass
             
     # Filtrar por zona si se seleccionó una y la columna existe
-    if 'ZONA' in df_filtered.columns and selected_zona != all_zona_option:
+    if 'ZONA' in df_inscriptos.columns and selected_zona != all_zona_option:
         df_filtered = df_filtered[df_filtered['ZONA'] == selected_zona]
     
     # Mostrar resumen de filtros aplicados
@@ -346,7 +355,7 @@ def render_filters(df_inscriptos, key_prefix=""):
         if selected_loc is not None and selected_loc != all_loc_option:
             filtros_aplicados.append(f"Localidad: {selected_loc}")
             
-    if 'ZONA' in df_filtered.columns and selected_zona != all_zona_option:
+    if 'ZONA' in df_inscriptos.columns and selected_zona != all_zona_option:
         filtros_aplicados.append(f"Zona: {selected_zona}")
     
     if filtros_aplicados:
@@ -377,24 +386,28 @@ def render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has
         # Usar la función auxiliar para mostrar KPIs
         kpi_data = [
             {
-                "title": "BENEFICIARIOS",
+                "title": "BENEFICIARIOS TOTALES",
                 "value": f"{total_beneficiarios:,}".replace(',', '.'),
-                "color_class": "kpi-primary"
+                "color_class": "kpi-primary",
+                "tooltip": TOOLTIPS_DESCRIPTIVOS.get("BENEFICIARIOS TOTALES", "")
             },
             {
-                "title": "BENEFICIARIOS CTI",
-                "value": f"{total_beneficiarios_cti:,}".replace(',', '.'),
-                "color_class": "kpi-secondary"
-            },
-            {
-                "title": "TOTAL BENEFICIARIOS",
-                "value": f"{total_general:,}".replace(',', '.'),
-                "color_class": "kpi-accent-3"
+                "title": "BENEFICIARIOS EL",
+                "value": f"{total_beneficiarios:,}".replace(',', '.'),
+                "color_class": "kpi-secondary",
+                "tooltip": TOOLTIPS_DESCRIPTIVOS.get("BENEFICIARIOS EL", "")
             },
             {
                 "title": "ZONA FAVORECIDA",
                 "value": f"{beneficiarios_zona_favorecida:,}".replace(',', '.'),
-                "color_class": "kpi-accent-4"
+                "color_class": "kpi-accent-3",
+                "tooltip": TOOLTIPS_DESCRIPTIVOS.get("ZONA FAVORECIDA", "")
+            },
+            {
+                "title": "BENEFICIARIOS CTI",
+                "value": f"{total_beneficiarios_cti:,}".replace(',', '.'),
+                "color_class": "kpi-accent-4",
+                "tooltip": TOOLTIPS_DESCRIPTIVOS.get("BENEFICIARIOS CTI", "")
             }
         ]
         
@@ -480,7 +493,12 @@ def render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has
                 else:
                     style = 'style="background-color: var(--color-accent-2);"'
                 
-                html_table_main += f'<th {style}>{col}</th>'
+                # Agregar el tooltip si existe para este estado
+                tooltip = ESTADO_TOOLTIPS.get(col, "")
+                if tooltip:
+                    html_table_main += f'<th {style} title="{tooltip}">{col}</th>'
+                else:
+                    html_table_main += f'<th {style}>{col}</th>'
             
             html_table_main += """
                         </tr>
@@ -636,33 +654,34 @@ def render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has
             
             # Filtrar solo beneficiarios
             beneficiarios_estados = ["BENEFICIARIO", "BENEFICIARIO- CTI"]
-            df_beneficiarios = df_filtered[df_filtered['N_ESTADO_FICHA'].isin(beneficiarios_estados)]
+            df_beneficiarios = df_inscriptos[df_inscriptos['N_ESTADO_FICHA'].isin(beneficiarios_estados)]
             
             if df_beneficiarios.empty:
                 st.warning("No hay beneficiarios con los filtros seleccionados.")
             else:
-                # Crear pivot table para mostrar cada estado en una columna separada
-                df_pivot = df_beneficiarios.pivot_table(
-                    index=['N_DEPARTAMENTO', 'N_LOCALIDAD'],
-                    columns='N_ESTADO_FICHA',
-                    values='ID_FICHA',
-                    aggfunc='count',
-                    fill_value=0
-                ).reset_index()
+                # Enfoque más directo: separar por tipo de beneficiario y luego unir
+                # 1. Crear dataframe para beneficiarios EL
+                df_beneficiarios_el = df_beneficiarios[df_beneficiarios['N_ESTADO_FICHA'] == "BENEFICIARIO"]
+                df_el_count = df_beneficiarios_el.groupby(['N_DEPARTAMENTO', 'N_LOCALIDAD']).size().reset_index(name='BENEFICIARIO')
                 
-                # Renombrar columnas para mejor visualización
-                if 'BENEFICIARIO' not in df_pivot.columns:
-                    df_pivot['BENEFICIARIO'] = 0
-                if 'BENEFICIARIO- CTI' not in df_pivot.columns:
-                    df_pivot['BENEFICIARIO- CTI'] = 0
+                # 2. Crear dataframe para beneficiarios CTI
+                df_beneficiarios_cti = df_beneficiarios[df_beneficiarios['N_ESTADO_FICHA'] == "BENEFICIARIO- CTI"]
+                df_cti_count = df_beneficiarios_cti.groupby(['N_DEPARTAMENTO', 'N_LOCALIDAD']).size().reset_index(name='BENEFICIARIO- CTI')
                 
-                # Añadir columna de total
-                df_pivot['TOTAL'] = df_pivot['BENEFICIARIO'] + df_pivot['BENEFICIARIO- CTI']
+                # 3. Unir los dos dataframes
+                df_mapa = pd.merge(df_el_count, df_cti_count, on=['N_DEPARTAMENTO', 'N_LOCALIDAD'], how='outer')
+                
+                # 4. Rellenar los NAs con ceros
+                df_mapa['BENEFICIARIO'] = df_mapa['BENEFICIARIO'].fillna(0).astype(int)
+                df_mapa['BENEFICIARIO- CTI'] = df_mapa['BENEFICIARIO- CTI'].fillna(0).astype(int)
+                
+                # 5. Añadir columna de total
+                df_mapa['TOTAL'] = df_mapa['BENEFICIARIO'] + df_mapa['BENEFICIARIO- CTI']
                 # Ordenar por 'TOTAL' descendente (y N_DEPARTAMENTO como criterio secundario)
-                df_pivot_sorted = df_pivot.sort_values(['TOTAL', 'N_DEPARTAMENTO'], ascending=[False, True])
+                df_mapa_sorted = df_mapa.sort_values(['TOTAL', 'N_DEPARTAMENTO'], ascending=[False, True])
                 
                 # Aplicar formato y estilo a la tabla
-                styled_df = df_pivot_sorted.style \
+                styled_df = df_mapa_sorted.style \
                     .background_gradient(subset=['BENEFICIARIO', 'BENEFICIARIO- CTI', 'TOTAL'], cmap='Blues') \
                     .format(thousands=".", precision=0)
                 
@@ -701,57 +720,108 @@ def render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has
                     st.warning("No hay beneficiarios para mostrar en el mapa.")
                     return
                 
-                # Contar beneficiarios por departamento
-                df_beneficiarios['ID_DEPARTAMENTO_GOB'] = df_beneficiarios['ID_DEPARTAMENTO_GOB'].fillna(-1).astype(int)
+                # Enfoque más directo: separar por tipo de beneficiario y luego unir
+                # 1. Crear dataframe para beneficiarios EL
+                df_beneficiarios_el = df_beneficiarios[df_beneficiarios['N_ESTADO_FICHA'] == "BENEFICIARIO"]
+                df_el_count = df_beneficiarios_el.groupby(['ID_DEPARTAMENTO_GOB', 'N_DEPARTAMENTO']).size().reset_index(name='BENEFICIARIO')
                 
-                # Agrupar por ID_DEPARTAMENTO_GOB y N_DEPARTAMENTO
-                df_mapa = df_beneficiarios.groupby(['ID_DEPARTAMENTO_GOB', 'N_DEPARTAMENTO']).size().reset_index(name='Cantidad')
+                # 2. Crear dataframe para beneficiarios CTI
+                df_beneficiarios_cti = df_beneficiarios[df_beneficiarios['N_ESTADO_FICHA'] == "BENEFICIARIO- CTI"]
+                df_cti_count = df_beneficiarios_cti.groupby(['ID_DEPARTAMENTO_GOB', 'N_DEPARTAMENTO']).size().reset_index(name='BENEFICIARIO- CTI')
+                
+                # 3. Unir los dos dataframes
+                df_mapa = pd.merge(df_el_count, df_cti_count, on=['ID_DEPARTAMENTO_GOB', 'N_DEPARTAMENTO'], how='outer')
+                
+                # 4. Rellenar los NAs con ceros
+                df_mapa['BENEFICIARIO'] = df_mapa['BENEFICIARIO'].fillna(0).astype(int)
+                df_mapa['BENEFICIARIO- CTI'] = df_mapa['BENEFICIARIO- CTI'].fillna(0).astype(int)
+                
+                # 5. Añadir columna de total
+                df_mapa['Total'] = df_mapa['BENEFICIARIO'] + df_mapa['BENEFICIARIO- CTI']
                 
                 # Convertir a string para el mapa (sin decimales porque ya es entero)
-                df_mapa['ID_DEPARTAMENTO_GOB'] = df_mapa['ID_DEPARTAMENTO_GOB'].astype(str)
+                df_mapa['ID_DEPARTAMENTO_GOB'] = df_mapa['ID_DEPARTAMENTO_GOB'].apply(lambda x: str(int(x)) if pd.notnull(x) else "")
                 
                 # Reemplazar "-1" con un valor adecuado para NaN si es necesario
                 df_mapa.loc[df_mapa['ID_DEPARTAMENTO_GOB'] == "-1", 'ID_DEPARTAMENTO_GOB'] = "Sin asignar"
                 
-                # Mostrar tabla de datos para el mapa antes de renderizar el mapa
-                st.markdown(f"### Vista previa de df_mapa (agrupado por ID_DEPARTAMENTO_GOB)")
-                st.dataframe(df_mapa, use_container_width=True)
+                # Detectar si geojson_data es un DataFrame y convertir a GeoJSON estándar
+                import geopandas as gpd
+                geojson_dict = None
+                if isinstance(geojson_data, (pd.DataFrame, gpd.GeoDataFrame)):
+                    try:
+                        gdf = gpd.GeoDataFrame(geojson_data)
+                        geojson_dict = gdf.__geo_interface__
+                    except Exception as e:
+                        st.error(f"Error convirtiendo DataFrame a GeoJSON: {e}")
+                elif isinstance(geojson_data, dict) and 'features' in geojson_data:
+                    geojson_dict = geojson_data
+                else:
+                    st.warning("geojson_data no es un DataFrame ni un GeoJSON estándar. Revisa la fuente de datos.")
 
-                # Crear y mostrar el mapa usando Plotly
-                with st.spinner("Generando mapa..."):
-                    fig = px.choropleth_mapbox(
-                        df_mapa,
-                        geojson=geojson_data,
-                        locations='ID_DEPARTAMENTO_GOB',
-                        color='Cantidad',
-                        featureidkey="properties.CODDEPTO",
-                        hover_data=['N_DEPARTAMENTO', 'Cantidad'],  # <-- aquí defines lo que aparece al pasar el mouse
-                        center={"lat": -31.4, "lon": -64.2},  # Coordenadas aproximadas de Córdoba
-                        zoom=6,  # Nivel de zoom
-                        opacity=0.7,  # Opacidad de los polígonos
-                        mapbox_style="carto-positron",  # Estilo de mapa más limpio
-                        color_continuous_scale="Blues",
-                        labels={'Cantidad': 'Beneficiarios'},
-                        title="Distribución de Beneficiarios por Departamento"
-                    )
-                    
-                    # Ajustar el diseño
-                    fig.update_layout(
-                        margin={"r":0,"t":50,"l":0,"b":0},
-                        coloraxis_colorbar={
-                            "title": "Cantidad",
-                            "tickformat": ",d"
-                        },
-                        title={
-                            'text': "Distribución de Beneficiarios (EL + CTI) por Departamento",
-                            'y':0.97,
-                            'x':0.5,
-                            'xanchor': 'center',
-                            'yanchor': 'top'
-                        }
-                    )
-                    
-                    st.plotly_chart(fig, use_container_width=True)
+                # Normalizar tipos y depurar IDs antes de graficar
+                if isinstance(geojson_dict, dict) and 'features' in geojson_dict:
+                    for f in geojson_dict['features']:
+                        f['properties']['CODDEPTO'] = str(f['properties']['CODDEPTO']).strip()
+
+                else:
+                    st.warning("geojson_dict no tiene la clave 'features' o no es un dict. Revisa la carga del GeoJSON.")
+                
+                # Crear un layout con 4 columnas (3 para la tabla y 1 para el mapa)
+                table_col, map_col = st.columns([3, 1])
+                
+                # Mostrar tabla de datos para el mapa en las primeras 3 columnas
+                with table_col:
+                    st.markdown(f"### Beneficiarios por Departamento")
+                    # Crear una copia del dataframe sin la columna ID_DEPARTAMENTO_GOB para mostrar
+                    df_mapa_display = df_mapa.drop(columns=['ID_DEPARTAMENTO_GOB']).copy()
+                    # Renombrar columnas para mejor visualización
+                    df_mapa_display = df_mapa_display.rename(columns={
+                        'N_DEPARTAMENTO': 'Departamento',
+                        'BENEFICIARIO': 'Beneficiarios EL',
+                        'BENEFICIARIO- CTI': 'Beneficiarios CTI',
+                        'Total': 'Total Beneficiarios'
+                    })
+                    st.dataframe(df_mapa_display, use_container_width=True, hide_index=True)
+
+                # Crear y mostrar el mapa usando Plotly en la última columna
+                with map_col:
+                    with st.spinner("Generando mapa..."):
+                        fig = px.choropleth_mapbox(
+                            df_mapa,
+                            geojson=geojson_dict,
+                            locations='ID_DEPARTAMENTO_GOB',
+                            color='Total',
+                            featureidkey="properties.CODDEPTO",
+                            hover_data=['N_DEPARTAMENTO', 'BENEFICIARIO', 'BENEFICIARIO- CTI', 'Total'],
+                            center={"lat": -31.4, "lon": -64.2},  # Coordenadas aproximadas de Córdoba
+                            zoom=6,  # Nivel de zoom
+                            opacity=0.7,  # Opacidad de los polígonos
+                            mapbox_style="carto-positron",  # Estilo de mapa más limpio
+                            color_continuous_scale="Blues",
+                            labels={'Total': 'Beneficiarios'},
+                            title="Distribución de Beneficiarios"
+                        )
+                        
+                        # Ajustar el diseño
+                        fig.update_layout(
+                            margin={"r":0,"t":50,"l":0,"b":0},
+                            coloraxis_colorbar={
+                                "title": "Cantidad",
+                                "tickformat": ",d"
+                            },
+                            title={
+                                'text': "Beneficiarios por Departamento",
+                                'y':0.97,
+                                'x':0.5,
+                                'xanchor': 'center',
+                                'yanchor': 'top'
+                            },
+                            # Reducir el tamaño para adaptarse a la columna más pequeña
+                            height=400
+                        )
+                        
+                        st.plotly_chart(fig, use_container_width=True)
         
         with tab_empresas:
             if has_empresas:
@@ -823,24 +893,27 @@ def show_companies(df_empresas, geojson_data):
             <div class="metric-card">
                 <div class="metric-label">Empresas Adheridas</div>
                 <div class="metric-value">{:}</div>
+                <div class="metric-tooltip" title="{}"></div>
             </div>
-        """.format(empresas_adh), unsafe_allow_html=True)
+        """.format(empresas_adh, TOOLTIPS_DESCRIPTIVOS.get("EMPRESAS ADHERIDAS", "")), unsafe_allow_html=True)
     
     with col2:
         st.markdown("""
             <div class="metric-card">
                 <div class="metric-label">Empresas con Beneficiarios</div>
                 <div class="metric-value">{:}</div>
+                <div class="metric-tooltip" title="{}"></div>
             </div>
-        """.format(empresas_con_benef), unsafe_allow_html=True)
+        """.format(empresas_con_benef, TOOLTIPS_DESCRIPTIVOS.get("EMPRESAS CON BENEFICIARIOS", "")), unsafe_allow_html=True)
         
     with col3:
         st.markdown("""
             <div class="metric-card">
                 <div class="metric-label">Empresas sin Beneficiarios</div>
                 <div class="metric-value">{:}</div>
+                <div class="metric-tooltip" title="{}"></div>
             </div>
-        """.format(empresas_sin_benef), unsafe_allow_html=True)
+        """.format(empresas_sin_benef, TOOLTIPS_DESCRIPTIVOS.get("EMPRESAS SIN BENEFICIARIOS", "")), unsafe_allow_html=True)
 
     st.markdown("""<div class="info-box">Las empresas (Empresas y Monotributistas) en esta tabla se encuentran adheridas a uno o más programas de empleo, han cumplido con los requisitos establecidos por los programas en su momento y salvo omisiones, han proporcionado sus datos a través de los registros de programasempleo.cba.gov.ar</div>""", unsafe_allow_html=True)
 
@@ -875,13 +948,18 @@ def show_companies(df_empresas, geojson_data):
         with col1:
             st.markdown('<div class="chart-container">', unsafe_allow_html=True)
             st.markdown('<h3 style="font-size: 18px; margin-bottom: 15px;">Puestos y Categorías Demandadas por Empresa</h3>', unsafe_allow_html=True)
-            # Agrupar por empresa, puesto y categoría, sin columna de cantidad
-            df_grouped = df_perfil_demanda.groupby(['N_EMPRESA','CUIT','N_PUESTO_EMPLEO', 'N_CATEGORIA_EMPLEO']).size().reset_index()
-            # Eliminar la columna "0" que se crea
-            df_grouped = df_grouped.drop(columns=[0])
-            st.dataframe(df_grouped, hide_index=True, use_container_width=True)
+            # Gráfico de torta por tipo de empresa
+            if 'NOMBRE_TIPO_EMPRESA' in df_perfil_demanda.columns:
+                tipo_empresa_count = df_perfil_demanda['NOMBRE_TIPO_EMPRESA'].value_counts().reset_index()
+                tipo_empresa_count.columns = ['Tipo de Empresa', 'Cantidad']
+                fig_pie = px.pie(tipo_empresa_count, names='Tipo de Empresa', values='Cantidad',
+                                 title='Distribución por Tipo de Empresa',
+                                 color_discrete_sequence=px.colors.qualitative.Pastel)
+                st.plotly_chart(fig_pie, use_container_width=True)
+            else:
+                st.info("No hay datos de tipo de empresa para graficar.")
             st.markdown('</div>', unsafe_allow_html=True)
-
+        
         # --- Visualización 2: Gráfico de Barras por Categoría (Top 10) (en col2) con mejor estilo ---
         with col2:
             st.markdown('<div class="chart-container">', unsafe_allow_html=True)
@@ -892,19 +970,13 @@ def show_companies(df_empresas, geojson_data):
             df_cat_count = df_cat_count.sort_values(by='Empresas que Buscan', ascending=False)
 
             if len(df_cat_count) > 9:
-                #tomar el top 9
-                df_cat_count_top_9 = df_cat_count.head(9).copy()
-
-                # Agrupar el resto en "Otros"
-                otros_count = df_cat_count.iloc[9:]['Empresas que Buscan'].sum()
-                df_otros = pd.DataFrame([{'N_CATEGORIA_EMPLEO': 'Otros', 'Empresas que Buscan': otros_count}]) 
-
-                # Concatenar el top 9 con "Otros"
-                df_cat_count_final = pd.concat([df_cat_count_top_9, df_otros], ignore_index=True)
+                # Tomar el top 9 directamente, sin agregar 'Otros'
+                df_cat_count_final = df_cat_count.head(9).copy()
             else:
                 df_cat_count_final = df_cat_count.copy()
 
             if True:
+                # Crear gráfico de barras con texto de categoría y conteo visible
                 chart_cat = alt.Chart(df_cat_count_final).mark_bar(
                     cornerRadiusTopRight=5,
                     cornerRadiusBottomRight=5
@@ -912,32 +984,41 @@ def show_companies(df_empresas, geojson_data):
                     x=alt.X('Empresas que Buscan', title=''),  
                     y=alt.Y('N_CATEGORIA_EMPLEO:N', title=''), 
                     tooltip=['N_CATEGORIA_EMPLEO', 'Empresas que Buscan'],
-                    text=alt.Text('Empresas que Buscan', format=',d'),
                     color=alt.value('#4e73df')  # Consistent color scheme
                 ).properties(
                     width=600,
                     height=400
                 )
-                
-                # Agregar las labels al gráfico
-                text = alt.Chart(df_cat_count_final).mark_text(
+                # Texto de conteo
+                text_count = alt.Chart(df_cat_count_final).mark_text(
                     align='left',
                     baseline='middle',
                     dx=3,
-                    color='white'  # Better contrast for text
+                    color='white',
+                    fontWeight='bold',
+                    size=16
                 ).encode(
                     x=alt.X('Empresas que Buscan', title=''),  
                     y=alt.Y('N_CATEGORIA_EMPLEO:N', title=''), 
-                    text='Empresas que Buscan'
+                    text=alt.Text('Empresas que Buscan', format=',d')
                 )
-    
-                # Primero combinar los gráficos con layer
-                combined_chart = alt.layer(chart_cat, text)
-                
-                # Luego aplicar la configuración al gráfico combinado
+                # Texto de categoría (ubicado a la izquierda de la barra)
+                text_cat = alt.Chart(df_cat_count_final).mark_text(
+                    align='right',
+                    baseline='middle',
+                    dx=-8,
+                    color='black',
+                    fontWeight='bold',
+                    size=14
+                ).encode(
+                    x=alt.value(0),
+                    y=alt.Y('N_CATEGORIA_EMPLEO:N', title=''),
+                    text='N_CATEGORIA_EMPLEO'
+                )
+                # Combinar gráfico de barras, texto de conteo y texto de categoría
+                combined_chart = alt.layer(chart_cat, text_count, text_cat)
+                # Configuración visual
                 combined_chart = combined_chart.configure_axisY(labels=False, domain=False, ticks=False)
-                
-                # Mostrar el gráfico combinado
                 st.altair_chart(combined_chart, use_container_width=True)
             else:
                 # Alternativa usando Plotly si Altair no está disponible
