@@ -19,7 +19,7 @@ TOOLTIPS_DESCRIPTIVOS = {
     "En Evaluación": "Formularios en proceso de evaluación técnica o administrativa (CREADO, EVALUACIÓN TÉCNICA, COMENZADO)",
     "Rechazados - Bajas": "Formularios rechazados o dados de baja por distintos motivos",
     "A Pagar - Convocatoria": "Formularios aprobados listos para pago o en proceso de convocatoria (A PAGAR, A PAGAR CON LOTE, A PAGAR CON BANCO, MUTUO FIRMADO)",
-    "Pagados": "Formularios con préstamos ya pagados, finalizados o con plan de cuotas (PAGADO, FINALIZADO, CON PLAN DE CUOTAS, etc.)",
+    "Pagados": "Formularios con préstamos ya pagados, finalizados o con plan de cuotas (PAGADO, CON PLAN DE CUOTAS, etc.)",
     "En proceso de pago": "Formularios con pago emitido o en estado de impago (PAGO EMITIDO, IMPAGO)",
     "Pagados-Finalizados": "Formularios sin deuda, con préstamos ya pagados (FINALIZADO)",
     

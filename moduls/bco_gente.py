@@ -144,6 +144,21 @@ def load_and_preprocess_data(data):
                                     how='left'
                                 )
                                 
+                                # --- Limpieza de LATITUD y LONGITUD SOLO después del merge con df_localidad_municipio ---
+                                def limpiar_lat_lon(valor):
+                                    if isinstance(valor, str):
+                                        # Si tiene más de un punto, eliminar todos menos el último
+                                        if valor.count('.') > 1:
+                                            partes = valor.split('.')
+                                            valor = ''.join(partes[:-1]) + '.' + partes[-1]
+                                        valor = valor.replace(',', '.')  # Por si viene con coma decimal
+                                    return valor
+
+                                for col in ['LATITUD', 'LONGITUD']:
+                                    if col in df_global.columns:
+                                        df_global[col] = df_global[col].astype(str).apply(limpiar_lat_lon)
+                                        df_global[col] = pd.to_numeric(df_global[col], errors='coerce')
+
                             except Exception as e_merge2:
                                 st.warning(f"Error durante el segundo merge con df_localidad_municipio: {str(e_merge2)}")
                         # No es necesario un 'else' aquí, las advertencias ya se mostraron si can_merge es False
@@ -246,14 +261,13 @@ def render_filters(df_filtrado_global):
         # Filtro de línea de préstamo en la tercera columna
         with col3:
             lineas_prestamo = sorted(df_filtrado['N_LINEA_PRESTAMO'].dropna().unique())
-            all_lineas_option = "Todas las líneas"
-            selected_linea = st.selectbox("Línea de préstamo:", [all_lineas_option] + list(lineas_prestamo), key="bco_linea_filter")
+            selected_lineas = st.multiselect("Línea de préstamo:", lineas_prestamo, default=lineas_prestamo, key="bco_linea_filter")
         
-        if selected_linea != all_lineas_option:
-            df_filtrado = df_filtrado[df_filtrado['N_LINEA_PRESTAMO'] == selected_linea]
+        if selected_lineas:
+            df_filtrado = df_filtrado[df_filtrado['N_LINEA_PRESTAMO'].isin(selected_lineas)]
         
         
-        return df_filtrado, selected_dpto, selected_loc, selected_linea
+        return df_filtrado, selected_dpto, selected_loc, selected_lineas
 
 def show_bco_gente_dashboard(data, dates, is_development=False):
     """
@@ -333,21 +347,40 @@ def show_bco_gente_dashboard(data, dates, is_development=False):
             
             # Filtro de departamento en la primera columna
             with col1:
-                departamentos = sorted(df_filtrado_global['N_DEPARTAMENTO'].dropna().unique())
+                # DataFrame con LATITUD NO nulo
+                df_lat_notnull = df_filtrado_global[df_filtrado_global['LATITUD'].notnull()]
+                # DataFrame con LATITUD nulo
+                df_lat_null = df_filtrado_global[df_filtrado_global['LATITUD'].isnull()]
+
+                # Departamentos: los de lat_notnull + "Otros" si hay filas en lat_null
+                departamentos = sorted(df_lat_notnull['N_DEPARTAMENTO'].dropna().unique().tolist())
+                if not df_lat_null.empty:
+                    departamentos.append("Otros")
                 all_dpto_option = "Todos los departamentos"
                 selected_dpto = st.selectbox("Departamento:", [all_dpto_option] + list(departamentos), key="global_dpto_filter")
-            
+
             # Filtrar por departamento seleccionado
             if selected_dpto != all_dpto_option:
-                df_filtrado_global_tab = df_filtrado_global[df_filtrado_global['N_DEPARTAMENTO'] == selected_dpto]
-                # Filtro de localidad (dependiente del departamento)
-                localidades = sorted(df_filtrado_global_tab['N_LOCALIDAD'].dropna().unique())
+                if selected_dpto == "Otros":
+                    df_filtrado_global_tab = df_lat_null.copy()
+                    localidades = sorted(df_filtrado_global_tab['N_LOCALIDAD'].dropna().unique())
+                else:
+                    df_filtrado_global_tab = df_filtrado_global[df_filtrado_global['N_DEPARTAMENTO'] == selected_dpto]
+                    # Filtro de localidad (dependiente del departamento)
+                    df_latitud_notnull = df_filtrado_global_tab[df_filtrado_global_tab['LATITUD'].notnull()]
+                    df_latitud_null = df_filtrado_global_tab[df_filtrado_global_tab['LATITUD'].isnull()]
+                    localidades = sorted(
+                        pd.concat([
+                            df_latitud_notnull['N_LOCALIDAD'].dropna(),
+                            df_latitud_null['N_LOCALIDAD'].dropna()
+                        ]).unique()
+                    )
                 all_loc_option = "Todas las localidades"
-                
+
                 # Mostrar filtro de localidad en la segunda columna
                 with col2:
                     selected_loc = st.selectbox("Localidad:", [all_loc_option] + list(localidades), key="global_loc_filter")
-                
+
                 if selected_loc != all_loc_option:
                     df_filtrado_global_tab = df_filtrado_global_tab[df_filtrado_global_tab['N_LOCALIDAD'] == selected_loc]
             else:
@@ -355,28 +388,131 @@ def show_bco_gente_dashboard(data, dates, is_development=False):
                 localidades = sorted(df_filtrado_global['N_LOCALIDAD'].dropna().unique())
                 all_loc_option = "Todas las localidades"
                 df_filtrado_global_tab = df_filtrado_global
-                
+
                 # Mostrar filtro de localidad en la segunda columna
                 with col2:
                     selected_loc = st.selectbox("Localidad:", [all_loc_option] + list(localidades), key="global_loc_filter")
-                
+
                 if selected_loc != all_loc_option:
                     df_filtrado_global_tab = df_filtrado_global_tab[df_filtrado_global_tab['N_LOCALIDAD'] == selected_loc]
             
             # Filtro de línea de préstamo en la tercera columna
             with col3:
                 lineas_prestamo = sorted(df_filtrado_global_tab['N_LINEA_PRESTAMO'].dropna().unique())
-                all_lineas_option = "Todas las líneas"
-                selected_linea = st.selectbox("Línea de préstamo:", [all_lineas_option] + list(lineas_prestamo), key="global_linea_filter")
+                selected_lineas = st.multiselect("Línea de préstamo:", lineas_prestamo, default=lineas_prestamo, key="global_linea_filter")
             
-            if selected_linea != all_lineas_option:
-                df_filtrado_global_tab = df_filtrado_global_tab[df_filtrado_global_tab['N_LINEA_PRESTAMO'] == selected_linea]
+            if selected_lineas:
+                df_filtrado_global_tab = df_filtrado_global_tab[df_filtrado_global_tab['N_LINEA_PRESTAMO'].isin(selected_lineas)]
             
+
             # Mostrar los datos filtrados en la pestaña GLOBAL
             with st.spinner("Cargando visualizaciones globales..."):
                 mostrar_global(df_filtrado_global_tab, TOOLTIPS_DESCRIPTIVOS, df_recupero)
-        else:
-            st.warning("No hay datos globales disponibles para mostrar.")
+            # --- NUEVA SECCIÓN: Mapa de Monto Otorgado por Localidad (Pagados) ---
+            st.markdown("<hr style='border: 2px solid #cccccc;'>", unsafe_allow_html=True)
+            st.subheader("Mapa de Monto Otorgado por Localidad (solo préstamos Pagados)")
+            st.dataframe()
+            try:
+                # Filtrar por CATEGORIA == "Pagados" y por línea seleccionada
+                df_map = df_global[
+                    (df_global["CATEGORIA"] == "Pagados") &
+                    (df_global["N_LINEA_PRESTAMO"].isin(selected_lineas))
+                ].copy()
+                # Mostrar columnas de df_map
+                st.write("Columnas de df_map:", df_map.columns.tolist())
+
+                # Mostrar las primeras filas del dataframe
+                st.dataframe(df_map)
+
+                # Botón para descargar el dataframe como CSV
+                csv = df_map.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="Descargar df_map como CSV",
+                    data=csv,
+                    file_name='df_map.csv',
+                    mime='text/csv'
+                    )
+                # Filtro interactivo por línea de préstamo
+                lineas_disponibles = df_global["N_LINEA_PRESTAMO"].dropna().unique().tolist()
+                lineas_disponibles.sort()
+                selected_lineas = st.multiselect(
+                    "Filtrar por Línea de Préstamo:",
+                    options=lineas_disponibles,
+                    default=lineas_disponibles,
+                    key="filtro_linea_prestamo_mapa"
+                )
+
+                # Agrupar por localidad y sumar monto otorgado
+                df_map_grouped = df_map.groupby([
+                    "N_LOCALIDAD", "N_DEPARTAMENTO", "LATITUD", "LONGITUD"
+                ], dropna=False)["MONTO_OTORGADO"].sum().reset_index()
+                # Limpiar y convertir LATITUD y LONGITUD a float usando la función centralizada
+                df_map_grouped = convert_decimal_separator(df_map_grouped, columns=["LATITUD", "LONGITUD"])
+                # Reemplazar valores nulos de LATITUD y LONGITUD por las coordenadas de Córdoba Capital
+                df_map_grouped["LATITUD"] = df_map_grouped["LATITUD"].fillna(-31.4135000)
+                df_map_grouped["LONGITUD"] = df_map_grouped["LONGITUD"].fillna(-64.1810500)
+                # Si quedan strings vacíos, convertirlos también
+                df_map_grouped.loc[df_map_grouped["LATITUD"].astype(str).str.strip() == '', "LATITUD"] = -31.4135000
+                df_map_grouped.loc[df_map_grouped["LONGITUD"].astype(str).str.strip() == '', "LONGITUD"] = -64.1810500
+                # Convertir a float por seguridad
+                df_map_grouped["LATITUD"] = df_map_grouped["LATITUD"].astype(float)
+                df_map_grouped["LONGITUD"] = df_map_grouped["LONGITUD"].astype(float)
+                if df_map_grouped.empty:
+                    st.info("No hay datos de préstamos pagados con coordenadas para mostrar en el mapa.")
+                else:
+                    import plotly.express as px
+                    col_mapa, col_tabla = st.columns([1, 3])
+                    with col_mapa:
+                        st.markdown("#### Mapa de Localidades")
+                        fig = px.scatter_mapbox(
+                            df_map_grouped,
+                            lat="LATITUD",
+                            lon="LONGITUD",
+                            color="MONTO_OTORGADO",
+                            size="MONTO_OTORGADO",
+                            size_max=40,
+                            hover_name="N_LOCALIDAD",
+                            hover_data=None,
+                            zoom=6,
+                            mapbox_style="carto-positron",
+                            color_continuous_scale="Viridis",
+                            labels={
+                                "N_LOCALIDAD": "Localidad",
+                                "N_DEPARTAMENTO": "Departamento",
+                                "MONTO_OTORGADO": "Monto Otorgado"
+                            },
+                            custom_data=[
+                                "N_LOCALIDAD",
+                                "N_DEPARTAMENTO",
+                                "MONTO_OTORGADO",
+                                "LATITUD",
+                                "LONGITUD"
+                            ]
+                        )
+                        fig.update_traces(
+                            hovertemplate=
+                                "<b>%{customdata[0]}</b><br>" +
+                                "Departamento: %{customdata[1]}<br>" +
+                                "Monto Otorgado: $%{customdata[2]:,.0f}<extra></extra>"
+                        )
+                        fig.update_layout(mapbox_center={"lat": -31.4167, "lon": -64.1833})
+                        st.plotly_chart(fig, use_container_width=True)
+                    with col_tabla:
+                        st.markdown("#### Tabla de Localidades por monto otorgado")
+                        styled_table = (
+                            df_map_grouped[["N_LOCALIDAD", "N_DEPARTAMENTO", "MONTO_OTORGADO"]]
+                            .sort_values("MONTO_OTORGADO", ascending=False)
+                            .style
+                            .background_gradient(cmap="Blues", subset=["MONTO_OTORGADO"])
+                            .format({"MONTO_OTORGADO": "{:,.0f}"})
+                        )
+                        st.dataframe(
+                            styled_table,
+                            use_container_width=True,
+                            hide_index=True
+                        )
+            except Exception as e:
+                st.error(f"Error al generar el mapa de monto otorgado: {e}")
     
     # with tab_recupero:
     #     # Filtros específicos para la pestaña RECUPERO
@@ -652,7 +788,10 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
     with col_torta_sexo:
         try:
             if 'N_SEXO' in df_filtrado_global.columns:
-                df_sexo = df_filtrado_global.dropna(subset=['N_SEXO']).copy()
+                df_sexo = df_filtrado_global[
+    (df_filtrado_global['CATEGORIA'] == 'Pagados') & 
+    (df_filtrado_global['N_SEXO'].notna())
+].copy()
                 if df_sexo.empty:
                     st.warning("No hay datos disponibles para el gráfico de sexo después de filtrar NaNs.")
                 else:
@@ -673,7 +812,7 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
                             hoverinfo='label+percent+value'
                         )
                         fig_sexo.update_layout(
-                            title="Distribución por Sexo",
+                            title="Distribución por Sexo EN CREDITOS PAGADOS",
                             margin=dict(l=20, r=20, t=30, b=20)
                         )
                         st.plotly_chart(fig_sexo, use_container_width=True)
@@ -1008,93 +1147,7 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
     except Exception as e:
         st.error(f"Error inesperado en la sección Serie Histórica: {e}")
 
-    # --- NUEVA SECCIÓN: Mapa de Monto Otorgado por Localidad (Pagados) ---
-    st.markdown("<hr style='border: 2px solid #cccccc;'>", unsafe_allow_html=True)
-    st.subheader("Mapa de Monto Otorgado por Localidad (solo préstamos Pagados)")
-    try:
-        # Filtro interactivo por línea de préstamo
-        lineas_disponibles = df_filtrado_global["N_LINEA_PRESTAMO"].dropna().unique().tolist()
-        lineas_disponibles.sort()
-        selected_lineas = st.multiselect(
-            "Filtrar por Línea de Préstamo:",
-            options=lineas_disponibles,
-            default=lineas_disponibles,
-            key="filtro_linea_prestamo_mapa"
-        )
-        # Filtrar por CATEGORIA == "Pagados" y por línea seleccionada
-        df_map = df_filtrado_global[
-            (df_filtrado_global["CATEGORIA"] == "Pagados") &
-            (df_filtrado_global["N_LINEA_PRESTAMO"].isin(selected_lineas))
-        ].copy()
-        # Agrupar por localidad y sumar monto otorgado
-        df_map_grouped = df_map.groupby([
-            "N_LOCALIDAD", "N_DEPARTAMENTO", "LATITUD", "LONGITUD"
-        ], dropna=True)["MONTO_OTORGADO"].sum().reset_index()
-        
-        # Limpiar y convertir LATITUD y LONGITUD a float usando la función centralizada
-        df_map_grouped = convert_decimal_separator(df_map_grouped, columns=["LATITUD", "LONGITUD"])
-        
-        # Extraer valores numéricos y convertir a float
-        for col in ["LATITUD", "LONGITUD"]:
-            df_map_grouped[col] = df_map_grouped[col].str.extract(r"(-?\d+\.\d+)").astype(float)
-            
-        df_map_grouped = df_map_grouped.dropna(subset=["LATITUD", "LONGITUD", "MONTO_OTORGADO"])
-        if df_map_grouped.empty:
-            st.info("No hay datos de préstamos pagados con coordenadas para mostrar en el mapa.")
-        else:
-            import plotly.express as px
-            col_mapa, col_tabla = st.columns([1, 3])
-            with col_mapa:
-                st.markdown("#### Mapa de Localidades")
-                fig = px.scatter_mapbox(
-                    df_map_grouped,
-                    lat="LATITUD",
-                    lon="LONGITUD",
-                    color="MONTO_OTORGADO",
-                    size="MONTO_OTORGADO",
-                    size_max=40,
-                    hover_name="N_LOCALIDAD",
-                    hover_data=None,
-                    zoom=6,
-                    mapbox_style="carto-positron",
-                    color_continuous_scale="Viridis",
-                    labels={
-                        "N_LOCALIDAD": "Localidad",
-                        "N_DEPARTAMENTO": "Departamento",
-                        "MONTO_OTORGADO": "Monto Otorgado"
-                    },
-                    custom_data=[
-                        "N_LOCALIDAD",
-                        "N_DEPARTAMENTO",
-                        "MONTO_OTORGADO",
-                        "LATITUD",
-                        "LONGITUD"
-                    ]
-                )
-                fig.update_traces(
-                    hovertemplate=
-                        "<b>%{customdata[0]}</b><br>" +
-                        "Departamento: %{customdata[1]}<br>" +
-                        "Monto Otorgado: $%{customdata[2]:,.0f}<extra></extra>"
-                )
-                fig.update_layout(mapbox_center={"lat": -31.4167, "lon": -64.1833})
-                st.plotly_chart(fig, use_container_width=True)
-            with col_tabla:
-                st.markdown("#### Tabla de Monto Otorgado por Localidad")
-                styled_table = (
-                    df_map_grouped[["N_LOCALIDAD", "N_DEPARTAMENTO", "MONTO_OTORGADO"]]
-                    .sort_values("MONTO_OTORGADO", ascending=False)
-                    .style
-                    .background_gradient(cmap="Blues", subset=["MONTO_OTORGADO"])
-                    .format({"MONTO_OTORGADO": "{:,.0f}"})
-                )
-                st.dataframe(
-                    styled_table,
-                    use_container_width=True,
-                    hide_index=True
-                )
-    except Exception as e:
-        st.warning(f"Error al generar el mapa de monto otorgado: {e}")
+    
 
 def mostrar_recupero(df_filtrado, df_localidad_municipio, geojson_data):
     """
