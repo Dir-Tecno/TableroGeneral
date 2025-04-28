@@ -418,20 +418,7 @@ def show_bco_gente_dashboard(data, dates, is_development=False):
                     (df_global["CATEGORIA"] == "Pagados") &
                     (df_global["N_LINEA_PRESTAMO"].isin(selected_lineas))
                 ].copy()
-                # Mostrar columnas de df_map
-                st.write("Columnas de df_map:", df_map.columns.tolist())
-
-                # Mostrar las primeras filas del dataframe
-                st.dataframe(df_map)
-
-                # Botón para descargar el dataframe como CSV
-                csv = df_map.to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    label="Descargar df_map como CSV",
-                    data=csv,
-                    file_name='df_map.csv',
-                    mime='text/csv'
-                    )
+                
                 # Filtro interactivo por línea de préstamo
                 lineas_disponibles = df_global["N_LINEA_PRESTAMO"].dropna().unique().tolist()
                 lineas_disponibles.sort()
