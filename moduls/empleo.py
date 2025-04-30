@@ -782,7 +782,7 @@ def render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has
                         'BENEFICIARIO- CTI': 'Beneficiarios CTI',
                         'Total': 'Total Beneficiarios'
                     })
-                    st.dataframe(df_mapa_display, use_container_width=True, hide_index=True)
+                    st.dataframe(df_mapa_display, use_container_width=True)
 
                 # Crear y mostrar el mapa usando Plotly en la última columna
                 with map_col:
@@ -950,8 +950,11 @@ def show_companies(df_empresas, geojson_data):
             st.markdown('<h3 style="font-size: 18px; margin-bottom: 15px;">Puestos y Categorías Demandadas por Empresa</h3>', unsafe_allow_html=True)
             # Gráfico de torta por tipo de empresa
             if 'NOMBRE_TIPO_EMPRESA' in df_perfil_demanda.columns:
-                tipo_empresa_count = df_perfil_demanda['NOMBRE_TIPO_EMPRESA'].value_counts().reset_index()
-                tipo_empresa_count.columns = ['Tipo de Empresa', 'Cantidad']
+                tipo_empresa_count = (
+                df_perfil_demanda.groupby('NOMBRE_TIPO_EMPRESA')['CUIT'].nunique()
+                .reset_index()
+                .rename(columns={'NOMBRE_TIPO_EMPRESA': 'Tipo de Empresa', 'CUIT': 'Cantidad'})
+)
                 fig_pie = px.pie(tipo_empresa_count, names='Tipo de Empresa', values='Cantidad',
                                  title='Distribución por Tipo de Empresa',
                                  color_discrete_sequence=px.colors.qualitative.Pastel)
@@ -1042,6 +1045,25 @@ def show_companies(df_empresas, geojson_data):
                 st.plotly_chart(fig, use_container_width=True)
                 
             st.markdown('</div>', unsafe_allow_html=True)
+
+def preprocesar_df_censales(df):
+    # Definir columnas y tipos
+    cols_int = ["Código", "Código Provincia", "Código Departamento", "Código Aglomerado", "Código Localidad", "Código Gobierno Local", "Codigo Fraccion"]
+    cols_float = ["Tasa de Actividad", "Tasa de Empleo", "Tasa de desocupación"]
+    # Convertir a entero
+    for col in cols_int:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce').astype('Int64')
+    # Convertir a float y luego a porcentaje (soporta decimales con coma)
+    for col in cols_float:
+        if col in df.columns:
+            # Reemplazar coma por punto para decimales europeos
+            df[col] = df[col].astype(str).str.replace(',', '.', regex=False)
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+            # Si está en formato 0.XX, pasar a porcentaje
+            if df[col].max() <= 1.0:
+                df[col] = df[col] * 100
+    return df
 
 def show_inscriptions(df_inscriptos, df_poblacion, geojson_data, file_date):
     """
@@ -1227,7 +1249,46 @@ def show_empleo_dashboard(data, dates=None, is_development=False):
             return
         
         # Renderizar el dashboard principal
-        render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has_empresas, has_geojson)
-    
+        subtab_names = ["General", "Datos Censales"]
+        sub_tabs = st.tabs(subtab_names)
+
+        # Subpestaña General (coloca aquí el dashboard principal de empleo)
+        with sub_tabs[0]:
+            # Aquí va el contenido actual del dashboard de empleo
+            st.markdown("### Dashboard General de Programas de Empleo")
+            render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has_empresas, has_geojson)
+
+        # Subpestaña Datos Censales
+        with sub_tabs[1]:
+            st.markdown("### Datos Censales de Localidades")
+            st.info("""
+            **¿Cómo se calcula la tasa de desocupación?**  
+            La tasa de desempleo se calcula dividiendo el número de personas desocupadas por la Población Económicamente Activa (PEA) y multiplicando por 100. Fuente: INDEC.
+            """)
+            df_censales = data.get('LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - DATOS_CENSALES.txt')
+            if df_censales is not None and not getattr(df_censales, 'empty', True):
+                df_censales = preprocesar_df_censales(df_censales)
+                # Filtros interactivos
+                departamentos = sorted(df_censales['Departamento'].dropna().unique())
+                depto_sel = st.selectbox("Filtrar por Departamento", options=["Todos"] + departamentos)
+                if depto_sel != "Todos":
+                    df_censales = df_censales[df_censales['Departamento'] == depto_sel]
+                localidades = sorted(df_censales['Localidad'].dropna().unique())
+                loc_sel = st.selectbox("Filtrar por Localidad", options=["Todas"] + localidades)
+                if loc_sel != "Todas":
+                    df_censales = df_censales[df_censales['Localidad'] == loc_sel]
+                df_tabla = df_censales[["Departamento", "Localidad", "Tasa de Actividad", "Tasa de Empleo", "Tasa de desocupación"]].copy()
+                for col in ["Tasa de Actividad", "Tasa de Empleo", "Tasa de desocupación"]:
+                    df_tabla[col] = df_tabla[col].round(2)
+                styled = df_tabla.style.background_gradient(
+                    subset=["Tasa de Actividad", "Tasa de Empleo", "Tasa de desocupación"],
+                    cmap="Blues"
+                ).format({
+                    col: "{:.2f}%" for col in ["Tasa de Actividad", "Tasa de Empleo", "Tasa de desocupación"]
+                })
+                st.dataframe(styled, use_container_width=True, hide_index=True)
+            else:
+                st.warning("No se encontraron datos censales para mostrar.")
+
     except Exception as e:
         st.error(f"Error al procesar los datos: {str(e)}")

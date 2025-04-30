@@ -411,7 +411,6 @@ def show_bco_gente_dashboard(data, dates, is_development=False):
             # --- NUEVA SECCIÓN: Mapa de Monto Otorgado por Localidad (Pagados) ---
             st.markdown("<hr style='border: 2px solid #cccccc;'>", unsafe_allow_html=True)
             st.subheader("Mapa de Monto Otorgado por Localidad (solo préstamos Pagados)")
-            st.dataframe()
             try:
                 # Filtrar por CATEGORIA == "Pagados" y por línea seleccionada
                 df_map = df_global[
