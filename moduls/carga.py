@@ -259,6 +259,54 @@ def safe_read_parquet(file_path_or_buffer, is_buffer=False):
     except Exception as e:
         return None, str(e)  # Devolver None como DataFrame y el mensaje de error
 
+def procesar_archivo(nombre, contenido, es_buffer):
+    """
+    Procesa un archivo (local o buffer) y devuelve el DataFrame y la fecha de modificación.
+    nombre: nombre de archivo (ej: data.csv)
+    contenido: ruta local (si es_buffer=False) o buffer de bytes (si es_buffer=True)
+    es_buffer: True si es buffer (GitLab), False si es ruta local
+    """
+    import datetime
+    import pandas as pd
+    import geopandas as gpd
+    import io
+    import os
+
+    try:
+        # Parquet
+        if nombre.endswith('.parquet'):
+            if es_buffer:
+                df = ParquetLoader.load(contenido)
+                fecha = datetime.datetime.now()
+            else:
+                df, error = safe_read_parquet(contenido)
+                fecha = datetime.datetime.fromtimestamp(os.path.getmtime(contenido))
+            return df, fecha
+        # CSV o TXT
+        elif nombre.endswith('.csv') or nombre.endswith('.txt'):
+            if es_buffer:
+                df = pd.read_csv(io.BytesIO(contenido))
+                fecha = datetime.datetime.now()
+            else:
+                df = pd.read_csv(contenido)
+                fecha = datetime.datetime.fromtimestamp(os.path.getmtime(contenido))
+
+            return df, fecha
+        # GeoJSON
+        elif nombre.endswith('.geojson'):
+            if es_buffer:
+                gdf = gpd.read_file(io.BytesIO(contenido))
+                fecha = datetime.datetime.now()
+            else:
+                gdf = gpd.read_file(contenido)
+                fecha = datetime.datetime.fromtimestamp(os.path.getmtime(contenido))
+            return gdf, fecha
+        else:
+            return None, None
+    except Exception as e:
+        st.warning(f"Error al procesar {nombre}: {str(e)}")
+        return None, None
+
 def load_data_from_gitlab(repo_id, branch='main', token=None, use_local=False, local_path=None):
     """
     Carga todos los archivos del repositorio o desde una carpeta local
@@ -300,45 +348,16 @@ def load_data_from_gitlab(repo_id, branch='main', token=None, use_local=False, l
                     
                     # Extraer nombre de archivo relativo a la carpeta base
                     nombre = os.path.basename(archivo_path)
-                    
-                    # Cargar según extensión
-                    if archivo_path.endswith('.parquet'):
-                        try:
-                            df, error = safe_read_parquet(archivo_path)
-                            if df is not None:
-                                # Convertir tipos numpy
-                                df = convert_numpy_types(df)
-                                all_data[nombre] = df
-                                all_dates[nombre] = datetime.datetime.fromtimestamp(os.path.getmtime(archivo_path))
-                            else:
-                                st.warning(f"Error al cargar {nombre}: {error}")
-                        except Exception as e:
-                            st.warning(f"Error al cargar {nombre}: {str(e)}")
-                    
-                    elif archivo_path.endswith('.csv'):
-                        try:
-                            df = pd.read_csv(archivo_path)
-                            # Convertir tipos numpy
-                            df = convert_numpy_types(df)
-                            all_data[nombre] = df
-                            all_dates[nombre] = datetime.datetime.fromtimestamp(os.path.getmtime(archivo_path))
-                        except Exception as e:
-                            st.warning(f"Error al cargar {nombre}: {str(e)}")
+                    df, fecha = procesar_archivo(nombre, archivo_path, es_buffer=False)
+                    if df is not None:
+                        all_data[nombre] = df
+                        all_dates[nombre] = fecha
+
                     
                     elif archivo_path.endswith('.geojson'):
                         try:
                             gdf = gpd.read_file(archivo_path)
                             all_data[nombre] = gdf
-                            all_dates[nombre] = datetime.datetime.fromtimestamp(os.path.getmtime(archivo_path))
-                        except Exception as e:
-                            st.warning(f"Error al cargar {nombre}: {str(e)}")
-                    
-                    elif archivo_path.endswith('.txt'):
-                        try:
-                            df = pd.read_csv(archivo_path, sep=None, engine='python')
-                            # Convertir tipos numpy
-                            df = convert_numpy_types(df)
-                            all_data[nombre] = df
                             all_dates[nombre] = datetime.datetime.fromtimestamp(os.path.getmtime(archivo_path))
                         except Exception as e:
                             st.warning(f"Error al cargar {nombre}: {str(e)}")
@@ -379,43 +398,11 @@ def load_data_from_gitlab(repo_id, branch='main', token=None, use_local=False, l
                     
                     # Extraer nombre de archivo
                     nombre = archivo.split('/')[-1]
-                    
-                    # Cargar según extensión
-                    if archivo.endswith('.parquet'):
-                        df = ParquetLoader.load(contenido)
-                        if df is not None:
-                            all_data[nombre] = df
-                            all_dates[nombre] = datetime.datetime.now()
-                        else:
-                            st.warning(f"Error al cargar {nombre}")
-                    
-                    elif archivo.endswith('.csv'):
-                        try:
-                            df = pd.read_csv(io.BytesIO(contenido))
-                            # Convertir tipos numpy
-                            df = convert_numpy_types(df)
-                            all_data[nombre] = df
-                            all_dates[nombre] = datetime.datetime.now()
-                        except Exception as e:
-                            st.warning(f"Error al cargar {nombre}: {str(e)}")
-                    
-                    elif archivo.endswith('.geojson'):
-                        try:
-                            gdf = gpd.read_file(io.BytesIO(contenido))
-                            all_data[nombre] = gdf
-                            all_dates[nombre] = datetime.datetime.now()
-                        except Exception as e:
-                            st.warning(f"Error al cargar {nombre}: {str(e)}")
-                    
-                    elif archivo.endswith('.txt'):
-                        try:
-                            df = pd.read_csv(io.BytesIO(contenido), sep=None, engine='python')
-                            # Convertir tipos numpy
-                            df = convert_numpy_types(df)
-                            all_data[nombre] = df
-                            all_dates[nombre] = datetime.datetime.now()
-                        except Exception as e:
-                            st.warning(f"Error al cargar {nombre}: {str(e)}")
+                    df, fecha = procesar_archivo(nombre, contenido, es_buffer=True)
+                    if df is not None:
+                        all_data[nombre] = df
+                        all_dates[nombre] = fecha
+
                 
                 except Exception as e:
                     st.error(f"Error al procesar {archivo}: {str(e)}")

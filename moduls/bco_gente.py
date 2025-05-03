@@ -939,6 +939,44 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
                 height=400
             )
             
+            # --- Generar DataFrame extendido para descarga (con columnas extra, pero sin renderizarlas en pantalla) ---
+            columnas_extra = [
+                col for col in ['TIPO', 'Gestion 2023-2027', 'FUERZAS', 'ESTADO', 'LEGISLADOR DEPARTAMENTAL'] if col in df_filtrado_global.columns
+            ]
+            # Unir las columnas extra al DataFrame original (antes del agrupado)
+            df_descarga = df_filtrado_global[
+                ['N_DEPARTAMENTO', 'N_LOCALIDAD'] + columnas_extra + ['NRO_SOLICITUD', 'N_ESTADO_PRESTAMO']
+            ].copy()
+            # Agregar columna de categoría
+            df_descarga['CATEGORIA'] = 'Otros'
+            for categoria, estados in ESTADO_CATEGORIAS.items():
+                mask = df_descarga['N_ESTADO_PRESTAMO'].isin(estados)
+                df_descarga.loc[mask, 'CATEGORIA'] = categoria
+            # Agrupar para obtener el conteo por las columnas extra y categoría
+            df_descarga_grouped = df_descarga.groupby(
+                ['N_DEPARTAMENTO', 'N_LOCALIDAD'] + columnas_extra + ['CATEGORIA']
+            )['NRO_SOLICITUD'].count().reset_index()
+            df_descarga_grouped = df_descarga_grouped.rename(columns={'NRO_SOLICITUD': 'Cantidad'})
+            # --- Botón de descarga Excel con ícono ---
+            import io
+            import base64
+            excel_buffer = io.BytesIO()
+            df_descarga_grouped.to_excel(excel_buffer, index=False)
+            excel_buffer.seek(0)
+            excel_icon = """
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="20" height="20" rx="3" fill="#217346"/>
+            <path d="M6.5 7.5H8L9.25 10L10.5 7.5H12L10.25 11L12 14.5H10.5L9.25 12L8 14.5H6.5L8.25 11L6.5 7.5Z" fill="white"/>
+            </svg>
+            """
+            st.markdown(f'<span style="vertical-align:middle">{excel_icon}</span> <b>Descargar agrupado extendido (Excel)</b>', unsafe_allow_html=True)
+            st.download_button(
+                label="Descargar Excel",
+                data=excel_buffer.getvalue(),
+                file_name="estados_prestamos_categoria_extend.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                help="Descargar el agrupado con todas las columnas extra para análisis avanzado."
+            )
            
     except Exception as e:
         st.warning(f"Error al generar la tabla de estados: {str(e)}")

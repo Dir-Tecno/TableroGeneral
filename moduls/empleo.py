@@ -1046,25 +1046,6 @@ def show_companies(df_empresas, geojson_data):
                 
             st.markdown('</div>', unsafe_allow_html=True)
 
-def preprocesar_df_censales(df):
-    # Definir columnas y tipos
-    cols_int = ["Código", "Código Provincia", "Código Departamento", "Código Aglomerado", "Código Localidad", "Código Gobierno Local", "Codigo Fraccion"]
-    cols_float = ["Tasa de Actividad", "Tasa de Empleo", "Tasa de desocupación"]
-    # Convertir a entero
-    for col in cols_int:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce').astype('Int64')
-    # Convertir a float y luego a porcentaje (soporta decimales con coma)
-    for col in cols_float:
-        if col in df.columns:
-            # Reemplazar coma por punto para decimales europeos
-            df[col] = df[col].astype(str).str.replace(',', '.', regex=False)
-            df[col] = pd.to_numeric(df[col], errors='coerce')
-            # Si está en formato 0.XX, pasar a porcentaje
-            if df[col].max() <= 1.0:
-                df[col] = df[col] * 100
-    return df
-
 def show_inscriptions(df_inscriptos, df_poblacion, geojson_data, file_date):
     """
     Muestra la vista de inscripciones con mejor estilo visual
@@ -1265,28 +1246,49 @@ def show_empleo_dashboard(data, dates=None, is_development=False):
             **¿Cómo se calcula la tasa de desocupación?**  
             La tasa de desempleo se calcula dividiendo el número de personas desocupadas por la Población Económicamente Activa (PEA) y multiplicando por 100. Fuente: INDEC.
             """)
-            df_censales = data.get('LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - DATOS_CENSALES.txt')
+            df_censales = data.get('LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt')
             if df_censales is not None and not getattr(df_censales, 'empty', True):
-                df_censales = preprocesar_df_censales(df_censales)
-                # Filtros interactivos
-                departamentos = sorted(df_censales['Departamento'].dropna().unique())
+                departamentos = sorted(df_censales['DEPARTAMENTO'].dropna().unique())
                 depto_sel = st.selectbox("Filtrar por Departamento", options=["Todos"] + departamentos)
                 if depto_sel != "Todos":
-                    df_censales = df_censales[df_censales['Departamento'] == depto_sel]
-                localidades = sorted(df_censales['Localidad'].dropna().unique())
+                    df_censales = df_censales[df_censales['DEPARTAMENTO'] == depto_sel]
+                localidades = sorted(df_censales['LOCALIDAD'].dropna().unique())
                 loc_sel = st.selectbox("Filtrar por Localidad", options=["Todas"] + localidades)
                 if loc_sel != "Todas":
-                    df_censales = df_censales[df_censales['Localidad'] == loc_sel]
-                df_tabla = df_censales[["Departamento", "Localidad", "Tasa de Actividad", "Tasa de Empleo", "Tasa de desocupación"]].copy()
+                    df_censales = df_censales[df_censales['LOCALIDAD'] == loc_sel]
+                df_tabla = df_censales[["DEPARTAMENTO", "LOCALIDAD", "Tasa de Actividad", "Tasa de Empleo", "Tasa de desocupación"]].copy()
                 for col in ["Tasa de Actividad", "Tasa de Empleo", "Tasa de desocupación"]:
                     df_tabla[col] = df_tabla[col].round(2)
-                styled = df_tabla.style.background_gradient(
-                    subset=["Tasa de Actividad", "Tasa de Empleo", "Tasa de desocupación"],
-                    cmap="Blues"
-                ).format({
-                    col: "{:.2f}%" for col in ["Tasa de Actividad", "Tasa de Empleo", "Tasa de desocupación"]
+                # --- Agregar fila de totales ---
+                total_row = pd.DataFrame({
+                    "DEPARTAMENTO": ["Total"],
+                    "LOCALIDAD": ["Total"],
+                    "Tasa de Actividad": [df_tabla["Tasa de Actividad"].mean()],
+                    "Tasa de Empleo": [df_tabla["Tasa de Empleo"].mean()],
+                    "Tasa de desocupación": [df_tabla["Tasa de desocupación"].mean()]
                 })
-                st.dataframe(styled, use_container_width=True, hide_index=True)
+                df_tabla_tot = pd.concat([df_tabla, total_row], ignore_index=True)
+
+                # --- Reemplazar NaN/None por guion largo para mejor visualización ---
+                df_tabla_tot = df_tabla_tot.where(pd.notnull(df_tabla_tot), '—')
+                # Formatear las columnas de porcentaje como strin  g con símbolo %
+                for col in ["Tasa de Actividad", "Tasa de Empleo", "Tasa de desocupación"]:
+                    df_tabla_tot[col] = df_tabla_tot[col].apply(lambda x: f"{x:.2f}%" if pd.notnull(x) and x != '—' else x)
+                # --- Configuración de columnas con formato y tooltips ---
+                column_config = {
+                    "DEPARTAMENTO": st.column_config.TextColumn("Departamento"),
+                    "LOCALIDAD": st.column_config.TextColumn("Localidad"),
+                    "Tasa de Actividad": st.column_config.NumberColumn("Tasa de Actividad", help="Porcentaje de la PEA sobre la población total", format="%.2f%%"),
+                    "Tasa de Empleo": st.column_config.NumberColumn("Tasa de Empleo", help="Porcentaje de ocupados sobre la PEA", format="%.2f%%"),
+                    "Tasa de desocupación": st.column_config.NumberColumn("Tasa de Desocupación", help="Porcentaje de desocupados sobre la PEA", format="%.2f%%")
+                }
+                st.dataframe(
+                    df_tabla_tot,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config=column_config,
+                    height=400
+                )
             else:
                 st.warning("No se encontraron datos censales para mostrar.")
 
