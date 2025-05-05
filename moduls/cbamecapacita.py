@@ -135,6 +135,7 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
             # Limpiar y convertir LATITUD y LONGITUD
             df_cursos = convert_decimal_separator(df_cursos, columns=["LATITUD", "LONGITUD"])
             
+            #st.dataframe(df_cursos)
             # Extraer valores numéricos y convertir a float
             for col in ["LATITUD", "LONGITUD"]:
                 df_cursos[col] = (
