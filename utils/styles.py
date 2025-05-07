@@ -301,6 +301,12 @@ def apply_styles():
         color: #6c757d;
         margin-bottom: 5px;
     }
+    
+    .metric-subtitle {
+        font-size: 12px;
+        color: #6c757d;
+        margin-top: 5px;
+    }
 
     /* Table styles */
     .styled-table {
@@ -371,6 +377,32 @@ def apply_styles():
         margin-bottom: 15px;
         border-radius: 4px;
         font-size: 14px;
+    }
+    
+    /* Filtros */
+    .filter-section {
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        display: flex;
+        flex-wrap: wrap;
+    }
+    
+    .filter-label {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--color-primary);
+        margin-bottom: 5px;
+    }
+    
+    .filter-info {
+        font-size: 12px;
+        color: #6c757d;
+        margin-top: 5px;
+        margin-bottom: 15px;
+        font-style: italic;
     }
     </style>
     """, unsafe_allow_html=True)

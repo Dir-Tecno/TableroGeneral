@@ -298,7 +298,7 @@ def render_filters(df_inscriptos, key_prefix=""):
             if 'N_DEPARTAMENTO' in df_inscriptos.columns:
                 departamentos = sorted(df_inscriptos['N_DEPARTAMENTO'].dropna().unique())
                 all_dpto_option = "Todos los departamentos"
-                selected_dpto = st.selectbox("Departamento:", [all_dpto_option] + list(departamentos), key=f"{key_prefix}_dpto_filter")
+                selected_dpto = st.selectbox("Departamento (Beneficiarios):", [all_dpto_option] + list(departamentos), key=f"{key_prefix}_dpto_filter")
                 
                 # Inicializar variables con valores por defecto
                 selected_loc = None
@@ -419,8 +419,10 @@ def render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has
         
         # Contenido de la pestaña Beneficiarios
         with tab_beneficiarios:
-            # Filtros específicos para la pestaña Beneficiarios
-            df_filtered, selected_dpto, selected_loc, all_dpto_option, all_loc_option = render_filters(df_inscriptos, key_prefix="benef")
+            # Contenedor para los filtros específicos de la pestaña Beneficiarios
+            with st.container():
+                # Filtros específicos para la pestaña Beneficiarios
+                df_filtered, selected_dpto, selected_loc, all_dpto_option, all_loc_option = render_filters(df_inscriptos, key_prefix="benef_tab")
             
             # Conteo de ID_FICHA por PROGRAMA y ESTADO_FICHA
             pivot_table = df_filtered.pivot_table(
@@ -837,11 +839,9 @@ def render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has
         
         with tab_empresas:
             if has_empresas:
-                # Filtros específicos para la pestaña Empresas
-                df_filtered_empresas, selected_dpto_emp, selected_loc_emp, all_dpto_option_emp, all_loc_option_emp = render_filters(df_empresas, key_prefix="emp")
-                
-                # Mostrar los datos de empresas con los filtros aplicados
-                show_companies(df_filtered_empresas, geojson_data)
+                # Pasar directamente el DataFrame de empresas sin aplicar los filtros de render_filters
+                # ya que los filtros se manejarán internamente en show_companies
+                show_companies(df_empresas, geojson_data)
             else:
                 st.markdown("""
                     <div class="info-box status-warning">
@@ -877,11 +877,20 @@ def show_companies(df_empresas, geojson_data):
                        if col in df_empresas.columns]
 
     if 'CUIT' in df_empresas.columns and 'ADHERIDO' in df_empresas.columns:
+        # Guardamos la lista original de programas para cada CUIT antes de agrupar
+        df_empresas['PROGRAMAS_LISTA'] = df_empresas['ADHERIDO']
         df_empresas['ADHERIDO'] = df_empresas.groupby('CUIT')['ADHERIDO'].transform(lambda x: ', '.join(sorted(set(x))))
     
     # Usar columns_to_select para crear df_display correctamente
-    df_display = df_empresas[columns_to_select].drop_duplicates(subset='CUIT')
+    df_display = df_empresas[columns_to_select + (['PROGRAMAS_LISTA'] if 'PROGRAMAS_LISTA' in df_empresas.columns else [])].drop_duplicates(subset='CUIT')
     df_display = df_display.sort_values(by='CUPO', ascending=False).reset_index(drop=True)
+    
+    # Extraer todos los programas únicos para el filtro multiselect
+    programas_unicos = []
+    if 'ADHERIDO' in df_display.columns:
+        # Extraer todos los programas únicos de la columna ADHERIDO
+        todos_programas = df_display['ADHERIDO'].str.split(', ').explode().dropna().unique()
+        programas_unicos = sorted(todos_programas)
 
 
             
@@ -889,49 +898,156 @@ def show_companies(df_empresas, geojson_data):
             
 
     st.markdown("<hr style='border: 1px solid #e0e0e0; margin: 20px 0;'>", unsafe_allow_html=True)
+    
+    # Añadir filtros en la pestaña de empresas
+    st.markdown('<div class="filter-section">', unsafe_allow_html=True)
+    col_filtro1, col_filtro2 = st.columns(2)
+    
+    # Primera columna para el filtro de programas (subido como solicitado)
+    with col_filtro1:
+        if programas_unicos:
+            st.markdown('<div class="filter-label">Programa:</div>', unsafe_allow_html=True)
+            selected_programas = st.multiselect("Seleccionar programas", options=programas_unicos, default=[], label_visibility="collapsed")
+        else:
+            selected_programas = []
+    
+    # Segunda columna para el filtro de departamento
+    with col_filtro2:
+        st.markdown('<div class="filter-label">Departamento (Empresas):</div>', unsafe_allow_html=True)
+        if 'N_DEPARTAMENTO' in df_display.columns:
+            departamentos = sorted(df_display['N_DEPARTAMENTO'].dropna().unique())
+            selected_dpto = st.selectbox("Seleccionar departamento de empresas", options=["Todos los departamentos"] + departamentos, label_visibility="collapsed")
+        else:
+            selected_dpto = "Todos los departamentos"
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Aplicar filtros al dataframe
+    df_filtered = df_display.copy()
+    
+    # Filtrar por departamento si se seleccionó uno específico
+    if selected_dpto != "Todos los departamentos" and 'N_DEPARTAMENTO' in df_filtered.columns:
+        df_filtered = df_filtered[df_filtered['N_DEPARTAMENTO'] == selected_dpto]
+    
+    # Filtrar por programas seleccionados
+    if selected_programas:
+        # Crear una máscara para filtrar empresas que tengan al menos uno de los programas seleccionados
+        # Primero verificamos si la columna PROGRAMAS_LISTA existe (datos originales)
+        if 'PROGRAMAS_LISTA' in df_filtered.columns:
+            # Creamos un conjunto con los CUITs de empresas que tienen alguno de los programas seleccionados
+            cuits_con_programas = set()
+            for programa in selected_programas:
+                # Obtenemos los CUITs de empresas con este programa
+                cuits_programa = df_empresas[df_empresas['PROGRAMAS_LISTA'] == programa]['CUIT'].unique()
+                cuits_con_programas.update(cuits_programa)
+            # Filtramos el dataframe para incluir solo las empresas con los CUITs seleccionados
+            df_filtered = df_filtered[df_filtered['CUIT'].isin(cuits_con_programas)]
+        else:
+            # Si no tenemos la columna original, usamos el campo ADHERIDO agregado
+            mask = df_filtered['ADHERIDO'].apply(lambda x: any(programa in x.split(', ') for programa in selected_programas))
+            df_filtered = df_filtered[mask]
+    
+    # Mostrar mensaje con el número de registros después de aplicar los filtros
+    st.markdown(f'<div class="filter-info">Mostrando {len(df_filtered)} de {len(df_display)} empresas</div>', unsafe_allow_html=True)
 
     # Métricas y tabla final con mejor diseño
-    empresas_adh = df_display['CUIT'].nunique()
+    empresas_adh = df_filtered['CUIT'].nunique()
     
     # Calcular empresas con y sin beneficiarios
-    empresas_con_benef = df_display[df_display['BENEF'] > 0]['CUIT'].nunique()
-    empresas_sin_benef = df_display[pd.isna(df_display['BENEF'])]['CUIT'].nunique()
+    empresas_con_benef = df_filtered[df_filtered['BENEF'] > 0]['CUIT'].nunique()
+    empresas_sin_benef = df_filtered[df_filtered['BENEF'].isna()]['CUIT'].nunique()
+    
+    # Calcular empresas por programa para mostrar en los KPIs usando los datos originales
+    programas_conteo = {}
+    programas_con_benef = {}
+    programas_sin_benef = {}
+    
+    if 'PROGRAMAS_LISTA' in df_empresas.columns:
+        # Usamos el dataframe original (antes del agrupamiento) para contar correctamente
+        df_empresas_original = df_empresas.copy()
+        
+        # Aplicamos los mismos filtros que aplicamos a df_filtered
+        if selected_dpto != "Todos los departamentos" and 'N_DEPARTAMENTO' in df_empresas_original.columns:
+            df_empresas_original = df_empresas_original[df_empresas_original['N_DEPARTAMENTO'] == selected_dpto]
+            
+        for programa in programas_unicos:
+            # Contar empresas que tienen este programa específico
+            empresas_programa = df_empresas_original[df_empresas_original['PROGRAMAS_LISTA'] == programa]
+            cuits_programa = empresas_programa['CUIT'].unique()
+            
+            # Total de empresas por programa
+            programas_conteo[programa] = len(cuits_programa)
+            
+            # Empresas con beneficiarios por programa
+            if 'BENEF' in df_empresas_original.columns:
+                cuits_con_benef = empresas_programa[empresas_programa['BENEF'] > 0]['CUIT'].unique()
+                programas_con_benef[programa] = len(cuits_con_benef)
+                
+                # Empresas sin beneficiarios por programa
+                cuits_sin_benef = empresas_programa[empresas_programa['BENEF'].isna()]['CUIT'].unique()
+                programas_sin_benef[programa] = len(cuits_sin_benef)
+    
+    # Obtener los dos programas principales para mostrar en cada KPI
+    programas_principales = sorted(programas_conteo.items(), key=lambda x: x[1], reverse=True)[:2] if programas_conteo else []
+    programas_con_benef_principales = sorted(programas_con_benef.items(), key=lambda x: x[1], reverse=True)[:2] if programas_con_benef else []
+    programas_sin_benef_principales = sorted(programas_sin_benef.items(), key=lambda x: x[1], reverse=True)[:2] if programas_sin_benef else []
     
     # Layout para los KPIs - 3 columnas
     col1, col2, col3 = st.columns(3)
     
     with col1:
+        # Crear el subtexto con el desglose por programa
+        subtexto = ""
+        if programas_principales:
+            subtexto_items = [f"{prog}: {count}" for prog, count in programas_principales]
+            subtexto = f"<div class='metric-subtitle'>{' - '.join(subtexto_items)}</div>"
+        
         st.markdown("""
             <div class="metric-card">
                 <div class="metric-label">Empresas Adheridas</div>
                 <div class="metric-value">{:}</div>
+                {}
                 <div class="metric-tooltip" title="{}"></div>
             </div>
-        """.format(empresas_adh, TOOLTIPS_DESCRIPTIVOS.get("EMPRESAS ADHERIDAS", "")), unsafe_allow_html=True)
+        """.format(empresas_adh, subtexto, TOOLTIPS_DESCRIPTIVOS.get("EMPRESAS ADHERIDAS", "")), unsafe_allow_html=True)
     
     with col2:
+        # Crear el subtexto con el desglose por programa para empresas con beneficiarios
+        subtexto_con_benef = ""
+        if programas_con_benef_principales:
+            subtexto_items = [f"{prog}: {count}" for prog, count in programas_con_benef_principales]
+            subtexto_con_benef = f"<div class='metric-subtitle'>{' - '.join(subtexto_items)}</div>"
+        
         st.markdown("""
             <div class="metric-card">
                 <div class="metric-label">Empresas con Beneficiarios</div>
                 <div class="metric-value">{:}</div>
+                {}
                 <div class="metric-tooltip" title="{}"></div>
             </div>
-        """.format(empresas_con_benef, TOOLTIPS_DESCRIPTIVOS.get("EMPRESAS CON BENEFICIARIOS", "")), unsafe_allow_html=True)
+        """.format(empresas_con_benef, subtexto_con_benef, TOOLTIPS_DESCRIPTIVOS.get("EMPRESAS CON BENEFICIARIOS", "")), unsafe_allow_html=True)
         
     with col3:
+        # Crear el subtexto con el desglose por programa para empresas sin beneficiarios
+        subtexto_sin_benef = ""
+        if programas_sin_benef_principales:
+            subtexto_items = [f"{prog}: {count}" for prog, count in programas_sin_benef_principales]
+            subtexto_sin_benef = f"<div class='metric-subtitle'>{' - '.join(subtexto_items)}</div>"
+        
         st.markdown("""
             <div class="metric-card">
                 <div class="metric-label">Empresas sin Beneficiarios</div>
                 <div class="metric-value">{:}</div>
+                {}
                 <div class="metric-tooltip" title="{}"></div>
             </div>
-        """.format(empresas_sin_benef, TOOLTIPS_DESCRIPTIVOS.get("EMPRESAS SIN BENEFICIARIOS", "")), unsafe_allow_html=True)
+        """.format(empresas_sin_benef, subtexto_sin_benef, TOOLTIPS_DESCRIPTIVOS.get("EMPRESAS SIN BENEFICIARIOS", "")), unsafe_allow_html=True)
 
     st.markdown("""<div class="info-box">Las empresas (Empresas y Monotributistas) en esta tabla se encuentran adheridas a uno o más programas de empleo, han cumplido con los requisitos establecidos por los programas en su momento y salvo omisiones, han proporcionado sus datos a través de los registros de programasempleo.cba.gov.ar</div>""", unsafe_allow_html=True)
 
     # Mostrar el DataFrame con mejor estilo, dentro de un expander
     with st.expander("Ver tabla de empresas adheridas", expanded=False):
-        st.dataframe(df_display, hide_index=True, use_container_width=True)
+        st.dataframe(df_filtered, hide_index=True, use_container_width=True)
 
     st.markdown("<hr style='border: 1px solid #e0e0e0; margin: 20px 0;'>", unsafe_allow_html=True)
 
@@ -1241,37 +1357,44 @@ def show_empleo_dashboard(data, dates=None, is_development=False):
         if not has_fichas:
             return
         
-        # Renderizar el dashboard principal
-        subtab_names = ["General", "Datos Censales"]
-        sub_tabs = st.tabs(subtab_names)
-
-        # Subpestaña General (coloca aquí el dashboard principal de empleo)
-        with sub_tabs[0]:
-            # Aquí va el contenido actual del dashboard de empleo
-            st.markdown("### Dashboard General de Programas de Empleo")
-            render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has_empresas, has_geojson)
-
-        # Subpestaña Datos Censales
-        with sub_tabs[1]:
-            st.markdown("### Datos Censales de Localidades")
+        # Renderizar el dashboard principal directamente sin pestañas
+        st.markdown("### Dashboard General de Programas de Empleo")
+        render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has_empresas, has_geojson)
+        
+        # Agregar la tabla de datos censales en un desplegable
+        with st.expander("Ver Datos Censales de Localidades", expanded=False):
             st.info("""
             **¿Cómo se calcula la tasa de desocupación?**  
             La tasa de desempleo se calcula dividiendo el número de personas desocupadas por la Población Económicamente Activa (PEA) y multiplicando por 100. Fuente: INDEC.
             """)
             df_censales = data.get('LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt')
             if df_censales is not None and not getattr(df_censales, 'empty', True):
-                departamentos = sorted(df_censales['DEPARTAMENTO'].dropna().unique())
-                depto_sel = st.selectbox("Filtrar por Departamento", options=["Todos"] + departamentos)
+                col1, col2 = st.columns(2)
+                with col1:
+                    departamentos = sorted(df_censales['DEPARTAMENTO'].dropna().unique())
+                    depto_sel = st.selectbox("Filtrar por Departamento", options=["Todos"] + departamentos, key="censo_depto")
+                with col2:
+                    # Filtrar localidades según el departamento seleccionado
+                    if depto_sel != "Todos":
+                        df_censales_filtrado = df_censales[df_censales['DEPARTAMENTO'] == depto_sel]
+                    else:
+                        df_censales_filtrado = df_censales
+                    
+                    localidades = sorted(df_censales_filtrado['LOCALIDAD'].dropna().unique())
+                    loc_sel = st.selectbox("Filtrar por Localidad", options=["Todas"] + localidades, key="censo_loc")
+                
+                # Aplicar filtros
                 if depto_sel != "Todos":
                     df_censales = df_censales[df_censales['DEPARTAMENTO'] == depto_sel]
-                localidades = sorted(df_censales['LOCALIDAD'].dropna().unique())
-                loc_sel = st.selectbox("Filtrar por Localidad", options=["Todas"] + localidades)
                 if loc_sel != "Todas":
                     df_censales = df_censales[df_censales['LOCALIDAD'] == loc_sel]
+                
+                # Preparar tabla
                 df_tabla = df_censales[["DEPARTAMENTO", "LOCALIDAD", "Tasa de Actividad", "Tasa de Empleo", "Tasa de desocupación"]].copy()
                 for col in ["Tasa de Actividad", "Tasa de Empleo", "Tasa de desocupación"]:
                     df_tabla[col] = df_tabla[col].round(2)
-                # --- Agregar fila de totales ---
+                
+                # Agregar fila de totales
                 total_row = pd.DataFrame({
                     "DEPARTAMENTO": ["Total"],
                     "LOCALIDAD": ["Total"],
@@ -1281,12 +1404,14 @@ def show_empleo_dashboard(data, dates=None, is_development=False):
                 })
                 df_tabla_tot = pd.concat([df_tabla, total_row], ignore_index=True)
 
-                # --- Reemplazar NaN/None por guion largo para mejor visualización ---
+                # Reemplazar NaN/None por guion largo
                 df_tabla_tot = df_tabla_tot.where(pd.notnull(df_tabla_tot), '—')
-                # Formatear las columnas de porcentaje como strin  g con símbolo %
+                
+                # Formatear columnas de porcentaje
                 for col in ["Tasa de Actividad", "Tasa de Empleo", "Tasa de desocupación"]:
                     df_tabla_tot[col] = df_tabla_tot[col].apply(lambda x: f"{x:.2f}%" if pd.notnull(x) and x != '—' else x)
-                # --- Configuración de columnas con formato y tooltips ---
+                
+                # Configuración de columnas
                 column_config = {
                     "DEPARTAMENTO": st.column_config.TextColumn("Departamento"),
                     "LOCALIDAD": st.column_config.TextColumn("Localidad"),
@@ -1294,6 +1419,8 @@ def show_empleo_dashboard(data, dates=None, is_development=False):
                     "Tasa de Empleo": st.column_config.NumberColumn("Tasa de Empleo", help="Porcentaje de ocupados sobre la PEA", format="%.2f%%"),
                     "Tasa de desocupación": st.column_config.NumberColumn("Tasa de Desocupación", help="Porcentaje de desocupados sobre la PEA", format="%.2f%%")
                 }
+                
+                # Mostrar tabla
                 st.dataframe(
                     df_tabla_tot,
                     use_container_width=True,
