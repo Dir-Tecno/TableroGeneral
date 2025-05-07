@@ -535,7 +535,11 @@ def render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has
                         else:
                             cell_style = 'style="text-align: right;"'
                     
-                    html_table_main += f'<td {cell_style}>{int(row[col]):,}'.replace(',', '.')+'</td>'
+                    # Manejar posibles valores NaN antes de convertir a entero
+                    if pd.isna(row[col]):
+                        html_table_main += f'<td {cell_style}>0</td>'
+                    else:
+                        html_table_main += f'<td {cell_style}>{int(row[col]):,}'.replace(',', '.')+'</td>'
                 
                 # Celda Sub total
                 val1 = int(row['BENEFICIARIO']) if 'BENEFICIARIO' in row and not pd.isnull(row['BENEFICIARIO']) else 0
@@ -625,7 +629,11 @@ def render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has
                                     cell_style = 'style="background-color: #e6f0f7; text-align: right;"'
                                 else:
                                     cell_style = 'style="text-align: right;"'
-                                html_table_grupo3 += f'<td {cell_style}>{int(row[col]):,}'.replace(',', '.')+'</td>'
+                                # Manejar posibles valores NaN antes de convertir a entero
+                                if pd.isna(row[col]):
+                                    html_table_grupo3 += f'<td {cell_style}>0</td>'
+                                else:
+                                    html_table_grupo3 += f'<td {cell_style}>{int(row[col]):,}'.replace(',', '.')+'</td>'
                             
                             # Columnas de datos para otros
                             for col in otros_cols:
@@ -636,7 +644,11 @@ def render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has
                                     cell_style = 'style="background-color: #e6f0f7; text-align: right;"'
                                 else:
                                     cell_style = 'style="text-align: right;"'
-                                html_table_grupo3 += f'<td {cell_style}>{int(row[col]):,}'.replace(',', '.')+'</td>'
+                                # Manejar posibles valores NaN antes de convertir a entero
+                                if pd.isna(row[col]):
+                                    html_table_grupo3 += f'<td {cell_style}>0</td>'
+                                else:
+                                    html_table_grupo3 += f'<td {cell_style}>{int(row[col]):,}'.replace(',', '.')+'</td>'
                             
                             html_table_grupo3 += '</tr>'
                     
