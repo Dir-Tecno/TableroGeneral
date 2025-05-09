@@ -155,6 +155,22 @@ def load_and_preprocess_data(data, dates=None):
         df_empresas = clean_thousand_separator(df_empresas)
         df_inscriptos_raw = clean_thousand_separator(df_inscriptos_raw)
         df_poblacion = clean_thousand_separator(df_poblacion)
+        
+        # Cargar y limpiar datos censales (si existen)
+        df_censales = data.get('LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt')
+        if df_censales is not None and not df_censales.empty:
+            # Limpiar caracteres especiales en columnas numéricas
+            numeric_cols = ['Tasa de Actividad', 'Tasa de Empleo', 'Tasa de desocupación']
+            for col in numeric_cols:
+                if col in df_censales.columns:
+                    # Convertir a string primero para manejar cualquier tipo de dato
+                    df_censales[col] = df_censales[col].astype(str)
+                    # Reemplazar guión largo u otros caracteres no numéricos con NaN
+                    df_censales[col] = df_censales[col].replace(['\u2014', '\u2013', '\u2212', '-', 'nan', 'None', 'null', ''], pd.NA)
+                    # Convertir a numérico
+                    df_censales[col] = pd.to_numeric(df_censales[col], errors='coerce')
+            # Actualizar el dataset en el diccionario de datos
+            data['LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt'] = df_censales
 
         # Filtrar para excluir el estado "ADHERIDO"
         df_inscriptos = df_inscriptos_raw[df_inscriptos_raw['N_ESTADO_FICHA'] != "ADHERIDO"].copy()
@@ -1336,13 +1352,38 @@ def show_empleo_dashboard(data, dates=None, is_development=False):
         st.markdown("***")
         st.caption("Información de Desarrollo (Columnas de DataFrames - Empleo)")
         if isinstance(data, dict):
-            for name, df in data.items():
-                if df is not None:
-                    with st.expander(f"Columnas en: `{name}`"):
-                        st.write(df.columns.tolist())
-                        st.write("Primeras 5 filas:")
-                        st.dataframe(df.head())
+            # Definir datasets prioritarios (los nuevos)
+            nuevos_datasets = ['datos_ppp_jesi.csv', 'datos_mas26_jesi.csv']
+            
+            # Mostrar primero los nuevos datasets con más detalle
+            for name in nuevos_datasets:
+                if name in data and data[name] is not None:
+                    with st.expander(f"NUEVO DATASET: `{name}`", expanded=True):
+                        df = data[name]
+                        st.write(f"**Estructura del dataset:**")
+                        st.write(f"Columnas: {df.columns.tolist()}")
                         st.write(f"Total de registros: {len(df)}")
+                        st.write("")
+                        st.write(f"**Primeras 5 filas:**")
+                        st.dataframe(df.head(), use_container_width=True)
+                        
+                        # Mostrar algunos stats básicos
+                        st.write("")
+                        st.write(f"**Información estadística básica:**")
+                        # Seleccionar columnas numéricas para estadísticas
+                        numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
+                        if numeric_cols:
+                            st.dataframe(df[numeric_cols].describe(), use_container_width=True)
+            
+            # Mostrar el resto de datasets
+            otros_datasets = [name for name in data.keys() if name not in nuevos_datasets]
+            for name in otros_datasets:
+                if data[name] is not None:
+                    with st.expander(f"Columnas en: `{name}`"):
+                        st.write(data[name].columns.tolist())
+                        st.write("Primeras 5 filas:")
+                        st.dataframe(data[name].head())
+                        st.write(f"Total de registros: {len(data[name])}")
                 else:
                     st.warning(f"DataFrame '{name}' no cargado o vacío.")
         else:
@@ -1360,6 +1401,10 @@ def show_empleo_dashboard(data, dates=None, is_development=False):
         # Renderizar el dashboard principal directamente sin pestañas
         st.markdown("### Dashboard General de Programas de Empleo")
         render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has_empresas, has_geojson)
+        
+        # Agregar sección específica para datos censales
+        st.markdown("### Información Demográfica y Estadísticas Laborales por Localidad")
+        st.markdown("Esta sección presenta indicadores demográficos y laborales clave por localidad según datos censales")
         
         # Agregar la tabla de datos censales en un desplegable
         with st.expander("Ver Datos Censales de Localidades", expanded=False):
@@ -1391,8 +1436,15 @@ def show_empleo_dashboard(data, dates=None, is_development=False):
                 
                 # Preparar tabla
                 df_tabla = df_censales[["DEPARTAMENTO", "LOCALIDAD", "Tasa de Actividad", "Tasa de Empleo", "Tasa de desocupación"]].copy()
+                
+                # Limpiar y convertir las columnas numéricas, reemplazando cualquier caracter especial por NaN
                 for col in ["Tasa de Actividad", "Tasa de Empleo", "Tasa de desocupación"]:
-                    df_tabla[col] = df_tabla[col].round(2)
+                    # Convertir a string primero para manejar cualquier tipo de dato
+                    df_tabla[col] = df_tabla[col].astype(str)
+                    # Reemplazar guión largo u otros caracteres no numéricos con NaN
+                    df_tabla[col] = df_tabla[col].replace(['\u2014', '\u2013', '\u2212', '-', 'nan', 'None', 'null', ''], pd.NA)
+                    # Convertir a numérico y redondear
+                    df_tabla[col] = pd.to_numeric(df_tabla[col], errors='coerce').round(2)
                 
                 # Agregar fila de totales
                 total_row = pd.DataFrame({
@@ -1404,14 +1456,40 @@ def show_empleo_dashboard(data, dates=None, is_development=False):
                 })
                 df_tabla_tot = pd.concat([df_tabla, total_row], ignore_index=True)
 
-                # Reemplazar NaN/None por guion largo
-                df_tabla_tot = df_tabla_tot.where(pd.notnull(df_tabla_tot), '—')
+                # Definir funciones para dar estilo a la tabla
+                def highlight_totals(val):
+                    if val == 'Total':
+                        return 'background-color: #f2f2f2; font-weight: bold'
+                    return ''
                 
-                # Formatear columnas de porcentaje
+                def highlight_total_rows(s):
+                    is_total_row = s.iloc[0] == 'Total'
+                    return ['background-color: #f2f2f2; font-weight: bold' if is_total_row else '' for _ in s]
+                
+                # Reemplazar NaN por guión largo antes de crear el Styler
+                df_tabla_tot = df_tabla_tot.fillna('—')
+                
+                # Preparar datos para formateo - primero aseguramos que las columnas numéricas son de tipo float
                 for col in ["Tasa de Actividad", "Tasa de Empleo", "Tasa de desocupación"]:
-                    df_tabla_tot[col] = df_tabla_tot[col].apply(lambda x: f"{x:.2f}%" if pd.notnull(x) and x != '—' else x)
+                    # Convertir solo los valores no-guión a numéricos
+                    mask = df_tabla_tot[col] != '—'
+                    df_tabla_tot.loc[mask, col] = pd.to_numeric(df_tabla_tot.loc[mask, col], errors='coerce')
                 
-                # Configuración de columnas
+                # Crear objeto Styler con formato avanzado
+                styled_df = df_tabla_tot.style \
+                    .applymap(highlight_totals, subset=['DEPARTAMENTO', 'LOCALIDAD']) \
+                    .apply(highlight_total_rows, axis=1) \
+                    .format({
+                        "Tasa de Actividad": lambda x: f"{x:.2f}%" if isinstance(x, (int, float)) else x,
+                        "Tasa de Empleo": lambda x: f"{x:.2f}%" if isinstance(x, (int, float)) else x,
+                        "Tasa de desocupación": lambda x: f"{x:.2f}%" if isinstance(x, (int, float)) else x
+                    }) \
+                    .background_gradient(subset=["Tasa de Actividad", "Tasa de Empleo"], cmap='Blues', low=0.1, high=0.9) \
+                    .background_gradient(subset=["Tasa de desocupación"], cmap='Reds', low=0.1, high=0.9) \
+                    .set_properties(**{'text-align': 'right'}, subset=["Tasa de Actividad", "Tasa de Empleo", "Tasa de desocupación"]) \
+                    .set_properties(**{'text-align': 'left'}, subset=['DEPARTAMENTO', 'LOCALIDAD'])
+                
+                # --- Configuración de columnas con formato y tooltips ---
                 column_config = {
                     "DEPARTAMENTO": st.column_config.TextColumn("Departamento"),
                     "LOCALIDAD": st.column_config.TextColumn("Localidad"),
@@ -1420,9 +1498,9 @@ def show_empleo_dashboard(data, dates=None, is_development=False):
                     "Tasa de desocupación": st.column_config.NumberColumn("Tasa de Desocupación", help="Porcentaje de desocupados sobre la PEA", format="%.2f%%")
                 }
                 
-                # Mostrar tabla
+                # Mostrar la tabla con el estilo mejorado
                 st.dataframe(
-                    df_tabla_tot,
+                    styled_df,
                     use_container_width=True,
                     hide_index=True,
                     column_config=column_config,

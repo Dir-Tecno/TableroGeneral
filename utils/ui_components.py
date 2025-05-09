@@ -1,6 +1,6 @@
 import streamlit as st
 
-def create_kpi_card(title, value, color_class="kpi-primary", delta=None, delta_color="#d4f7d4", tooltip=None):
+def create_kpi_card(title, value, color_class="kpi-primary", delta=None, delta_color="#d4f7d4", tooltip=None, detalle_html=None):
     """
     Crea una tarjeta KPI con un estilo consistente en toda la aplicación.
     
@@ -30,7 +30,9 @@ def create_kpi_card(title, value, color_class="kpi-primary", delta=None, delta_c
             <div class="kpi-title">{title}</div>
             <div class="kpi-value">{formatted_value}</div>
     """
-    
+    # Agregar detalle_html si está presente
+    if detalle_html:
+        html += f'{detalle_html}'
     # Agregar delta si está presente
     if delta is not None:
         # Determinar el símbolo basado en el valor delta
@@ -42,9 +44,9 @@ def create_kpi_card(title, value, color_class="kpi-primary", delta=None, delta_c
             delta_text = delta
         
         html += f'<div style="font-size: 12px; margin-top: 5px; color: {delta_color};">{delta_text}</div>'
-    
     html += "</div>"
     return html
+
 
 def create_bco_gente_kpis(resultados, tooltips):
     """
@@ -98,6 +100,9 @@ def create_bco_gente_kpis(resultados, tooltips):
 
 def display_kpi_row(kpi_data, num_columns=5):
     """
+    kpi_data puede incluir opcionalmente el campo 'detalle_html' para mostrar debajo del valor principal.
+    """
+    """
     Muestra una fila de tarjetas KPI.
     
     Args:
@@ -117,7 +122,8 @@ def display_kpi_row(kpi_data, num_columns=5):
                     color_class=kpi.get("color_class", "kpi-primary"),
                     delta=kpi.get("delta"),
                     delta_color=kpi.get("delta_color", "#d4f7d4"),
-                    tooltip=kpi.get("tooltip")
+                    tooltip=kpi.get("tooltip"),
+                    detalle_html=kpi.get("detalle_html")
                 ),
                 unsafe_allow_html=True
             )

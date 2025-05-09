@@ -69,7 +69,7 @@ def load_and_preprocess_data(data):
         if has_global_data and has_recupero_data and 'NRO_SOLICITUD' in df_recupero.columns:
             try:
                 # Verificar si existen las columnas necesarias en df_recupero
-                required_columns = ['NRO_SOLICITUD', 'DEUDA', 'DEUDA_NO_VENCIDA', 'MONTO_OTORGADO']
+                required_columns = ['FEC_NACIMIENTO','NRO_SOLICITUD', 'DEUDA', 'DEUDA_NO_VENCIDA', 'MONTO_OTORGADO']
                 missing_columns = [col for col in required_columns if col not in df_recupero.columns]
                 
                 if not missing_columns:
@@ -584,7 +584,35 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
     
     # Usar la función de ui_components para crear y mostrar KPIs
     kpi_data = create_bco_gente_kpis(resultados, tooltips_categorias)
+    # Agregar detalle_html a cada KPI si corresponde
+    for kpi in kpi_data:
+        categoria = kpi.get("title")
+        estados = ESTADO_CATEGORIAS.get(categoria, [])
+        total_categoria = resultados.get(categoria, 0)
+        # Solo mostrar desglose si hay más de un estado definido y el total es mayor a 0
+        if estados and len(estados) > 1:
+            conteos_detalle = []
+            for estado in estados:
+                cantidad = int(df_filtrado_global[df_filtrado_global["N_ESTADO_PRESTAMO"] == estado].shape[0])
+                conteos_detalle.append(f"<b>{estado}:</b> {cantidad}")
+            detalle_html = "<div style='font-size:13px; color:#555; margin-bottom:0; margin-top:6px'>" + " | ".join(conteos_detalle) + "</div>"
+            kpi["detalle_html"] = detalle_html
+        else:
+            kpi["detalle_html"] = ""
     display_kpi_row(kpi_data)
+
+    # Desglose dinámico de TODOS los N_ESTADO_PRESTAMO agrupados por CATEGORIA_ESTADO
+    grupos_detalle = []
+    for categoria, estados in ESTADO_CATEGORIAS.items():
+        if estados:
+            estados_detalle = []
+            for estado in estados:
+                cantidad = int(df_filtrado_global[df_filtrado_global["N_ESTADO_PRESTAMO"] == estado].shape[0])
+                estados_detalle.append(f"<b>{estado}:</b> {cantidad}")
+            grupos_detalle.append(" ".join(estados_detalle))
+    if grupos_detalle:
+        detalle_html = "<div style='font-size:13px; color:#555; margin-bottom:8px; margin-top:6px'>" + " | ".join(grupos_detalle) + "</div>"
+        st.markdown(detalle_html, unsafe_allow_html=True)
 
     # Línea divisoria en gris claro
     st.markdown("<hr style='border: 2px solid #cccccc;'>", unsafe_allow_html=True)
@@ -734,9 +762,9 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
          # NUEVA SECCIÓN: Gráficos de Torta Demográficos
     st.subheader("Distribución de Créditos", help="Distribución demográfica de los beneficiarios")
     
-    # Crear dos columnas para los gráficos de torta
-    col_torta_cat, col_torta_sexo = st.columns(2)
-    
+    # Crear tres columnas para los gráficos: Línea, Sexo, Edades
+    col_torta_cat, col_torta_sexo, col_edades = st.columns(3)
+
     # Gráfico de torta por categoría
     with col_torta_cat:
         try:
@@ -775,9 +803,9 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
         try:
             if 'N_SEXO' in df_filtrado_global.columns:
                 df_sexo = df_filtrado_global[
-    (df_filtrado_global['CATEGORIA'] == 'Pagados') & 
-    (df_filtrado_global['N_SEXO'].notna())
-].copy()
+                    (df_filtrado_global['CATEGORIA'] == 'Pagados') & 
+                    (df_filtrado_global['N_SEXO'].notna())
+                ].copy()
                 if df_sexo.empty:
                     st.warning("No hay datos disponibles para el gráfico de sexo después de filtrar NaNs.")
                 else:
@@ -807,6 +835,55 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
                 st.warning("La columna 'N_SEXO' no está presente en el DataFrame.")
         except Exception as e:
             st.error(f"Error al generar el gráfico de sexo: {e}")
+
+    # Gráfico de distribución de edades con filtro propio de categoría
+    with col_edades:
+        try:
+            import plotly.express as px
+            from datetime import datetime
+            categorias_estado = list(ESTADO_CATEGORIAS.keys())
+            # Filtro solo para el gráfico de edades
+            selected_categorias_edades = st.multiselect(
+                "Filtrar por Categoría de Estado (solo afecta este gráfico):",
+                options=categorias_estado,
+                default=categorias_estado,
+                key="filtro_categoria_edades"
+            )
+            if df_recupero is not None and 'FEC_NACIMIENTO' in df_recupero.columns and 'N_ESTADO_PRESTAMO' in df_recupero.columns:
+                df_edades = df_recupero[['FEC_NACIMIENTO', 'N_ESTADO_PRESTAMO']].copy()
+                # Mapear N_ESTADO_PRESTAMO a CATEGORIA
+                df_edades['CATEGORIA'] = 'Otros'
+                for categoria, estados in ESTADO_CATEGORIAS.items():
+                    mask = df_edades['N_ESTADO_PRESTAMO'].isin(estados)
+                    df_edades.loc[mask, 'CATEGORIA'] = categoria
+                # Filtrar por las categorías seleccionadas
+                if selected_categorias_edades:
+                    df_edades = df_edades[df_edades['CATEGORIA'].isin(selected_categorias_edades)]
+                # Convertir a datetime y quitar hora
+                df_edades['FEC_NACIMIENTO'] = pd.to_datetime(df_edades['FEC_NACIMIENTO'], errors='coerce').dt.date
+                # Calcular edad
+                hoy = datetime.now().date()
+                df_edades['EDAD'] = df_edades['FEC_NACIMIENTO'].apply(lambda x: hoy.year - x.year - ((hoy.month, hoy.day) < (x.month, x.day)) if pd.notnull(x) else None)
+                # Definir rangos de edad
+                bins = [0, 17, 25, 35, 45, 55, 65, 200]
+                labels = ['<18', '18-25', '26-35', '36-45', '46-55', '56-65', '65+']
+                df_edades['RANGO_EDAD'] = pd.cut(df_edades['EDAD'], bins=bins, labels=labels, right=True)
+                conteo_edades = df_edades['RANGO_EDAD'].value_counts(sort=False).reset_index()
+                conteo_edades.columns = ['Rango de Edad', 'Cantidad']
+                fig_edades = px.bar(
+                    conteo_edades,
+                    x='Rango de Edad',
+                    y='Cantidad',
+                    title='Distribución por Rango de Edad',
+                    color='Rango de Edad',
+                    color_discrete_sequence=px.colors.qualitative.Pastel
+                )
+                fig_edades.update_layout(margin=dict(l=20, r=20, t=30, b=20))
+                st.plotly_chart(fig_edades, use_container_width=True)
+            else:
+                st.warning("No hay datos de FEC_NACIMIENTO o N_ESTADO_PRESTAMO disponibles en df_recupero.")
+        except Exception as e:
+            st.error(f"Error al generar el gráfico de edades: {e}")
 
     # Línea divisoria para separar secciones
     st.markdown("<hr style='border: 2px solid #cccccc;'>", unsafe_allow_html=True)
