@@ -112,7 +112,7 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
     
     with tab2:
         st.markdown("## Sector Productivos por Departamento")
-        # Obtener el DataFrame correspondiente
+        # Botón para descargar el Excel con columnas seleccionadas
         df_cursos = None
         if isinstance(data, dict):
             df_cursos = data.get("VT_CURSOS_SEDES_GEO.parquet")
@@ -121,7 +121,33 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                 if "N_SEDE" in df.columns and "LATITUD" in df.columns:
                     df_cursos = df
                     break
+        # Mostrar botón solo si existe el DataFrame
         if df_cursos is not None:
+            import io
+            import pandas as pd
+            columnas_exportar = [
+                "SEPE_CURSOS.FC_OBTENER_NOMBRE_INSTITUCION(INS.CUIT,INS.CUE)",
+                "N_CURSO",
+                "HORA_INICIO",
+                "HORA_FIN",
+                "N_SECTOR_PRODUCTIVO",
+                "N_SEDE",
+                "CONVENIO_MUNICIPIO_COMUNA",
+                "N_DEPARTAMENTO",
+                "N_LOCALIDAD"
+            ]
+            # Filtrar solo columnas existentes
+            columnas_existentes = [col for col in columnas_exportar if col in df_cursos.columns]
+            df_export = df_cursos[columnas_existentes].copy()
+            buffer = io.BytesIO()
+            df_export.to_excel(buffer, index=False)
+            st.download_button(
+                label="Descargar Excel de Cursos (columnas seleccionadas)",
+                data=buffer.getvalue(),
+                file_name="cursos_sector_productivo.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
             # Obtener GeoJSON de departamentos
             geojson_departamentos = None
             if isinstance(data, dict):

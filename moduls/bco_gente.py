@@ -11,6 +11,150 @@ from utils.data_cleaning import convert_decimal_separator
 # Crear diccionario para tooltips de categorías (técnico, lista de estados)
 tooltips_categorias = {k: ", ".join(v) for k, v in ESTADO_CATEGORIAS.items()}
 
+# --- KPIs de Datos Fiscales ---
+def mostrar_kpis_fiscales(df_global):
+    """
+    Para cada campo fiscal, muestra una tabla con el valor y la cantidad de CUIL únicos asociados,
+    filtrando por líneas y categorías igual que mostrar_resumen_creditos.
+    """
+    if df_global is None or df_global.empty:
+        st.warning("No hay datos disponibles para los KPIs fiscales.")
+        return
+
+    lineas = ["INICIAR EMPRENDIMIENTO", "POTENCIAR EMPRENDIMIENTO", "L4."]
+    categorias = ["Pagados", "Pagados-Finalizados"]
+    df_filtrado = df_global[
+        (df_global["N_LINEA_PRESTAMO"].isin(lineas)) &
+        (df_global["CATEGORIA"].isin(categorias))
+    ].copy()
+
+    if df_filtrado.empty:
+        st.info("No se encontraron registros para las líneas y categorías seleccionadas.")
+        return
+
+    campos = [
+        "IMP_GANANCIAS",
+        "IMP_IVA",
+        "MONOTRIBUTO",
+        "INTEGRANTE_SOC",
+        "EMPLEADOR",
+        "ACTIVIDAD_MONOTRIBUTO"
+    ]
+
+    # Mostrar las tablas en 2 filas de 3 columnas
+    cols_row1 = st.columns(3)
+    cols_row2 = st.columns(3)
+    for idx, campo in enumerate(campos):
+        col = cols_row1[idx] if idx < 3 else cols_row2[idx-3]
+        with col:
+            st.markdown(f"<b>{campo.replace('_',' ').title()}</b>", unsafe_allow_html=True)
+            if campo not in df_filtrado.columns:
+                st.info(f"No existe la columna {campo} en los datos.")
+                continue
+            df_campo = df_filtrado[df_filtrado[campo].notnull()]
+            group = df_campo.groupby(campo)["CUIL"].nunique().reset_index()
+            group = group.rename(columns={"CUIL": "CUILs únicos", campo: campo})
+            group = group.sort_values("CUILs únicos", ascending=False)
+            st.dataframe(group, use_container_width=True, hide_index=True)
+
+# --- RESUMEN DE CREDITOS: Tabla de conteo de campos fiscales para líneas seleccionadas ---
+def mostrar_resumen_creditos(df_global):
+    """
+    Muestra dos gráficos de barras apiladas, uno para cada línea de préstamo ('INICIAR EMPRENDIMIENTO' y 'POTENCIAR EMPRENDIMIENTO'),
+    filtrando por CATEGORIA en ['Pagados', 'Pagados-Finalizados'].
+    En cada barra: el total de CUIL únicos y el total de CUIL únicos con MONOTRIBUTO not null (apilado).
+    """
+    if df_global is None or df_global.empty:
+        st.warning("No hay datos disponibles en el recupero para el resumen de créditos.")
+        return
+
+    # Filtrar por líneas y categorías
+    lineas = ["INICIAR EMPRENDIMIENTO", "POTENCIAR EMPRENDIMIENTO"]
+    categorias = ["Pagados", "Pagados-Finalizados"]
+    df_filtrado = df_global[
+        (df_global["N_LINEA_PRESTAMO"].isin(lineas)) &
+        (df_global["CATEGORIA"].isin(categorias))
+    ].copy()
+
+    if df_filtrado.empty:
+        st.info("No se encontraron registros para las líneas y categorías seleccionadas.")
+        return
+
+    # Calcular resumen por línea
+    resumen = []
+    for linea in lineas:
+        df_linea = df_filtrado[df_filtrado["N_LINEA_PRESTAMO"] == linea]
+        total_cuils = df_linea["CUIL"].nunique()
+        cuils_monotributo = df_linea[df_linea["MONOTRIBUTO"].notnull()]["CUIL"].nunique()
+        resumen.append({
+            "Línea de Crédito": linea,
+            "CUILs únicos (Total)": total_cuils,
+            "CUILs únicos con MONOTRIBUTO": cuils_monotributo
+        })
+    resumen_df = pd.DataFrame(resumen)
+
+    st.subheader("Resumen de personas por línea de crédito y presencia de MONOTRIBUTO")
+    import plotly.graph_objects as go
+    # Crear los dos gráficos
+    figs = []
+    for idx, row in resumen_df.iterrows():
+        linea = row["Línea de Crédito"]
+        total = row["CUILs únicos (Total)"]
+        con_mono = row["CUILs únicos con MONOTRIBUTO"]
+        sin_mono = total - con_mono
+        fig = go.Figure()
+        fig.add_trace(go.Bar(
+            name="CUILs únicos con MONOTRIBUTO",
+            x=[linea],
+            y=[con_mono],
+            marker_color="#66c2a5",
+            text=[con_mono],
+            textposition="inside"
+        ))
+        fig.add_trace(go.Bar(
+            name="CUILs únicos sin MONOTRIBUTO",
+            x=[linea],
+            y=[sin_mono],
+            marker_color="#fc8d62",
+            text=[sin_mono],
+            textposition="inside"
+        ))
+        fig.update_layout(
+            barmode='stack',
+            showlegend=True,
+            xaxis_title=None,
+            yaxis_title="Cantidad de CUIL únicos",
+            title=f"Distribución de CUIL únicos en {linea}",
+            height=350,
+            margin=dict(l=10, r=10, t=40, b=10)
+        )
+        figs.append(fig)
+
+    # Presentar en una sola fila de 3 columnas
+    cols = st.columns(3)
+    with cols[0]:
+        st.markdown(f"**{resumen_df.iloc[0]['Línea de Crédito']}**")
+        st.plotly_chart(figs[0], use_container_width=True)
+    with cols[1]:
+        st.markdown(f"**{resumen_df.iloc[1]['Línea de Crédito']}**")
+        st.plotly_chart(figs[1], use_container_width=True)
+    with cols[2]:
+        st.markdown("**Tabla resumen**")
+        st.dataframe(resumen_df, use_container_width=True, hide_index=True)
+        import io
+        csv_buffer = io.StringIO()
+        resumen_df.to_csv(csv_buffer, index=False, encoding='utf-8')
+        csv_buffer.seek(0)
+        st.download_button(
+            label="Descargar CSV resumen",
+            data=csv_buffer.getvalue(),
+            file_name="resumen_cuils_monotributo_por_linea.csv",
+            mime="text/csv"
+        )
+
+# --- Ejemplo de integración (descomentar para usar en el flujo principal) ---
+# mostrar_resumen_creditos(df_global)
+
 def load_and_preprocess_data(data):
     """
     Carga y preprocesa los datos necesarios para el dashboard.
@@ -33,6 +177,14 @@ def load_and_preprocess_data(data):
         has_recupero_data = df_recupero is not None and not df_recupero.empty
         # Check if geojson_data was loaded (it might be bytes, dict, or None initially)
         has_geojson_data = geojson_data is not None 
+
+        # Agregar columna de CATEGORIA a df_recupero si está disponible
+        if has_recupero_data and 'N_ESTADO_PRESTAMO' in df_recupero.columns:
+            df_recupero['CATEGORIA'] = 'Otros'
+            for categoria, estados in ESTADO_CATEGORIAS.items():
+                mask = df_recupero['N_ESTADO_PRESTAMO'].isin(estados)
+                df_recupero.loc[mask, 'CATEGORIA'] = categoria
+
         # Check if df_localidad_municipio (likely a string) is not None and not an empty string
         has_localidad_municipio_data = df_localidad_municipio is not None and df_localidad_municipio != "" 
         
@@ -69,7 +221,20 @@ def load_and_preprocess_data(data):
         if has_global_data and has_recupero_data and 'NRO_SOLICITUD' in df_recupero.columns:
             try:
                 # Verificar si existen las columnas necesarias en df_recupero
-                required_columns = ['FEC_NACIMIENTO','NRO_SOLICITUD', 'DEUDA', 'DEUDA_NO_VENCIDA', 'MONTO_OTORGADO']
+                required_columns = ['FEC_NACIMIENTO','CUIL','NRO_SOLICITUD', 'DEUDA', 'DEUDA_NO_VENCIDA', 'MONTO_OTORGADO','IMP_GANANCIAS','IMP_IVA','MONOTRIBUTO','INTEGRANTE_SOC','EMPLEADOR','ACTIVIDAD_MONOTRIBUTO']
+                missing_columns = [col for col in required_columns if col not in df_recupero.columns]
+                
+                if not missing_columns:
+                    # Seleccionar solo las columnas necesarias de df_recupero para el merge
+                    df_recupero_subset = df_recupero[required_columns].copy()
+                    
+                    # Renombrar DEUDA como DEUDA_VENCIDA
+                    df_recupero_subset = df_recupero_subset.rename(columns={'DEUDA': 'DEUDA_VENCIDA'})
+                    
+                    # Convertir columnas numéricas a tipo float
+                    for col in ['DEUDA_VENCIDA', 'DEUDA_NO_VENCIDA', 'MONTO_OTORGADO']:
+                        df_recupero_subset[col] = pd.to_numeric(df_recupero_subset[col], errors='coerce')
+
                 missing_columns = [col for col in required_columns if col not in df_recupero.columns]
                 
                 if not missing_columns:
@@ -180,17 +345,6 @@ def load_and_preprocess_data(data):
                 mask = df_global['N_ESTADO_PRESTAMO'].isin(estados)
                 # Asignar la categoría a los registros que cumplen con la máscara
                 df_global.loc[mask, 'CATEGORIA'] = categoria
-        
-        # Filtrar registros con N_DEPARTAMENTO nulo o igual a "BURRUYACU"
-        if has_global_data and 'N_DEPARTAMENTO' in df_global.columns:
-            # Crear máscara para identificar registros a excluir
-            exclude_mask = (df_global['N_DEPARTAMENTO'].isna()) | (df_global['N_DEPARTAMENTO'] == 'BURRUYACU')
-            
-            # Filtrar el DataFrame para excluir estos registros
-            df_global = df_global[~exclude_mask]
-            
-            # Verificar si todavía hay datos después del filtrado
-            has_global_data = not df_global.empty
         
         # Filtrar líneas de préstamo que no deben ser consideradas
         if has_global_data and 'N_LINEA_PRESTAMO' in df_global.columns:
@@ -499,7 +653,8 @@ def show_bco_gente_dashboard(data, dates, is_development=False):
                         )
             except Exception as e:
                 st.error(f"Error al generar el mapa de monto otorgado: {e}")
-    
+            
+
     # with tab_recupero:
     #     # Filtros específicos para la pestaña RECUPERO
     #     if has_global_data and df_global is not None and not df_global.empty:
@@ -755,11 +910,16 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
         
     except Exception as e:
             st.warning(f"Error al generar la tabla de conteo por línea: {str(e)}")
+    st.subheader("Condición ante ARCA de Préstamos de las líneas de emprendimientos", 
+                 help="Muestra la cantidad de personas con condición ante ARCA de los préstamos de las líneas de emprendimientos, estado pagados y finalizados, basado en los datos filtrados.")
 
-        # Línea divisoria para separar secciones
+    mostrar_resumen_creditos(df_filtrado_global)
+    with st.expander("Detalle de condición ante ARCA", expanded=False):
+        mostrar_kpis_fiscales(df_filtrado_global)
+    # Línea divisoria para separar secciones
     st.markdown("<hr style='border: 2px solid #cccccc;'>", unsafe_allow_html=True)
 
-         # NUEVA SECCIÓN: Gráficos de Torta Demográficos
+    # NUEVA SECCIÓN: Gráficos de Torta Demográficos
     st.subheader("Distribución de Créditos", help="Distribución demográfica de los beneficiarios")
     
     # Crear tres columnas para los gráficos: Línea, Sexo, Edades
