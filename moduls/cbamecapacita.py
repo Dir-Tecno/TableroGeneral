@@ -46,20 +46,33 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
     # Mostrar columnas en modo desarrollo
     if is_development:
         st.markdown("***")
-        st.caption("Información de Desarrollo (Columnas de DataFrames - CBA Capacita)")
+        st.caption("Información de Desarrollo (Columnas de DataFrames - CBA Me Capacita)")
         if isinstance(data, dict):
-            for name, df in data.items():
-                if df is not None:
+            for name, df_item in data.items(): # Usar df_item para claridad
+                if df_item is not None and not df_item.empty:
                     with st.expander(f"Columnas en: `{name}`"):
-                        st.write(df.columns.tolist())
+                        st.write(f"Nombre del DataFrame: {name}")
+                        st.write(f"Tipos de datos: {df_item.dtypes}")
                         st.write("Primeras 5 filas:")
-                        st.dataframe(df.head())
-                        st.write(f"Total de registros: {len(df)}")
-                else:
-                    st.warning(f"DataFrame '{name}' no cargado o vacío.")
+                        
+                        # Aplicar la corrección aquí para df_item.head()
+                        # Esta es la sección que corresponde a la línea 56 del traceback
+                        df_head_display = df_item.head()
+                        if 'geometry' in df_head_display.columns:
+                            st.dataframe(df_head_display.drop(columns=['geometry']))
+                        else:
+                            st.dataframe(df_head_display)
+                        
+                        st.write(f"Total de registros: {len(df_item)}")
+                elif df_item is None:
+                    st.warning(f"DataFrame '{name}' no cargado (es None).")
+                else: # df_item is empty
+                    st.info(f"DataFrame '{name}' está vacío.")
         else:
-            st.warning("Formato de datos inesperado para CBA Me Capacita.")
+            st.warning("Formato de datos inesperado para CBA Me Capacita (se esperaba un diccionario).")
         st.markdown("***")
+
+    
 
     # --- Usar función de carga y preprocesamiento ---
     df_postulantes, df_cursos = load_and_preprocess_data(data)
@@ -132,17 +145,13 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                         geojson_departamentos = df
                         break
 
-            # Limpiar y convertir LATITUD y LONGITUD
+           # Limpiar y convertir LATITUD y LONGITUD
             df_cursos = convert_decimal_separator(df_cursos, columns=["LATITUD", "LONGITUD"])
-            
-            #st.dataframe(df_cursos)
-            # Extraer valores numéricos y convertir a float
+
+            # Asegúrate de que los valores sean strings antes de usar .str.extract()
             for col in ["LATITUD", "LONGITUD"]:
-                df_cursos[col] = (
-                    df_cursos[col]
-                        .str.extract(r"(-?\d+\.\d+)")
-                        .astype(float)
-                    )
+                df_cursos[col] = df_cursos[col].astype(str)  # Convertir a string
+                df_cursos[col] = df_cursos[col].str.extract(r"(-?\d+\.\d+)").astype(float)
                 df_cursos = df_cursos.dropna(subset=["LATITUD", "LONGITUD"])
 
             # Agrupar y contar para tabla (incluye ID_DEPARTAMENTO para relación con geojson)

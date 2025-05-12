@@ -16,6 +16,67 @@ import geopandas as gpd
 import math
 import requests
 import altair as alt
+from io import StringIO
+import os
+
+
+def show_empleo_dashboard(data, dates, is_development=False):
+    """
+    Muestra el dashboard de Programas de Empleo.
+    
+    Args:
+        data: Diccionario de dataframes.
+        dates: Diccionario con fechas de actualización.
+        is_development (bool): True si se está en modo desarrollo.
+    """
+    if data is None:
+        st.error("No se pudieron cargar los datos de Programas de Empleo.")
+        return
+
+    # Mostrar columnas en modo desarrollo (similar a otros módulos)
+    if is_development:
+        st.markdown("***")
+        st.caption("Archivos que componen el módulo 'moduls/':")
+        moduls_path = os.path.join(os.path.dirname(__file__))
+        archivos = [f for f in os.listdir(moduls_path) if f.endswith('.py')]
+        st.write(archivos)
+        st.caption("Información de Desarrollo (Columnas de DataFrames - Empleo)")
+        if isinstance(data, dict):
+            for name, df_item in data.items():
+                if df_item is not None and not df_item.empty:
+                    with st.expander(f"Columnas en: `{name}`"):
+                        st.write(f"Nombre del DataFrame: {name}")
+                        st.write(f"Tipos de datos: {df_item.dtypes}")
+                        st.write("Primeras 5 filas:")
+                        
+                        df_head_display = df_item.head()
+                        if 'geometry' in df_head_display.columns:
+                            st.dataframe(df_head_display.drop(columns=['geometry']))
+                        else:
+                            st.dataframe(df_head_display)
+                        
+                        st.write(f"Total de registros: {len(df_item)}")
+                elif df_item is None:
+                    st.warning(f"DataFrame '{name}' no cargado (es None).")
+                else: # df_item is empty
+                    st.info(f"DataFrame '{name}' está vacío.")
+        else:
+            st.warning("Formato de datos inesperado para Programas de Empleo (se esperaba un diccionario).")
+        st.markdown("***")
+
+    # Cargar y preprocesar datos
+    df_inscriptos, df_empresas, df_poblacion, geojson_data, has_fichas, has_empresas, has_poblacion, has_geojson = load_and_preprocess_data(data, dates)
+
+    # Verificar que los datos de inscripciones se hayan cargado
+    if not has_fichas or df_inscriptos is None or df_inscriptos.empty:
+        st.error("No se pudieron cargar o procesar los datos de inscripciones para el dashboard de Empleo.")
+        return
+
+    # Renderizar filtros y obtener el DataFrame filtrado
+    df_filtered, selected_dpto, selected_loc, all_dpto_option, all_loc_option = render_filters(df_inscriptos, key_prefix="empleo")
+
+    # Renderizar el resto del dashboard
+    render_dashboard(df_filtered, df_empresas, df_poblacion, geojson_data, has_empresas, has_geojson)
 
 def enviar_a_slack(mensaje, valoracion):
     """
@@ -92,6 +153,7 @@ def load_and_preprocess_data(data, dates=None):
         Tupla con los dataframes procesados y flags de disponibilidad
     """
     with st.spinner("Cargando y procesando datos de empleo..."):
+
         # Extraer los dataframes necesarios
         df_inscriptos_raw = data.get('VT_REPORTES_PPP_MAS26.parquet')
         geojson_data = data.get('capa_departamentos_2010.geojson')
@@ -99,7 +161,7 @@ def load_and_preprocess_data(data, dates=None):
         # Cargar datos de circuitos electorales
         df_circuitos = data.get('LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt')
         has_circuitos = df_circuitos is not None and not df_circuitos.empty
-        
+
         # Crear df_emp_ben: cantidad de beneficiarios por empresa (CUIT)
         df_emp_ben = (
             df_inscriptos_raw[
@@ -1338,75 +1400,33 @@ def show_inscriptions(df_inscriptos, df_poblacion, geojson_data, file_date):
             </div>
         """, unsafe_allow_html=True)
 
-def show_empleo_dashboard(data, dates=None, is_development=False):
+def show_empleo_dashboard(data, dates, is_development=False):
     """
-    Muestra el dashboard de programas de empleo.
+    Función principal que muestra el dashboard de empleo.
     
     Args:
-        data: Diccionario de dataframes.
-        dates: Diccionario con fechas de actualización.
-        is_development (bool): True si se está en modo desarrollo.
+        data: Diccionario con los dataframes cargados
+        dates: Diccionario con las fechas de actualización
+        is_development: Booleano que indica si estamos en modo desarrollo
     """
-    # Mostrar columnas en modo desarrollo
-    if is_development:
-        st.markdown("***")
-        st.caption("Información de Desarrollo (Columnas de DataFrames - Empleo)")
-        if isinstance(data, dict):
-            # Definir datasets prioritarios (los nuevos)
-            nuevos_datasets = ['datos_ppp_jesi.csv', 'datos_mas26_jesi.csv']
-            
-            # Mostrar primero los nuevos datasets con más detalle
-            for name in nuevos_datasets:
-                if name in data and data[name] is not None:
-                    with st.expander(f"NUEVO DATASET: `{name}`", expanded=True):
-                        df = data[name]
-                        st.write(f"**Estructura del dataset:**")
-                        st.write(f"Columnas: {df.columns.tolist()}")
-                        st.write(f"Total de registros: {len(df)}")
-                        st.write("")
-                        st.write(f"**Primeras 5 filas:**")
-                        st.dataframe(df.head(), use_container_width=True)
-                        
-                        # Mostrar algunos stats básicos
-                        st.write("")
-                        st.write(f"**Información estadística básica:**")
-                        # Seleccionar columnas numéricas para estadísticas
-                        numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
-                        if numeric_cols:
-                            st.dataframe(df[numeric_cols].describe(), use_container_width=True)
-            
-            # Mostrar el resto de datasets
-            otros_datasets = [name for name in data.keys() if name not in nuevos_datasets]
-            for name in otros_datasets:
-                if data[name] is not None:
-                    with st.expander(f"Columnas en: `{name}`"):
-                        st.write(data[name].columns.tolist())
-                        st.write("Primeras 5 filas:")
-                        st.dataframe(data[name].head())
-                        st.write(f"Total de registros: {len(data[name])}")
-                else:
-                    st.warning(f"DataFrame '{name}' no cargado o vacío.")
-        else:
-            st.warning("Formato de datos inesperado para Empleo.")
-        st.markdown("***")
-        
     try:
-        # Cargar y preprocesar datos
+        # Cargar y preprocesar los datos
         df_inscriptos, df_empresas, df_poblacion, geojson_data, has_fichas, has_empresas, has_poblacion, has_geojson = load_and_preprocess_data(data, dates)
         
-
-        if not has_fichas:
+        if df_inscriptos is None or df_inscriptos.empty:
+            st.error("No se pudieron cargar los datos de inscripciones necesarios para el dashboard.")
             return
         
-        # Renderizar el dashboard principal directamente sin pestañas
-        st.markdown("### Dashboard General de Programas de Empleo")
-        render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has_empresas, has_geojson)
+        # Aplicar filtros
+        df_filtered, selected_dpto, selected_loc, all_dpto_option, all_loc_option = render_filters(df_inscriptos)
+        
+        # Renderizar el dashboard principal
+        render_dashboard(df_filtered, df_empresas, df_poblacion, geojson_data, has_empresas, has_geojson)
         
         # Agregar sección específica para datos censales
         st.markdown("### Información Demográfica y Estadísticas Laborales por Localidad")
         st.markdown("Esta sección presenta indicadores demográficos y laborales clave por localidad según datos censales")
         
-        # Agregar la tabla de datos censales en un desplegable
         with st.expander("Ver Datos Censales de Localidades", expanded=False):
             st.info("""
             **¿Cómo se calcula la tasa de desocupación?**  
@@ -1416,98 +1436,129 @@ def show_empleo_dashboard(data, dates=None, is_development=False):
             if df_censales is not None and not getattr(df_censales, 'empty', True):
                 col1, col2 = st.columns(2)
                 with col1:
-                    departamentos = sorted(df_censales['DEPARTAMENTO'].dropna().unique())
-                    depto_sel = st.selectbox("Filtrar por Departamento", options=["Todos"] + departamentos, key="censo_depto")
+                    departamentos_censales = sorted(df_censales['DEPARTAMENTO'].dropna().unique())
+                    depto_sel_censal = st.selectbox("Filtrar por Departamento (Censal):", options=["Todos"] + departamentos_censales, key="censo_depto")
                 with col2:
-                    # Filtrar localidades según el departamento seleccionado
-                    if depto_sel != "Todos":
-                        df_censales_filtrado = df_censales[df_censales['DEPARTAMENTO'] == depto_sel]
+                    if depto_sel_censal != "Todos":
+                        df_censales_filtrado_loc = df_censales[df_censales['DEPARTAMENTO'] == depto_sel_censal]
                     else:
-                        df_censales_filtrado = df_censales
+                        df_censales_filtrado_loc = df_censales
                     
-                    localidades = sorted(df_censales_filtrado['LOCALIDAD'].dropna().unique())
-                    loc_sel = st.selectbox("Filtrar por Localidad", options=["Todas"] + localidades, key="censo_loc")
+                    localidades_censales = sorted(df_censales_filtrado_loc['LOCALIDAD'].dropna().unique())
+                    loc_sel_censal = st.selectbox("Filtrar por Localidad (Censal):", options=["Todas"] + localidades_censales, key="censo_loc")
                 
-                # Aplicar filtros
-                if depto_sel != "Todos":
-                    df_censales = df_censales[df_censales['DEPARTAMENTO'] == depto_sel]
-                if loc_sel != "Todas":
-                    df_censales = df_censales[df_censales['LOCALIDAD'] == loc_sel]
+                df_censales_display = df_censales.copy()
+                if depto_sel_censal != "Todos":
+                    df_censales_display = df_censales_display[df_censales_display['DEPARTAMENTO'] == depto_sel_censal]
+                if loc_sel_censal != "Todas":
+                    df_censales_display = df_censales_display[df_censales_display['LOCALIDAD'] == loc_sel_censal]
                 
-                # Preparar tabla
-                df_tabla = df_censales[["DEPARTAMENTO", "LOCALIDAD", "Tasa de Actividad", "Tasa de Empleo", "Tasa de desocupación"]].copy()
+                cols_tabla_censal = ["DEPARTAMENTO", "LOCALIDAD", "Tasa de Actividad", "Tasa de Empleo", "Tasa de desocupación"]
+                df_tabla_censal = df_censales_display[cols_tabla_censal].copy()
                 
-                # Limpiar y convertir las columnas numéricas, reemplazando cualquier caracter especial por NaN
                 for col in ["Tasa de Actividad", "Tasa de Empleo", "Tasa de desocupación"]:
-                    # Convertir a string primero para manejar cualquier tipo de dato
-                    df_tabla[col] = df_tabla[col].astype(str)
-                    # Reemplazar guión largo u otros caracteres no numéricos con NaN
-                    df_tabla[col] = df_tabla[col].replace(['\u2014', '\u2013', '\u2212', '-', 'nan', 'None', 'null', ''], pd.NA)
-                    # Convertir a numérico y redondear
-                    df_tabla[col] = pd.to_numeric(df_tabla[col], errors='coerce').round(2)
+                    if col in df_tabla_censal.columns:
+                        df_tabla_censal[col] = pd.to_numeric(df_tabla_censal[col], errors='coerce').round(2)
                 
-                # Agregar fila de totales
-                total_row = pd.DataFrame({
-                    "DEPARTAMENTO": ["Total"],
-                    "LOCALIDAD": ["Total"],
-                    "Tasa de Actividad": [df_tabla["Tasa de Actividad"].mean()],
-                    "Tasa de Empleo": [df_tabla["Tasa de Empleo"].mean()],
-                    "Tasa de desocupación": [df_tabla["Tasa de desocupación"].mean()]
-                })
-                df_tabla_tot = pd.concat([df_tabla, total_row], ignore_index=True)
+                if not df_tabla_censal.empty:
+                    total_row_censal = pd.DataFrame({
+                        "DEPARTAMENTO": ["Promedio General"],
+                        "LOCALIDAD": [""],
+                        "Tasa de Actividad": [df_tabla_censal["Tasa de Actividad"].mean().round(2)],
+                        "Tasa de Empleo": [df_tabla_censal["Tasa de Empleo"].mean().round(2)],
+                        "Tasa de desocupación": [df_tabla_censal["Tasa de desocupación"].mean().round(2)]
+                    })
+                    df_tabla_censal_tot = pd.concat([df_tabla_censal, total_row_censal], ignore_index=True)
+                else:
+                    df_tabla_censal_tot = df_tabla_censal
 
-                # Definir funciones para dar estilo a la tabla
-                def highlight_totals(val):
-                    if val == 'Total':
-                        return 'background-color: #f2f2f2; font-weight: bold'
-                    return ''
-                
-                def highlight_total_rows(s):
-                    is_total_row = s.iloc[0] == 'Total'
-                    return ['background-color: #f2f2f2; font-weight: bold' if is_total_row else '' for _ in s]
-                
-                # Reemplazar NaN por guión largo antes de crear el Styler
-                df_tabla_tot = df_tabla_tot.fillna('—')
-                
-                # Preparar datos para formateo - primero aseguramos que las columnas numéricas son de tipo float
-                for col in ["Tasa de Actividad", "Tasa de Empleo", "Tasa de desocupación"]:
-                    # Convertir solo los valores no-guión a numéricos
-                    mask = df_tabla_tot[col] != '—'
-                    df_tabla_tot.loc[mask, col] = pd.to_numeric(df_tabla_tot.loc[mask, col], errors='coerce')
-                
-                # Crear objeto Styler con formato avanzado
-                styled_df = df_tabla_tot.style \
-                    .applymap(highlight_totals, subset=['DEPARTAMENTO', 'LOCALIDAD']) \
-                    .apply(highlight_total_rows, axis=1) \
-                    .format({
-                        "Tasa de Actividad": lambda x: f"{x:.2f}%" if isinstance(x, (int, float)) else x,
-                        "Tasa de Empleo": lambda x: f"{x:.2f}%" if isinstance(x, (int, float)) else x,
-                        "Tasa de desocupación": lambda x: f"{x:.2f}%" if isinstance(x, (int, float)) else x
-                    }) \
-                    .background_gradient(subset=["Tasa de Actividad", "Tasa de Empleo"], cmap='Blues', low=0.1, high=0.9) \
-                    .background_gradient(subset=["Tasa de desocupación"], cmap='Reds', low=0.1, high=0.9) \
-                    .set_properties(**{'text-align': 'right'}, subset=["Tasa de Actividad", "Tasa de Empleo", "Tasa de desocupación"]) \
-                    .set_properties(**{'text-align': 'left'}, subset=['DEPARTAMENTO', 'LOCALIDAD'])
-                
-                # --- Configuración de columnas con formato y tooltips ---
-                column_config = {
-                    "DEPARTAMENTO": st.column_config.TextColumn("Departamento"),
-                    "LOCALIDAD": st.column_config.TextColumn("Localidad"),
-                    "Tasa de Actividad": st.column_config.NumberColumn("Tasa de Actividad", help="Porcentaje de la PEA sobre la población total", format="%.2f%%"),
-                    "Tasa de Empleo": st.column_config.NumberColumn("Tasa de Empleo", help="Porcentaje de ocupados sobre la PEA", format="%.2f%%"),
-                    "Tasa de desocupación": st.column_config.NumberColumn("Tasa de Desocupación", help="Porcentaje de desocupados sobre la PEA", format="%.2f%%")
-                }
-                
-                # Mostrar la tabla con el estilo mejorado
+                df_tabla_censal_tot = df_tabla_censal_tot.fillna('—')
                 st.dataframe(
-                    styled_df,
-                    use_container_width=True,
-                    hide_index=True,
-                    column_config=column_config,
-                    height=400
-                )
+                        df_tabla_censal_tot.style.format(
+                            {"Tasa de Actividad": "{:.2f}", "Tasa de Empleo": "{:.2f}", "Tasa de desocupación": "{:.2f}"},
+                            na_rep='—'
+                        )
+                    )
             else:
-                st.warning("No se encontraron datos censales para mostrar.")
+                st.warning("Datos censales no disponibles o vacíos.") 
+
+        with st.expander("Ver datos de población (basado en ppp_jesi.xlsx y mas26_jesi.xlsx)"):
+            try:
+                df_ppp_excel = data.get('ppp_jesi.xlsx')
+                df_mas26_excel = data.get('mas26_jesi.xlsx')
+                
+                if df_ppp_excel is not None and not df_ppp_excel.empty and \
+                   df_mas26_excel is not None and not df_mas26_excel.empty:
+
+                    ppp_cols_esperadas = ['Población de 15 a 24 años', 'TOTAL PEA', 'OCUPADA', 'DESOCUPADA']
+                    mas26_cols_esperadas = ['Población mayor de 25 años', 'TOTAL PEA', 'OCUPADA', 'DESOCUPADA']
+
+                    if not all(col in df_ppp_excel.columns for col in ppp_cols_esperadas):
+                        st.warning(f"El archivo 'ppp_jesi.xlsx' no contiene todas las columnas esperadas: {', '.join(ppp_cols_esperadas)}")
+                    elif not all(col in df_mas26_excel.columns for col in mas26_cols_esperadas):
+                        st.warning(f"El archivo 'mas26_jesi.xlsx' no contiene todas las columnas esperadas: {', '.join(mas26_cols_esperadas)}")
+                    else:
+                        df_ppp_clean = df_ppp_excel[ppp_cols_esperadas].copy()
+                        df_mas26_clean = df_mas26_excel[mas26_cols_esperadas].copy()
+                        
+                        df_ppp_clean = df_ppp_clean.rename(columns={'Población de 15 a 24 años': 'POBLACION'})
+                        df_mas26_clean = df_mas26_clean.rename(columns={'Población mayor de 25 años': 'POBLACION'})
+                        
+                        df_ppp_clean['GRUPO'] = 'Población de 15 a 24 años'
+                        df_mas26_clean['GRUPO'] = 'Población mayor de 25 años'
+                        
+                        df_poblacion_completo = pd.concat([df_ppp_clean, df_mas26_clean], ignore_index=True)
+                        
+                        st.subheader("Datos de Población por Grupo Etario")
+                        st.dataframe(df_poblacion_completo)
+                        
+                        colores_grafico = []
+                        if COLORES_IDENTIDAD and isinstance(COLORES_IDENTIDAD, dict) and len(COLORES_IDENTIDAD.values()) >= 3:
+                            colores_grafico = list(COLORES_IDENTIDAD.values())[:3]
+                        else:
+                            colores_grafico = px.colors.qualitative.Plotly[:3]
+
+                        fig_poblacion = px.bar(
+                            df_poblacion_completo, 
+                            x='GRUPO', 
+                            y=['TOTAL PEA', 'OCUPADA', 'DESOCUPADA'],
+                            barmode='group', 
+                            title="Distribución de la Población por Situación Laboral",
+                            color_discrete_sequence=colores_grafico
+                        )
+                        fig_poblacion.update_layout(xaxis_title="Grupo Etario", yaxis_title="Cantidad de Personas", legend_title="Situación Laboral", height=500)
+                        st.plotly_chart(fig_poblacion, use_container_width=True)
+                        
+                        st.subheader("Tasas de Empleo y Desocupación")
+                        df_tasas = df_poblacion_completo.copy()
+                        df_tasas['Tasa de Actividad'] = np.where(df_tasas['POBLACION'] != 0, (df_tasas['TOTAL PEA'] / df_tasas['POBLACION'] * 100), 0).round(2)
+                        df_tasas['Tasa de Empleo'] = np.where(df_tasas['POBLACION'] != 0, (df_tasas['OCUPADA'] / df_tasas['POBLACION'] * 100), 0).round(2)
+                        df_tasas['Tasa de Desocupación'] = np.where(df_tasas['TOTAL PEA'] != 0, (df_tasas['DESOCUPADA'] / df_tasas['TOTAL PEA'] * 100), 0).round(2)
+                        
+                        st.dataframe(df_tasas[['GRUPO', 'Tasa de Actividad', 'Tasa de Empleo', 'Tasa de Desocupación']])
+                        
+                        colores_tasas = []
+                        if COLORES_IDENTIDAD and isinstance(COLORES_IDENTIDAD, dict) and len(COLORES_IDENTIDAD.values()) >= 6:
+                            colores_tasas = list(COLORES_IDENTIDAD.values())[3:6]
+                        else:
+                            colores_tasas = px.colors.qualitative.Plotly[3:6]
+
+                        fig_tasas = px.bar(
+                            df_tasas, 
+                            x='GRUPO', 
+                            y=['Tasa de Actividad', 'Tasa de Empleo', 'Tasa de Desocupación'],
+                            barmode='group', 
+                            title="Tasas de Empleo por Grupo Etario",
+                            color_discrete_sequence=colores_tasas
+                        )
+                        fig_tasas.update_layout(xaxis_title="Grupo Etario", yaxis_title="Porcentaje (%)", legend_title="Indicador", height=500)
+                        st.plotly_chart(fig_tasas, use_container_width=True)
+                else:
+                    st.warning("No se pudieron cargar los archivos de población (ppp_jesi.xlsx y/o mas26_jesi.xlsx) para esta sección o están vacíos.")
+            except Exception as e:
+                st.error(f"Error al procesar los datos de población en esta sección: {str(e)}")
 
     except Exception as e:
-        st.error(f"Error al procesar los datos: {str(e)}")
+        st.error(f"Error al mostrar el dashboard de empleo: {str(e)}")  
+    
+    

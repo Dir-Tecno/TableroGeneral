@@ -279,38 +279,50 @@ def show_bco_gente_dashboard(data, dates, is_development=False):
         is_development (bool): True si se está en modo desarrollo.
     """
    
+    
     # Mostrar columnas en modo desarrollo
     if is_development:
         st.markdown("***")
         st.caption("Información de Desarrollo (Columnas de DataFrames - Bco. Gente)")
         if isinstance(data, dict):
-            for name, df in data.items():
-                if df is not None:
+            for name, df_item in data.items(): # Renombrado df a df_item para claridad
+                if df_item is not None and not df_item.empty: # Añadido chequeo de no vacío
                     with st.expander(f"Columnas en: `{name}`"):
-                        st.write(df.columns.tolist())
+                        st.write(f"Nombre del DataFrame: {name}")
+                        st.write(f"Tipos de datos: {df_item.dtypes}")
                         st.write("Primeras 5 filas:")
-                        st.dataframe(df.head())
-                        st.write(f"Total de registros: {len(df)}")
-                else:
-                    st.warning(f"DataFrame '{name}' no cargado o vacío.")
+                        
+                        # Aplicar la corrección aquí para el df_item.head()
+                        df_head_display = df_item.head()
+                        if 'geometry' in df_head_display.columns:
+                            st.dataframe(df_head_display.drop(columns=['geometry']))
+                        else:
+                            st.dataframe(df_head_display)
+                        
+                        st.write(f"Total de registros: {len(df_item)}")
+                elif df_item is None:
+                    st.warning(f"DataFrame '{name}' no cargado (es None).")
+                else: # df_item is empty
+                    st.info(f"DataFrame '{name}' está vacío.")
         else:
-            st.warning("Formato de datos inesperado para Banco de la Gente.")
+            st.warning("Formato de datos inesperado para Banco de la Gente (se esperaba un diccionario).")
         st.markdown("***")
     
     df_global = None
     df_recupero = None
     
-    # Cargar y preprocesar datos
+     # Cargar y preprocesar datos
     df_global, df_recupero, geojson_data, df_localidad_municipio, has_global_data, has_recupero_data, has_geojson_data, has_localidad_municipio_data = load_and_preprocess_data(data)
     
     if is_development:
-        st.write("Datos Globales ya cruzados")
-        if 'geometry' in df_global.columns:
-            st.dataframe(df_global.drop(columns=['geometry']))
-            df_to_download = df_global.drop(columns=['geometry'])
-        else:
-            st.dataframe(df_global)
-            df_to_download = df_global
+        st.write("Datos Globales ya cruzados (después de load_and_preprocess_data):")
+        if df_global is not None and not df_global.empty: # Asegurarse que df_global existe
+            if 'geometry' in df_global.columns:
+                st.dataframe(df_global.drop(columns=['geometry']))
+                df_to_download = df_global.drop(columns=['geometry'])
+            else:
+                st.dataframe(df_global)
+                df_to_download = df_global
         import io
         csv = df_to_download.to_csv(index=False).encode('utf-8')
         st.download_button(
