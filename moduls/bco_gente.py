@@ -88,43 +88,43 @@ def mostrar_resumen_creditos(df_global):
         cuils_monotributo = df_linea[df_linea["MONOTRIBUTO"].notnull()]["CUIL"].nunique()
         resumen.append({
             "Línea de Crédito": linea,
-            "CUILs únicos (Total)": total_cuils,
-            "CUILs únicos con MONOTRIBUTO": cuils_monotributo
+            "Personas (Total)": total_cuils,
+            "Personas con ARCA": cuils_monotributo
         })
     resumen_df = pd.DataFrame(resumen)
 
-    st.subheader("Resumen de personas por línea de crédito y presencia de MONOTRIBUTO")
+    st.markdown("#### Resumen de personas por línea de crédito y con condición ante ARCA")
     import plotly.graph_objects as go
     # Crear los dos gráficos
     figs = []
     for idx, row in resumen_df.iterrows():
         linea = row["Línea de Crédito"]
-        total = row["CUILs únicos (Total)"]
-        con_mono = row["CUILs únicos con MONOTRIBUTO"]
-        sin_mono = total - con_mono
+        total = row["Personas (Total)"]
+        con_arca = row["Personas con ARCA"]
+        sin_arca = total - con_arca
         fig = go.Figure()
         fig.add_trace(go.Bar(
-            name="CUILs únicos con MONOTRIBUTO",
+            name="Personas con ARCA",
             x=[linea],
-            y=[con_mono],
+            y=[con_arca],
             marker_color="#66c2a5",
-            text=[con_mono],
+            text=[con_arca],
             textposition="inside"
         ))
         fig.add_trace(go.Bar(
-            name="CUILs únicos sin MONOTRIBUTO",
+            name="Personas sin ARCA",
             x=[linea],
-            y=[sin_mono],
+            y=[sin_arca],
             marker_color="#fc8d62",
-            text=[sin_mono],
+            text=[sin_arca],
             textposition="inside"
         ))
         fig.update_layout(
             barmode='stack',
             showlegend=True,
             xaxis_title=None,
-            yaxis_title="Cantidad de CUIL únicos",
-            title=f"Distribución de CUIL únicos en {linea}",
+            yaxis_title="Cantidad de personas",
+            title=f"Distribución de personas en {linea}",
             height=350,
             margin=dict(l=10, r=10, t=40, b=10)
         )
@@ -148,7 +148,7 @@ def mostrar_resumen_creditos(df_global):
         st.download_button(
             label="Descargar CSV resumen",
             data=csv_buffer.getvalue(),
-            file_name="resumen_cuils_monotributo_por_linea.csv",
+            file_name="resumen_personas_por_linea.csv",
             mime="text/csv"
         )
 
