@@ -500,8 +500,7 @@ def show_bco_gente_dashboard(data, dates, is_development=False):
             st.caption(f"Última actualización de datos: {latest_date}")
     
     # Crear pestañas para las diferentes vistas
-    #    tab_global, tab_recupero = st.tabs(["GLOBAL", "RECUPERO"])
-    [tab_global] = st.tabs(["GLOBAL"])
+    tab_global, tab_recupero = st.tabs(["GLOBAL", "RECUPERO"])
     
     with tab_global:
         # Filtros específicos para la pestaña GLOBAL
@@ -667,60 +666,60 @@ def show_bco_gente_dashboard(data, dates, is_development=False):
                 st.error(f"Error al generar el mapa de monto otorgado: {e}")
             
 
-    # with tab_recupero:
-    #     # Filtros específicos para la pestaña RECUPERO
-    #     if has_global_data and df_global is not None and not df_global.empty:
-    #         st.markdown('<h3 style="font-size: 18px; margin-top: 0;">Filtros - RECUPERO</h3>', unsafe_allow_html=True)
+    with tab_recupero:
+        # Filtros específicos para la pestaña RECUPERO
+        if has_global_data and df_global is not None and not df_global.empty:
+            st.markdown('<h3 style="font-size: 18px; margin-top: 0;">Filtros - RECUPERO</h3>', unsafe_allow_html=True)
             
-    #         # Crear tres columnas para los filtros
-    #         col1, col2, col3 = st.columns(3)
+            # Crear tres columnas para los filtros
+            col1, col2, col3 = st.columns(3)
             
-    #         # Filtro de departamento en la primera columna
-    #         with col1:
-    #             departamentos = sorted(df_filtrado_global['N_DEPARTAMENTO'].dropna().unique())
-    #             all_dpto_option = "Todos los departamentos"
-    #             selected_dpto_rec = st.selectbox("Departamento:", [all_dpto_option] + list(departamentos), key="recupero_dpto_filter")
+            # Filtro de departamento en la primera columna
+            with col1:
+                departamentos = sorted(df_filtrado_global['N_DEPARTAMENTO'].dropna().unique())
+                all_dpto_option = "Todos los departamentos"
+                selected_dpto_rec = st.selectbox("Departamento:", [all_dpto_option] + list(departamentos), key="recupero_dpto_filter")
             
-    #         # Filtrar por departamento seleccionado
-    #         if selected_dpto_rec != all_dpto_option:
-    #             df_filtrado_recupero_tab = df_filtrado_global[df_filtrado_global['N_DEPARTAMENTO'] == selected_dpto_rec]
-    #             # Filtro de localidad (dependiente del departamento)
-    #             localidades = sorted(df_filtrado_recupero_tab['N_LOCALIDAD'].dropna().unique())
-    #             all_loc_option = "Todas las localidades"
+            # Filtrar por departamento seleccionado
+            if selected_dpto_rec != all_dpto_option:
+                df_filtrado_recupero_tab = df_filtrado_global[df_filtrado_global['N_DEPARTAMENTO'] == selected_dpto_rec]
+                # Filtro de localidad (dependiente del departamento)
+                localidades = sorted(df_filtrado_recupero_tab['N_LOCALIDAD'].dropna().unique())
+                all_loc_option = "Todas las localidades"
                 
-    #             # Mostrar filtro de localidad en la segunda columna
-    #             with col2:
-    #                 selected_loc_rec = st.selectbox("Localidad:", [all_loc_option] + list(localidades), key="recupero_loc_filter")
+                # Mostrar filtro de localidad en la segunda columna
+                with col2:
+                    selected_loc_rec = st.selectbox("Localidad:", [all_loc_option] + list(localidades), key="recupero_loc_filter")
                 
-    #             if selected_loc_rec != all_loc_option:
-    #                 df_filtrado_recupero_tab = df_filtrado_recupero_tab[df_filtrado_recupero_tab['N_LOCALIDAD'] == selected_loc_rec]
-    #         else:
-    #             # Si no se seleccionó departamento, mostrar todas las localidades
-    #             localidades = sorted(df_filtrado_global['N_LOCALIDAD'].dropna().unique())
-    #             all_loc_option = "Todas las localidades"
-    #             df_filtrado_recupero_tab = df_filtrado_global
+                if selected_loc_rec != all_loc_option:
+                    df_filtrado_recupero_tab = df_filtrado_recupero_tab[df_filtrado_recupero_tab['N_LOCALIDAD'] == selected_loc_rec]
+            else:
+                # Si no se seleccionó departamento, mostrar todas las localidades
+                localidades = sorted(df_filtrado_global['N_LOCALIDAD'].dropna().unique())
+                all_loc_option = "Todas las localidades"
+                df_filtrado_recupero_tab = df_filtrado_global
                 
-    #             # Mostrar filtro de localidad en la segunda columna
-    #             with col2:
-    #                 selected_loc_rec = st.selectbox("Localidad:", [all_loc_option] + list(localidades), key="recupero_loc_filter")
+                # Mostrar filtro de localidad en la segunda columna
+                with col2:
+                    selected_loc_rec = st.selectbox("Localidad:", [all_loc_option] + list(localidades), key="recupero_loc_filter")
                 
-    #             if selected_loc_rec != all_loc_option:
-    #                 df_filtrado_recupero_tab = df_filtrado_recupero_tab[df_filtrado_recupero_tab['N_LOCALIDAD'] == selected_loc_rec]
+                if selected_loc_rec != all_loc_option:
+                    df_filtrado_recupero_tab = df_filtrado_recupero_tab[df_filtrado_recupero_tab['N_LOCALIDAD'] == selected_loc_rec]
             
-    #         # Filtro de línea de préstamo en la tercera columna
-    #         with col3:
-    #             lineas_prestamo = sorted(df_filtrado_recupero_tab['N_LINEA_PRESTAMO'].dropna().unique())
-    #             all_lineas_option = "Todas las líneas"
-    #             selected_linea_rec = st.selectbox("Línea de préstamo:", [all_lineas_option] + list(lineas_prestamo), key="recupero_linea_filter")
+            # Filtro de línea de préstamo en la tercera columna
+            with col3:
+                lineas_prestamo = sorted(df_filtrado_recupero_tab['N_LINEA_PRESTAMO'].dropna().unique())
+                all_lineas_option = "Todas las líneas"
+                selected_linea_rec = st.selectbox("Línea de préstamo:", [all_lineas_option] + list(lineas_prestamo), key="recupero_linea_filter")
             
-    #         if selected_linea_rec != all_lineas_option:
-    #             df_filtrado_recupero_tab = df_filtrado_recupero_tab[df_filtrado_recupero_tab['N_LINEA_PRESTAMO'] == selected_linea_rec]
+            if selected_linea_rec != all_lineas_option:
+                df_filtrado_recupero_tab = df_filtrado_recupero_tab[df_filtrado_recupero_tab['N_LINEA_PRESTAMO'] == selected_linea_rec]
             
-    #         # Mostrar los datos de recupero en la pestaña RECUPERO
-    #         with st.spinner("Cargando visualizaciones de recupero..."):
-    #             mostrar_recupero(df_filtrado_recupero_tab, df_localidad_municipio, geojson_data)
-    #     else:
-    #         st.info("No hay datos de recupero disponibles para mostrar.")
+            # Mostrar los datos de recupero en la pestaña RECUPERO
+            with st.spinner("Cargando visualizaciones de recupero..."):
+                mostrar_recupero(df_filtrado_recupero_tab, df_localidad_municipio, geojson_data)
+        else:
+            st.info("No hay datos de recupero disponibles para mostrar.")
 
 def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
     """
