@@ -192,7 +192,39 @@ def load_and_preprocess_data(data):
         if has_global_data and 'N_LINEA_PRESTAMO' in df_global.columns:
             # Reemplazar "L4." por "INICIAR EMPRENDIMIENTO"
             df_global['N_LINEA_PRESTAMO'] = df_global['N_LINEA_PRESTAMO'].replace("L4.", "INICIAR EMPRENDIMIENTO")
-        
+
+        # --- Normalizar N_DEPARTAMENTO: dejar solo los válidos, el resto 'OTROS' ---
+        departamentos_validos = [
+            "CAPITAL",
+            "CALAMUCHITA",
+            "COLON",
+            "CRUZ DEL EJE",
+            "GENERAL ROCA",
+            "GENERAL SAN MARTIN",
+            "ISCHILIN",
+            "JUAREZ CELMAN",
+            "MARCOS JUAREZ",
+            "MINAS",
+            "POCHO",
+            "PRESIDENTE ROQUE SAENZ PEÑA",
+            "PUNILLA",
+            "RIO CUARTO",
+            "RIO PRIMERO",
+            "RIO SECO",
+            "RIO SEGUNDO",
+            "SAN ALBERTO",
+            "SAN JAVIER",
+            "SAN JUSTO",
+            "SANTA MARIA",
+            "SOBREMONTE",
+            "TERCERO ARRIBA",
+            "TOTORAL",
+            "TULUMBA",
+            "UNION"
+        ]
+        if has_global_data and 'N_DEPARTAMENTO' in df_global.columns:
+            df_global['N_DEPARTAMENTO'] = df_global['N_DEPARTAMENTO'].apply(lambda x: x if x in departamentos_validos else 'OTROS')
+
         # Corregir localidades del departamento CAPITAL
         if has_global_data and 'N_DEPARTAMENTO' in df_global.columns and 'N_LOCALIDAD' in df_global.columns:
             # Crear una máscara para identificar registros del departamento CAPITAL
@@ -1437,7 +1469,7 @@ def mostrar_recupero(df_filtrado, df_localidad_municipio, geojson_data):
         return
 
     # --- Nueva Sección: Tabla Agrupada de Pagados (usando datos ya filtrados) ---
-    st.subheader("Detalle de Préstamos Pagados por Localidad (Según Filtros Aplicados)")
+    st.subheader("Detalle de Préstamos Pagados por Localidad", help="Muestra la suma de préstamos pagados, no finalizados, con planes de cuotas, por localidad")
     
     # Asegurarse de que las columnas necesarias existan en el df_filtrado
     # 'N_LINEA_PRESTAMO' ya está implícitamente filtrada por render_filters, pero la necesitamos para la verificación
