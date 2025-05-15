@@ -9,9 +9,9 @@ ESTADO_CATEGORIAS = {
     "En Evaluación": ["CREADO","EVALUACIÓN TÉCNICA","COMENZADO"],
     "Rechazados - Bajas": ["RECHAZADO","DESISTIDO","IMPAGO DESISTIDO","BAJA ADMINISTRATIVA"],
     "A Pagar - Convocatoria": ["A PAGAR","A PAGAR CON LOTE","A PAGAR CON BANCO","A PAGAR ENVIADO A SUAF","A PAGAR CON SUAF","MUTUO FIRMADO"],
+    "En proceso de pago": ["PAGO EMITIDO","IMPAGO"],
     "Pagados": ["PAGADO","PRE-FINALIZADO","CON PLAN DE CUOTAS","CON PLAN DE CUOTAS CON IMPAGOS","MOROSO ENTRE 3 Y 4 MESES","MOROSO >= 5 MESES"],
-    "Pagados-Finalizados" : ["FINALIZADO"],
-    "En proceso de pago": ["PAGO EMITIDO","IMPAGO"]
+    "Pagados-Finalizados" : ["FINALIZADO"]
 }
 
 # Diccionario semántico: explicación amigable para cada KPI

@@ -792,7 +792,8 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
             conteos_detalle = []
             for estado in estados:
                 cantidad = int(df_filtrado_global[df_filtrado_global["N_ESTADO_PRESTAMO"] == estado].shape[0])
-                conteos_detalle.append(f"<b>{estado}:</b> {cantidad}")
+                cantidad_cuil = df_filtrado_global[df_filtrado_global["N_ESTADO_PRESTAMO"] == estado]["CUIL"].nunique()
+                conteos_detalle.append(f"<b>{estado}:</b> {cantidad} <span style='color:#0072bb'>(CUILs únicos: {cantidad_cuil})</span>")
             detalle_html = "<div style='font-size:13px; color:#555; margin-bottom:0; margin-top:6px'>" + " | ".join(conteos_detalle) + "</div>"
             kpi["detalle_html"] = detalle_html
         else:
@@ -811,6 +812,27 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
     if grupos_detalle:
         detalle_html = "<div style='font-size:13px; color:#555; margin-bottom:8px; margin-top:6px'>" + " | ".join(grupos_detalle) + "</div>"
         st.markdown(detalle_html, unsafe_allow_html=True)
+
+    # NUEVO: KPIs de personas únicas (CUILs únicos) por categoría
+    kpi_personas = []
+    for categoria, estados in ESTADO_CATEGORIAS.items():
+        if categoria == "Rechazados - Bajas":
+            continue  # Excluir esta categoría de los KPIs de personas únicas
+        if estados:
+            mask = df_filtrado_global["N_ESTADO_PRESTAMO"].isin(estados)
+            cantidad_cuils = df_filtrado_global.loc[mask, "CUIL"].nunique()
+            # Título y valor con el mismo tamaño de fuente (16px)
+            value_html = f"<span style='font-size:16px'>{cantidad_cuils}</span>"
+            title_html = f"<span style='font-size:16px'>Personas únicas en {categoria}</span>"
+            kpi_personas.append({
+                "title": title_html,
+                "value": value_html,
+                "color_class": "kpi-secondary",
+                "tooltip": f"Cantidad de CUIL únicos en {categoria} ({', '.join(estados)})",
+                "is_html": True
+            })
+    if kpi_personas:
+        display_kpi_row(kpi_personas)
 
     # Línea divisoria en gris claro
     st.markdown("<hr style='border: 2px solid #cccccc;'>", unsafe_allow_html=True)
