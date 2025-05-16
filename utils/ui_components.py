@@ -1,6 +1,6 @@
 import streamlit as st
 
-def create_kpi_card(title, value, color_class="kpi-primary", delta=None, delta_color="#d4f7d4", tooltip=None, detalle_html=None):
+def create_kpi_card(title, color_class="kpi-primary", delta=None, delta_color="#d4f7d4", tooltip=None, detalle_html=None, value_form=None, value_pers=None):
     """
     Crea una tarjeta KPI con un estilo consistente en toda la aplicación.
     
@@ -15,11 +15,15 @@ def create_kpi_card(title, value, color_class="kpi-primary", delta=None, delta_c
     Returns:
         str: HTML formateado para la tarjeta KPI
     """
-    # Formatear el valor si es numérico
-    if isinstance(value, (int, float)):
-        formatted_value = f"{value:,}"
+    # Mostrar el valor según value_form/value_pers si están presentes
+    if value_form is not None and value_pers is not None and value_form > 0 and value_pers > 0 and value_form != value_pers:
+        formatted_value = f"{value_form} / {value_pers}"
+    elif value_form is not None and value_form > 0:
+        formatted_value = f"{value_form}"
+    elif value_pers is not None and value_pers > 0:
+        formatted_value = f"{value_pers}"
     else:
-        formatted_value = value
+        formatted_value = str(value_form)
     
     # Agregar atributo title para el tooltip si está presente
     tooltip_attr = f' title="{tooltip}"' if tooltip else ''
@@ -51,51 +55,51 @@ def create_kpi_card(title, value, color_class="kpi-primary", delta=None, delta_c
 def create_bco_gente_kpis(resultados, tooltips):
     """
     Crea los KPIs específicos para el módulo Banco de la Gente.
+    Cada KPI incluye una clave 'categoria' con el valor exacto de la categoría para facilitar el mapeo y procesamiento posterior.
     
     Args:
         resultados (dict): Diccionario con los resultados de conteo por categoría
         tooltips (dict): Diccionario con los tooltips para cada KPI
-        
     Returns:
         list: Lista de diccionarios con datos de KPI para Banco de la Gente
     """
     kpis = [
         {
             "title": "FORMULARIOS EN EVALUACIÓN",
-            "value": resultados.get("En Evaluación", 0),
+            "categoria": "En Evaluación",
+            "value_form": resultados.get("En Evaluación", 0),
             "color_class": "kpi-primary",
             "tooltip": tooltips.get("En Evaluación")
         },
         {
             "title": "FORMULARIOS A PAGAR / CONVOCATORIA",
-            "value": resultados.get("A Pagar - Convocatoria", 0),
+            "categoria": "A Pagar - Convocatoria",
+            "value_form": resultados.get("A Pagar - Convocatoria", 0),
             "color_class": "kpi-accent-3",
             "tooltip": tooltips.get("A Pagar - Convocatoria")
         },
         {
             "title": "FORMULARIOS PAGADOS",
-            "value": resultados.get("Pagados", 0),
+            "categoria": "Pagados",
+            "value_form": resultados.get("Pagados", 0),
             "color_class": "kpi-accent-2",
             "tooltip": tooltips.get("Pagados")
         },
         {
             "title": "FORMULARIOS EN PROCESO DE PAGO",
-            "value": resultados.get("En proceso de pago", 0),
+            "categoria": "En proceso de pago",
+            "value_form": resultados.get("En proceso de pago", 0),
             "color_class": "kpi-accent-1",
             "tooltip": tooltips.get("En proceso de pago")
         },
         {
             "title": "FORMULARIOS PAGADOS - FINALIZADOS",
-            "value": resultados.get("Pagados-Finalizados", 0),
+            "categoria": "Pagados-Finalizados",
+            "value_form": resultados.get("Pagados-Finalizados", 0),
             "color_class": "kpi-success",
             "tooltip": tooltips.get("Pagados-Finalizados")
         }
-       
     ]
-    
-    # Opcional: Filtrar KPIs con valor 0 si no quieres mostrarlos
-    # kpis = [kpi for kpi in kpis if kpi['value'] > 0]
-    
     return kpis
 
 def display_kpi_row(kpi_data, num_columns=5):
@@ -118,12 +122,13 @@ def display_kpi_row(kpi_data, num_columns=5):
             st.markdown(
                 create_kpi_card(
                     title=kpi.get("title", ""),
-                    value=kpi.get("value", 0),
                     color_class=kpi.get("color_class", "kpi-primary"),
                     delta=kpi.get("delta"),
                     delta_color=kpi.get("delta_color", "#d4f7d4"),
                     tooltip=kpi.get("tooltip"),
-                    detalle_html=kpi.get("detalle_html")
+                    detalle_html=kpi.get("detalle_html"),
+                    value_form=kpi.get("value_form"),
+                    value_pers=kpi.get("value_pers")
                 ),
                 unsafe_allow_html=True
             )

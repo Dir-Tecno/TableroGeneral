@@ -781,24 +781,38 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
         resultados = {categoria: 0 for categoria in ESTADO_CATEGORIAS.keys()}
     
     # Usar la función de ui_components para crear y mostrar KPIs
+    # Solo una línea de KPIs, mostrando 'formularios / personas únicas' (ej: 1763/1115)
+    kpi_data = []
+    # Construir KPIs usando create_bco_gente_kpis para mantener colores, títulos y tooltips originales
     kpi_data = create_bco_gente_kpis(resultados, tooltips_categorias)
-    # Agregar detalle_html a cada KPI si corresponde
-    for kpi in kpi_data:
-        categoria = kpi.get("title")
+    for kpi in kpi_data[:]:  # Iterar sobre copia para poder modificar la lista
+        categoria = kpi.get("categoria")
+        if not categoria:
+            continue
+        if categoria == "Rechazados - Bajas":
+            kpi_data.remove(kpi)
+            continue
         estados = ESTADO_CATEGORIAS.get(categoria, [])
-        total_categoria = resultados.get(categoria, 0)
-        # Solo mostrar desglose si hay más de un estado definido y el total es mayor a 0
-        if estados and len(estados) > 1:
-            conteos_detalle = []
-            for estado in estados:
-                cantidad = int(df_filtrado_global[df_filtrado_global["N_ESTADO_PRESTAMO"] == estado].shape[0])
-                cantidad_cuil = df_filtrado_global[df_filtrado_global["N_ESTADO_PRESTAMO"] == estado]["CUIL"].nunique()
-                conteos_detalle.append(f"<b>{estado}:</b> {cantidad} <span style='color:#0072bb'>(CUILs únicos: {cantidad_cuil})</span>")
-            detalle_html = "<div style='font-size:13px; color:#555; margin-bottom:0; margin-top:6px'>" + " | ".join(conteos_detalle) + "</div>"
-            kpi["detalle_html"] = detalle_html
+        total_formularios = resultados.get(categoria, 0)
+        if estados:
+            mask = df_filtrado_global["N_ESTADO_PRESTAMO"].isin(estados)
+            total_personas = df_filtrado_global.loc[mask, "CUIL"].nunique()
         else:
-            kpi["detalle_html"] = ""
+            total_personas = 0
+        if categoria == "En Evaluación":
+            kpi["value_form"] = total_formularios
+            kpi["value_pers"] = total_personas
+        # Si en el futuro quieres aplicar a más KPIs, puedes agregar estas claves para otros casos aquí.
+
     display_kpi_row(kpi_data)
+
+    # DEBUG VISUAL: Mostrar info de CUIL únicos para 'En Evaluación'
+    estados_eval = ESTADO_CATEGORIAS["En Evaluación"]
+    mask_eval = df_filtrado_global["N_ESTADO_PRESTAMO"].isin(estados_eval)
+    df_eval = df_filtrado_global[mask_eval][["N_ESTADO_PRESTAMO", "CUIL"]]
+    cuils_unicos_eval = df_filtrado_global.loc[mask_eval, "CUIL"].nunique()
+    st.markdown("<hr>", unsafe_allow_html=True)
+   
 
     # Desglose dinámico de TODOS los N_ESTADO_PRESTAMO agrupados por CATEGORIA_ESTADO
     grupos_detalle = []
@@ -813,26 +827,6 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
         detalle_html = "<div style='font-size:13px; color:#555; margin-bottom:8px; margin-top:6px'>" + " | ".join(grupos_detalle) + "</div>"
         st.markdown(detalle_html, unsafe_allow_html=True)
 
-    # NUEVO: KPIs de personas únicas (CUILs únicos) por categoría
-    kpi_personas = []
-    for categoria, estados in ESTADO_CATEGORIAS.items():
-        if categoria == "Rechazados - Bajas":
-            continue  # Excluir esta categoría de los KPIs de personas únicas
-        if estados:
-            mask = df_filtrado_global["N_ESTADO_PRESTAMO"].isin(estados)
-            cantidad_cuils = df_filtrado_global.loc[mask, "CUIL"].nunique()
-            # Título y valor con el mismo tamaño de fuente (16px)
-            value_html = f"<span style='font-size:16px'>{cantidad_cuils}</span>"
-            title_html = f"<span style='font-size:16px'>Personas únicas en {categoria}</span>"
-            kpi_personas.append({
-                "title": title_html,
-                "value": value_html,
-                "color_class": "kpi-secondary",
-                "tooltip": f"Cantidad de CUIL únicos en {categoria} ({', '.join(estados)})",
-                "is_html": True
-            })
-    if kpi_personas:
-        display_kpi_row(kpi_personas)
 
     # Línea divisoria en gris claro
     st.markdown("<hr style='border: 2px solid #cccccc;'>", unsafe_allow_html=True)
