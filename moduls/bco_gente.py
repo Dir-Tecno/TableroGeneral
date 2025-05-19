@@ -1113,7 +1113,7 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
                       "basado en los datos filtrados. Las categorías agrupa estados del sistema. No considera formularios de baja ni lineas antiguas históricas.")
     try: #Tabla de estados de préstamos agrupados por categoría
         # Verificar que las columnas necesarias existan en el DataFrame
-        required_columns = ['N_DEPARTAMENTO', 'N_LOCALIDAD', 'N_ESTADO_PRESTAMO', 'NRO_SOLICITUD']
+        required_columns = ['N_DEPARTAMENTO', 'N_LOCALIDAD', 'N_ESTADO_PRESTAMO', 'NRO_SOLICITUD','MONTO_OTORGADO']
         missing_columns = [col for col in required_columns if col not in df_filtrado_global.columns]
         
         if missing_columns:
@@ -1128,7 +1128,17 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
             # Usar st.session_state para mantener las categorías seleccionadas
             if 'selected_categorias' not in st.session_state:
                 st.session_state.selected_categorias = categorias_orden
-                
+            
+            # Obtener líneas de crédito disponibles
+            if 'N_LINEA_PRESTAMO' in df_filtrado_global.columns:
+                lineas_credito = sorted(df_filtrado_global['N_LINEA_PRESTAMO'].dropna().unique())
+            else:
+                lineas_credito = []
+            
+            # Inicializar selected_lineas en session_state si no existe
+            if 'selected_lineas_credito' not in st.session_state:
+                st.session_state.selected_lineas_credito = lineas_credito
+            
             col1, col2 = st.columns([3, 1])
             
             with col1: # Multiselect para seleccionar categorías
@@ -1138,10 +1148,47 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
                     default=st.session_state.selected_categorias,
                     key="estado_categoria_filter"
                 )
-                
-                # Actualizar session_state solo si cambia la selección
-                if selected_categorias != st.session_state.selected_categorias:
-                    st.session_state.selected_categorias = selected_categorias
+            
+            with col2: # Multiselect para seleccionar líneas de crédito
+                selected_lineas = st.multiselect(
+                    "Filtrar por línea de crédito:",
+                    options=lineas_credito,
+                    default=st.session_state.selected_lineas_credito,
+                    key="linea_credito_filter"
+                )
+
+            # Aplicar filtros al DataFrame
+            df_filtered = df_filtrado_global.copy()
+            
+            # Filtrar por categorías seleccionadas
+            if selected_categorias:
+                df_filtered = df_filtered[df_filtered['CATEGORIA'].isin(selected_categorias)]
+            
+            # Filtrar por líneas de crédito seleccionadas
+            if selected_lineas:
+                df_filtered = df_filtered[df_filtered['N_LINEA_PRESTAMO'].isin(selected_lineas)]
+            
+            # Asegurarse de que los montos sean numéricos y reemplazar NaN por 0
+            if 'MONTO_OTORGADO' in df_filtered.columns:
+                df_filtered['MONTO_OTORGADO'] = pd.to_numeric(df_filtered['MONTO_OTORGADO'], errors='coerce').fillna(0)
+            
+            # Continuar con el agrupamiento solo si hay datos filtrados
+            if not df_filtered.empty:
+                # Realizar el agrupamiento
+                df_grouped = df_filtered.groupby(
+                    ['N_DEPARTAMENTO', 'N_LOCALIDAD', 'CATEGORIA', 'N_LINEA_PRESTAMO']
+                ).agg({
+                    'NRO_SOLICITUD': 'count',
+                    'MONTO_OTORGADO': 'sum'
+                }).reset_index()
+            else:
+                st.warning("No hay datos para mostrar con los filtros seleccionados.")
+
+            # Actualizar session_state
+            if selected_categorias != st.session_state.selected_categorias:
+                st.session_state.selected_categorias = selected_categorias
+            if selected_lineas != st.session_state.selected_lineas_credito:
+                st.session_state.selected_lineas_credito = selected_lineas
             
             # Si no se selecciona ninguna categoría, mostrar todas
             if not selected_categorias:
@@ -1241,18 +1288,26 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
             ]
             # Unir las columnas extra al DataFrame original (antes del agrupado)
             df_descarga = df_filtrado_global[
-                ['N_DEPARTAMENTO', 'N_LOCALIDAD'] + columnas_extra + ['NRO_SOLICITUD', 'N_ESTADO_PRESTAMO']
+                ['N_DEPARTAMENTO', 'N_LOCALIDAD'] + columnas_extra + ['NRO_SOLICITUD', 'N_ESTADO_PRESTAMO','MONTO_OTORGADO']
             ].copy()
             # Agregar columna de categoría
             df_descarga['CATEGORIA'] = 'Otros'
             for categoria, estados in ESTADO_CATEGORIAS.items():
                 mask = df_descarga['N_ESTADO_PRESTAMO'].isin(estados)
                 df_descarga.loc[mask, 'CATEGORIA'] = categoria
-            # Agrupar para obtener el conteo por las columnas extra y categoría
+            # Agrupar para obtener el conteo y la suma de montos por las columnas extra y categoría
             df_descarga_grouped = df_descarga.groupby(
                 ['N_DEPARTAMENTO', 'N_LOCALIDAD'] + columnas_extra + ['CATEGORIA']
-            )['NRO_SOLICITUD'].count().reset_index()
-            df_descarga_grouped = df_descarga_grouped.rename(columns={'NRO_SOLICITUD': 'Cantidad'})
+            ).agg({
+                'NRO_SOLICITUD': 'count',
+                'MONTO_OTORGADO': 'sum'
+            }).reset_index()
+
+            # Renombrar las columnas para mayor claridad
+            df_descarga_grouped = df_descarga_grouped.rename(columns={
+                'NRO_SOLICITUD': 'Cantidad',
+                'MONTO_OTORGADO': 'Monto Total'
+            })
             # --- Botón de descarga Excel con ícono ---
             import io
             import base64
@@ -1271,7 +1326,7 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
                 data=excel_buffer.getvalue(),
                 file_name="estados_prestamos_categoria_extend.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                help="Descargar el agrupado con todas las columnas extra para análisis avanzado."
+                help="Descargar el agrupado con todas las columnas extra para análisis avanzado, incluyendo montos totales."
             )
            
     except Exception as e:
