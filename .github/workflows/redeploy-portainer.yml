@@ -42,4 +42,3 @@ jobs:
           fi
 
           echo "✅ Stack actualizado exitosamente desde Git."
-
