@@ -253,7 +253,8 @@ def load_and_preprocess_data(data):
         if has_global_data and has_recupero_data and 'NRO_SOLICITUD' in df_recupero.columns:
             try:
                 # Verificar si existen las columnas necesarias en df_recupero
-                required_columns = ['FEC_NACIMIENTO','CUIL','NRO_SOLICITUD', 'DEUDA', 'DEUDA_NO_VENCIDA', 'MONTO_OTORGADO','IMP_GANANCIAS','IMP_IVA','MONOTRIBUTO','INTEGRANTE_SOC','EMPLEADOR','ACTIVIDAD_MONOTRIBUTO']
+                # Añadir FEC_INICIO_PAGO si existe en df_recupero
+                required_columns = ['FEC_NACIMIENTO','CUIL','NRO_SOLICITUD', 'DEUDA', 'DEUDA_NO_VENCIDA', 'MONTO_OTORGADO','IMP_GANANCIAS','IMP_IVA','MONOTRIBUTO','INTEGRANTE_SOC','EMPLEADOR','ACTIVIDAD_MONOTRIBUTO','FEC_INICIO_PAGO']
                 missing_columns = [col for col in required_columns if col not in df_recupero.columns]
                 
                 if not missing_columns:
