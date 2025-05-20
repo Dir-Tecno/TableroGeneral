@@ -1277,7 +1277,7 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
             ]
             # Unir las columnas extra al DataFrame original (antes del agrupado)
             df_descarga = df_categoria_estados[
-                ['N_DEPARTAMENTO', 'N_LOCALIDAD'] + columnas_extra + ['NRO_SOLICITUD', 'N_ESTADO_PRESTAMO','MONTO_OTORGADO']
+                ['N_DEPARTAMENTO', 'N_LOCALIDAD','N_LINEA_PRESTAMO'] + columnas_extra + ['NRO_SOLICITUD', 'N_ESTADO_PRESTAMO','MONTO_OTORGADO']
             ].copy()
             # Agregar columna de categoría
             df_descarga['CATEGORIA'] = 'Otros'
@@ -1286,7 +1286,7 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
                 df_descarga.loc[mask, 'CATEGORIA'] = categoria
             # Agrupar para obtener el conteo y la suma de montos por las columnas extra y categoría
             df_descarga_grouped = df_descarga.groupby(
-                ['N_DEPARTAMENTO', 'N_LOCALIDAD'] + columnas_extra + ['CATEGORIA']
+                ['N_DEPARTAMENTO', 'N_LOCALIDAD','N_LINEA_PRESTAMO'] + columnas_extra + ['CATEGORIA']
             ).agg({
                 'NRO_SOLICITUD': 'count',
                 'MONTO_OTORGADO': 'sum'
