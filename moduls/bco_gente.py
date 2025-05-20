@@ -23,12 +23,12 @@ def mostrar_kpis_fiscales(df_global):
 
     lineas = ["INICIAR EMPRENDIMIENTO", "POTENCIAR EMPRENDIMIENTO", "L4."]
     categorias = ["Pagados", "Pagados-Finalizados"]
-    df_filtrado = df_global[
+    df_categoria_estados = df_global[
         (df_global["N_LINEA_PRESTAMO"].isin(lineas)) &
         (df_global["CATEGORIA"].isin(categorias))
     ].copy()
 
-    if df_filtrado.empty:
+    if df_categoria_estados.empty:
         st.info("No se encontraron registros para las líneas y categorías seleccionadas.")
         return
 
@@ -48,10 +48,10 @@ def mostrar_kpis_fiscales(df_global):
         col = cols_row1[idx] if idx < 3 else cols_row2[idx-3]
         with col:
             st.markdown(f"<b>{campo.replace('_',' ').title()}</b>", unsafe_allow_html=True)
-            if campo not in df_filtrado.columns:
+            if campo not in df_categoria_estados.columns:
                 st.info(f"No existe la columna {campo} en los datos.")
                 continue
-            df_campo = df_filtrado[df_filtrado[campo].notnull()]
+            df_campo = df_categoria_estados[df_categoria_estados[campo].notnull()]
             group = df_campo.groupby(campo)["CUIL"].nunique().reset_index()
             group = group.rename(columns={"CUIL": "CUILs únicos", campo: campo})
             group = group.sort_values("CUILs únicos", ascending=False)
@@ -302,6 +302,7 @@ def load_and_preprocess_data(data):
                         # Definir columnas a traer desde df_localidad_municipio (incluyendo la clave)
                         cols_to_merge = [
                             'ID_LOCALIDAD', # Clave del merge (asumimos mismo nombre en ambos DFs)
+                            'ID_GOBIERNO_LOCAL',
                             'TIPO', 
                             'Gestion 2023-2027', 
                             'FUERZAS', 
@@ -1158,25 +1159,42 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
                     key="linea_credito_filter"
                 )
 
-            # Aplicar filtros al DataFrame
-            df_filtered = df_filtrado_global.copy()
+            # Aplicar filtros al DataFrame para la tabla de Estados de Préstamos por Categoría
+            df_categoria_estados = df_filtrado_global.copy()
+            
+            # --- Filtro de rango de fechas FEC_INICIO_PAGO ---
+            if 'FEC_INICIO_PAGO' in df_categoria_estados.columns:
+                df_categoria_estados['FEC_INICIO_PAGO'] = pd.to_datetime(df_categoria_estados['FEC_INICIO_PAGO'], errors='coerce')
+                fechas_validas = df_categoria_estados['FEC_INICIO_PAGO'].dropna().dt.date.unique()
+                fechas_validas = sorted(fechas_validas)
+                if fechas_validas:
+                    min_fecha = fechas_validas[0]
+                    max_fecha = fechas_validas[-1]
+                    fecha_inicio, fecha_fin = st.select_slider(
+                        'Seleccionar rango de Fecha de Inicio de Pago:',
+                        options=fechas_validas,
+                        value=(min_fecha, max_fecha),
+                        key='filtro_fecha_inicio_pago_categoria'
+                    )
+                    # Filtrar por rango seleccionado
+                    df_categoria_estados = df_categoria_estados[(df_categoria_estados['FEC_INICIO_PAGO'].dt.date >= fecha_inicio) & (df_categoria_estados['FEC_INICIO_PAGO'].dt.date <= fecha_fin)]
             
             # Filtrar por categorías seleccionadas
             if selected_categorias:
-                df_filtered = df_filtered[df_filtered['CATEGORIA'].isin(selected_categorias)]
+                df_categoria_estados = df_categoria_estados[df_categoria_estados['CATEGORIA'].isin(selected_categorias)]
             
             # Filtrar por líneas de crédito seleccionadas
             if selected_lineas:
-                df_filtered = df_filtered[df_filtered['N_LINEA_PRESTAMO'].isin(selected_lineas)]
+                df_categoria_estados = df_categoria_estados[df_categoria_estados['N_LINEA_PRESTAMO'].isin(selected_lineas)]
             
             # Asegurarse de que los montos sean numéricos y reemplazar NaN por 0
-            if 'MONTO_OTORGADO' in df_filtered.columns:
-                df_filtered['MONTO_OTORGADO'] = pd.to_numeric(df_filtered['MONTO_OTORGADO'], errors='coerce').fillna(0)
+            if 'MONTO_OTORGADO' in df_categoria_estados.columns:
+                df_categoria_estados['MONTO_OTORGADO'] = pd.to_numeric(df_categoria_estados['MONTO_OTORGADO'], errors='coerce').fillna(0)
             
             # Continuar con el agrupamiento solo si hay datos filtrados
-            if not df_filtered.empty:
+            if not df_categoria_estados.empty:
                 # Realizar el agrupamiento
-                df_grouped = df_filtered.groupby(
+                df_grouped = df_categoria_estados.groupby(
                     ['N_DEPARTAMENTO', 'N_LOCALIDAD', 'CATEGORIA', 'N_LINEA_PRESTAMO']
                 ).agg({
                     'NRO_SOLICITUD': 'count',
@@ -1225,7 +1243,7 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
                 return pivot_df.reindex(columns=['N_DEPARTAMENTO', 'N_LOCALIDAD'] + list(ESTADO_CATEGORIAS.keys()))
             
             # Obtener el DataFrame procesado usando caché
-            pivot_df = prepare_categoria_data(df_filtrado_global, categorias_orden)
+            pivot_df = prepare_categoria_data(df_categoria_estados, categorias_orden)
             
             # Filtrar solo las columnas seleccionadas
             columnas_mostrar = ['N_DEPARTAMENTO', 'N_LOCALIDAD'] + selected_categorias
@@ -1250,45 +1268,15 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
                 is_total_row = s.iloc[0] == 'Total' or s.iloc[1] == 'Total'
                 return ['background-color: #f2f2f2; font-weight: bold' if is_total_row else '' for _ in s]
             
-            # Crear objeto Styler
-            styled_df = pivot_df_filtered.style \
-                .applymap(highlight_totals, subset=['N_DEPARTAMENTO', 'N_LOCALIDAD'])
-            
-            # Aplicar formato a las columnas numéricas
-            numeric_columns = selected_categorias + ['Total']
-            
-            styled_df = styled_df \
-                .apply(highlight_total_rows, axis=1, subset=numeric_columns) \
-                .format({col: '{:,.0f}' for col in selected_categorias + ['Total']}) \
-                .background_gradient(subset=selected_categorias, cmap='Blues', low=0.1, high=0.9) \
-                .set_properties(**{'text-align': 'right'}, subset=numeric_columns) \
-                .set_properties(**{'text-align': 'left'}, subset=['N_DEPARTAMENTO', 'N_LOCALIDAD'])
-            
-            # Configurar las columnas para st.dataframe
-            column_config = {
-                "N_DEPARTAMENTO": st.column_config.TextColumn("Departamento"),
-                "N_LOCALIDAD": st.column_config.TextColumn("Localidad"),
-                "Total": st.column_config.NumberColumn(
-                    "Total",
-                    help="Suma total de todas las categorías seleccionadas"
-                )
-            }
-            
-            # Mostrar la tabla con st.dataframe
-            st.dataframe(
-                styled_df,
-                use_container_width=True,
-                hide_index=True,
-                column_config=column_config,
-                height=400
-            )
+            styled_df = pivot_df_filtered.style.apply(highlight_total_rows, axis=1)
+            st.dataframe(styled_df, use_container_width=True, hide_index=True)
             
             # --- Generar DataFrame extendido para descarga (con columnas extra, pero sin renderizarlas en pantalla) ---
             columnas_extra = [
-                col for col in ['TIPO', 'Gestion 2023-2027', 'FUERZAS', 'ESTADO', 'LEGISLADOR DEPARTAMENTAL'] if col in df_filtrado_global.columns
+                col for col in ['ID_GOBIERNO_LOCAL','TIPO', 'Gestion 2023-2027', 'FUERZAS', 'ESTADO', 'LEGISLADOR DEPARTAMENTAL'] if col in df_filtrado_global.columns
             ]
             # Unir las columnas extra al DataFrame original (antes del agrupado)
-            df_descarga = df_filtrado_global[
+            df_descarga = df_categoria_estados[
                 ['N_DEPARTAMENTO', 'N_LOCALIDAD'] + columnas_extra + ['NRO_SOLICITUD', 'N_ESTADO_PRESTAMO','MONTO_OTORGADO']
             ].copy()
             # Agregar columna de categoría
@@ -1311,9 +1299,12 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
             })
             # --- Botón de descarga Excel con ícono ---
             import io
-            import base64
             excel_buffer = io.BytesIO()
             df_descarga_grouped.to_excel(excel_buffer, index=False)
+            fecha_rango_str = ''
+            if 'fecha_inicio' in locals() and 'fecha_fin' in locals():
+                fecha_rango_str = f"_{fecha_inicio.strftime('%Y%m%d')}_{fecha_fin.strftime('%Y%m%d')}"
+            nombre_archivo = f"pagados_x_localidad{fecha_rango_str}.xlsx"
             excel_buffer.seek(0)
             excel_icon = """
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1321,13 +1312,13 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
             <path d="M6.5 7.5H8L9.25 10L10.5 7.5H12L10.25 11L12 14.5H10.5L9.25 12L8 14.5H6.5L8.25 11L6.5 7.5Z" fill="white"/>
             </svg>
             """
-            st.markdown(f'<span style="vertical-align:middle">{excel_icon}</span> <b>Descargar agrupado extendido (Excel)</b>', unsafe_allow_html=True)
+            st.markdown(f'<span style="vertical-align:middle">{excel_icon}</span> <b>Descargar (Excel)</b>', unsafe_allow_html=True)
             st.download_button(
-                label="Descargar Excel",
+                label=f"Descargar Excel {nombre_archivo}",
                 data=excel_buffer.getvalue(),
-                file_name="estados_prestamos_categoria_extend.xlsx",
+                file_name=nombre_archivo,
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                help="Descargar el agrupado con todas las columnas extra para análisis avanzado, incluyendo montos totales."
+                help="Descargar el agrupado por localidad con id de censo, incluyendo montos totales."
             )
            
     except Exception as e:
