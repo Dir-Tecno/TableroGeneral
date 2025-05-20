@@ -1559,6 +1559,4 @@ def show_empleo_dashboard(data, dates, is_development=False):
                 st.error(f"Error al procesar los datos de población en esta sección: {str(e)}")
 
     except Exception as e:
-        st.error(f"Error al mostrar el dashboard de empleo: {str(e)}")  
-    
-    
+        st.error(f"Error al mostrar el dashboard de empleo: {str(e)}")
