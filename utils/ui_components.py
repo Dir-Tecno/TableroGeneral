@@ -16,14 +16,14 @@ def create_kpi_card(title, color_class="kpi-primary", delta=None, delta_color="#
         str: HTML formateado para la tarjeta KPI
     """
     # Mostrar el valor según value_form/value_pers si están presentes
-    if value_form is not None and value_pers is not None and value_form > 0 and value_pers > 0 and value_form != value_pers:
+    if value_form is not None and value_pers is not None and value_form != value_pers:
         formatted_value = f"{value_form} / {value_pers}"
-    elif value_form is not None and value_form > 0:
+    elif value_form is not None:
         formatted_value = f"{value_form}"
-    elif value_pers is not None and value_pers > 0:
+    elif value_pers is not None:
         formatted_value = f"{value_pers}"
     else:
-        formatted_value = str(value_form)
+        formatted_value = "0"
     
     # Agregar atributo title para el tooltip si está presente
     tooltip_attr = f' title="{tooltip}"' if tooltip else ''
@@ -67,35 +67,35 @@ def create_bco_gente_kpis(resultados, tooltips):
         {
             "title": "FORMULARIOS EN EVALUACIÓN",
             "categoria": "En Evaluación",
-            "value_form": resultados.get("En Evaluación", 0),
+            "value_form": f"{resultados.get('En Evaluación', 0):,}".replace(',', '.'),
             "color_class": "kpi-primary",
             "tooltip": tooltips.get("En Evaluación")
         },
         {
             "title": "FORMULARIOS A PAGAR / CONVOCATORIA",
             "categoria": "A Pagar - Convocatoria",
-            "value_form": resultados.get("A Pagar - Convocatoria", 0),
+            "value_form": f"{resultados.get('A Pagar - Convocatoria', 0):,}".replace(',', '.'),
             "color_class": "kpi-accent-3",
             "tooltip": tooltips.get("A Pagar - Convocatoria")
         },
         {
             "title": "FORMULARIOS PAGADOS",
             "categoria": "Pagados",
-            "value_form": resultados.get("Pagados", 0),
+            "value_form": f"{resultados.get('Pagados', 0):,}".replace(',', '.'),
             "color_class": "kpi-accent-2",
             "tooltip": tooltips.get("Pagados")
         },
         {
             "title": "FORMULARIOS EN PROCESO DE PAGO",
             "categoria": "En proceso de pago",
-            "value_form": resultados.get("En proceso de pago", 0),
+            "value_form": f"{resultados.get('En proceso de pago', 0):,}".replace(',', '.'),
             "color_class": "kpi-accent-1",
             "tooltip": tooltips.get("En proceso de pago")
         },
         {
             "title": "FORMULARIOS PAGADOS - FINALIZADOS",
             "categoria": "Pagados-Finalizados",
-            "value_form": resultados.get("Pagados-Finalizados", 0),
+            "value_form": f"{resultados.get('Pagados-Finalizados', 0):,}".replace(',', '.'),
             "color_class": "kpi-success",
             "tooltip": tooltips.get("Pagados-Finalizados")
         }

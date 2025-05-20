@@ -36,32 +36,26 @@ def show_empleo_dashboard(data, dates, is_development=False):
     # Mostrar columnas en modo desarrollo (similar a otros módulos)
     if is_development:
         st.markdown("***")
-        st.caption("Archivos que componen el módulo 'moduls/':")
-        moduls_path = os.path.join(os.path.dirname(__file__))
-        archivos = [f for f in os.listdir(moduls_path) if f.endswith('.py')]
-        st.write(archivos)
-        st.caption("Información de Desarrollo (Columnas de DataFrames - Empleo)")
+        st.caption("Información de Desarrollo (Columnas de DataFrames - Programas de Empleo)")
         if isinstance(data, dict):
             for name, df_item in data.items():
-                if df_item is not None and not df_item.empty:
+                if df_item is not None and hasattr(df_item, 'empty') and not df_item.empty:
                     with st.expander(f"Columnas en: `{name}`"):
                         st.write(f"Nombre del DataFrame: {name}")
                         st.write(f"Tipos de datos: {df_item.dtypes}")
                         st.write("Primeras 5 filas:")
-                        
                         df_head_display = df_item.head()
                         if 'geometry' in df_head_display.columns:
                             st.dataframe(df_head_display.drop(columns=['geometry']))
                         else:
                             st.dataframe(df_head_display)
-                        
                         st.write(f"Total de registros: {len(df_item)}")
                 elif df_item is None:
                     st.warning(f"DataFrame '{name}' no cargado (es None).")
                 else: # df_item is empty
                     st.info(f"DataFrame '{name}' está vacío.")
         else:
-            st.warning("Formato de datos inesperado para Programas de Empleo (se esperaba un diccionario).")
+            st.warning("Formato de datos inesperado para Programas de Empleo (se esperaba un diccionario de DataFrames).")
         st.markdown("***")
 
     # Cargar y preprocesar datos
@@ -465,25 +459,25 @@ def render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has
         kpi_data = [
             {
                 "title": "BENEFICIARIOS TOTALES",
-                "value": f"{total_beneficiarios:,}".replace(',', '.'),
+                "value_form": f"{total_beneficiarios:,}".replace(',', '.'),
                 "color_class": "kpi-primary",
                 "tooltip": TOOLTIPS_DESCRIPTIVOS.get("BENEFICIARIOS TOTALES", "")
             },
             {
                 "title": "BENEFICIARIOS EL",
-                "value": f"{total_beneficiarios:,}".replace(',', '.'),
+                "value_form": f"{total_beneficiarios:,}".replace(',', '.'),
                 "color_class": "kpi-secondary",
                 "tooltip": TOOLTIPS_DESCRIPTIVOS.get("BENEFICIARIOS EL", "")
             },
             {
                 "title": "ZONA FAVORECIDA",
-                "value": f"{beneficiarios_zona_favorecida:,}".replace(',', '.'),
+                "value_form": f"{beneficiarios_zona_favorecida:,}".replace(',', '.'),
                 "color_class": "kpi-accent-3",
                 "tooltip": TOOLTIPS_DESCRIPTIVOS.get("ZONA FAVORECIDA", "")
             },
             {
                 "title": "BENEFICIARIOS CTI",
-                "value": f"{total_beneficiarios_cti:,}".replace(',', '.'),
+                "value_form": f"{total_beneficiarios_cti:,}".replace(',', '.'),
                 "color_class": "kpi-accent-4",
                 "tooltip": TOOLTIPS_DESCRIPTIVOS.get("BENEFICIARIOS CTI", "")
             }
@@ -1464,14 +1458,18 @@ def show_empleo_dashboard(data, dates, is_development=False):
                     total_row_censal = pd.DataFrame({
                         "DEPARTAMENTO": ["Promedio General"],
                         "LOCALIDAD": [""],
-                        "Tasa de Actividad": [df_tabla_censal["Tasa de Actividad"].mean().round(2)],
-                        "Tasa de Empleo": [df_tabla_censal["Tasa de Empleo"].mean().round(2)],
-                        "Tasa de desocupación": [df_tabla_censal["Tasa de desocupación"].mean().round(2)]
+                        "Tasa de Actividad": [round(df_tabla_censal["Tasa de Actividad"].mean(), 2)],
+                        "Tasa de Empleo": [round(df_tabla_censal["Tasa de Empleo"].mean(), 2)],
+                        "Tasa de desocupación": [round(df_tabla_censal["Tasa de desocupación"].mean(), 2)]
                     })
                     df_tabla_censal_tot = pd.concat([df_tabla_censal, total_row_censal], ignore_index=True)
                 else:
                     df_tabla_censal_tot = df_tabla_censal
 
+                # Forzar columnas a numéricas para evitar errores de formato
+                for col in ["Tasa de Actividad", "Tasa de Empleo", "Tasa de desocupación"]:
+                    if col in df_tabla_censal_tot.columns:
+                        df_tabla_censal_tot[col] = pd.to_numeric(df_tabla_censal_tot[col], errors='coerce')
                 df_tabla_censal_tot = df_tabla_censal_tot.fillna('—')
                 st.dataframe(
                         df_tabla_censal_tot.style.format(

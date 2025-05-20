@@ -179,6 +179,7 @@ def load_and_preprocess_data(data):
         has_geojson_data = geojson_data is not None 
 
         # Agregar columna de CATEGORIA a df_recupero si está disponible
+        
         if has_recupero_data and 'N_ESTADO_PRESTAMO' in df_recupero.columns:
             df_recupero['CATEGORIA'] = 'Otros'
             for categoria, estados in ESTADO_CATEGORIAS.items():
@@ -1110,7 +1111,7 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
     st.markdown("<hr style='border: 2px solid #cccccc;'>", unsafe_allow_html=True)
             
     # Tabla de estados de préstamos agrupados
-    st.subheader("Estados de Préstamos por Categoría", 
+    st.subheader("Estados de Préstamos por Localidad y Categoría de Estados", 
                  help="Muestra el conteo de préstamos agrupados por categorías de estado, "
                       "basado en los datos filtrados. Las categorías agrupa estados del sistema. No considera formularios de baja ni lineas antiguas históricas.")
     try: #Tabla de estados de préstamos agrupados por categoría

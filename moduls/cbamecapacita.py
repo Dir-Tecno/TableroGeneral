@@ -91,24 +91,32 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
     cursos_activos = df_cursos["ID_PLANIFICACION"].nunique() if df_cursos is not None else 0
     total_capacitaciones = df_postulantes["ID_CAPACITACION"].nunique() if df_postulantes is not None and "ID_CAPACITACION" in df_postulantes.columns else 0
 
+    def safe_format(val):
+        try:
+            if val is None or (isinstance(val, float) and pd.isna(val)):
+                return "0"
+            return f"{int(val):,}"
+        except Exception:
+            return str(val) if val is not None else "0"
+
     kpi_data = [
         {
             "title": "Postulantes",
-            "value": f"{total_postulantes:,}",
+            "value_form": f"{total_postulantes:,}".replace(',', '.'),
             "color_class": "kpi-primary",
             "delta": "",
             "delta_color": "#d4f7d4"
         },
         {
             "title": "Cursos Activos",
-            "value": f"{cursos_activos:,}",
+            "value_form": f"{cursos_activos:,}".replace(',', '.'),
             "color_class": "kpi-secondary",
             "delta": "",
             "delta_color": "#d4f7d4"
         },
         {
             "title": "Capacitaciones Elegidas",
-            "value": f"{total_capacitaciones:,}",
+            "value_form": f"{total_capacitaciones:,}".replace(',', '.'),
             "color_class": "kpi-accent-2",
             "delta": "",
             "delta_color": "#d4f7d4"
