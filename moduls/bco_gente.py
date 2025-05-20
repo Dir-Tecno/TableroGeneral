@@ -1137,6 +1137,7 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
             else:
                 lineas_credito = []
             
+            
             # Inicializar selected_lineas en session_state si no existe
             if 'selected_lineas_credito' not in st.session_state:
                 st.session_state.selected_lineas_credito = lineas_credito
