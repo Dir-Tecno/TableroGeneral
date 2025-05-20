@@ -1285,24 +1285,13 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
                 mask = df_descarga['N_ESTADO_PRESTAMO'].isin(estados)
                 df_descarga.loc[mask, 'CATEGORIA'] = categoria
             # Agrupar para obtener el conteo y la suma de montos por las columnas extra y categoría
-            # Agrupar para obtener el conteo y la suma de montos por las columnas extra y categoría
             df_descarga_grouped = df_descarga.groupby(
                 ['N_DEPARTAMENTO', 'N_LOCALIDAD'] + columnas_extra + ['CATEGORIA']
             ).agg({
                 'NRO_SOLICITUD': 'count',
                 'MONTO_OTORGADO': 'sum'
             }).reset_index()
-
-            # Renombrar las columnas para mayor claridad
-            df_descarga_grouped = df_descarga_grouped.rename(columns={
-                'NRO_SOLICITUD': 'Cantidad',
-                'MONTO_OTORGADO': 'Monto Total'
-            })
-            ).agg({
-                'NRO_SOLICITUD': 'count',
-                'MONTO_OTORGADO': 'sum'
-            }).reset_index()
-
+            
             # Renombrar las columnas para mayor claridad
             df_descarga_grouped = df_descarga_grouped.rename(columns={
                 'NRO_SOLICITUD': 'Cantidad',
