@@ -20,58 +20,6 @@ from io import StringIO
 import os
 
 
-def show_empleo_dashboard(data, dates, is_development=False):
-    """
-    Muestra el dashboard de Programas de Empleo.
-    
-    Args:
-        data: Diccionario de dataframes.
-        dates: Diccionario con fechas de actualización.
-        is_development (bool): True si se está en modo desarrollo.
-    """
-    if data is None:
-        st.error("No se pudieron cargar los datos de Programas de Empleo.")
-        return
-
-    # Mostrar columnas en modo desarrollo (similar a otros módulos)
-    if is_development:
-        st.markdown("***")
-        st.caption("Información de Desarrollo (Columnas de DataFrames - Programas de Empleo)")
-        if isinstance(data, dict):
-            for name, df_item in data.items():
-                if df_item is not None and hasattr(df_item, 'empty') and not df_item.empty:
-                    with st.expander(f"Columnas en: `{name}`"):
-                        st.write(f"Nombre del DataFrame: {name}")
-                        st.write(f"Tipos de datos: {df_item.dtypes}")
-                        st.write("Primeras 5 filas:")
-                        df_head_display = df_item.head()
-                        if 'geometry' in df_head_display.columns:
-                            st.dataframe(df_head_display.drop(columns=['geometry']))
-                        else:
-                            st.dataframe(df_head_display)
-                        st.write(f"Total de registros: {len(df_item)}")
-                elif df_item is None:
-                    st.warning(f"DataFrame '{name}' no cargado (es None).")
-                else: # df_item is empty
-                    st.info(f"DataFrame '{name}' está vacío.")
-        else:
-            st.warning("Formato de datos inesperado para Programas de Empleo (se esperaba un diccionario de DataFrames).")
-        st.markdown("***")
-
-    # Cargar y preprocesar datos
-    df_inscriptos, df_empresas, df_poblacion, geojson_data, has_fichas, has_empresas, has_poblacion, has_geojson = load_and_preprocess_data(data, dates)
-
-    # Verificar que los datos de inscripciones se hayan cargado
-    if not has_fichas or df_inscriptos is None or df_inscriptos.empty:
-        st.error("No se pudieron cargar o procesar los datos de inscripciones para el dashboard de Empleo.")
-        return
-
-    # Renderizar filtros y obtener el DataFrame filtrado
-    df_filtered, selected_dpto, selected_loc, all_dpto_option, all_loc_option = render_filters(df_inscriptos, key_prefix="empleo")
-
-    # Renderizar el resto del dashboard
-    render_dashboard(df_filtered, df_empresas, df_poblacion, geojson_data, has_empresas, has_geojson)
-
 def enviar_a_slack(mensaje, valoracion):
     """
     Envía un mensaje a Slack con la valoración del usuario.
@@ -135,7 +83,8 @@ def calculate_cupo(cantidad_empleados, empleador, adherido):
     
     return 0
 
-def load_and_preprocess_data(data, dates=None):
+
+def load_and_preprocess_data(data, dates=None, is_development=False):
     """
     Carga y preprocesa los datos necesarios para el dashboard.
     
@@ -208,12 +157,12 @@ def load_and_preprocess_data(data, dates=None):
             return None, None, None, None, False, False, False, False
         
         # Limpiar separador de miles en los DataFrames principales
-        df_empresas = clean_thousand_separator(df_empresas)
-        df_inscriptos_raw = clean_thousand_separator(df_inscriptos_raw)
-        df_poblacion = clean_thousand_separator(df_poblacion)
+        #df_empresas = clean_thousand_separator(df_empresas)
+        #df_inscriptos_raw = clean_thousand_separator(df_inscriptos_raw)
+        #df_poblacion = clean_thousand_separator(df_poblacion)
         
         # Cargar y limpiar datos censales (si existen)
-        df_censales = data.get('LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt')
+        df_censales = data.get('LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - DATOS_CENSALES.txt')
         if df_censales is not None and not df_censales.empty:
             # Limpiar caracteres especiales en columnas numéricas
             numeric_cols = ['Tasa de Actividad', 'Tasa de Empleo', 'Tasa de desocupación']
@@ -226,7 +175,7 @@ def load_and_preprocess_data(data, dates=None):
                     # Convertir a numérico
                     df_censales[col] = pd.to_numeric(df_censales[col], errors='coerce')
             # Actualizar el dataset en el diccionario de datos
-            data['LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt'] = df_censales
+            data['LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - DATOS_CENSALES.txt'] = df_censales
 
         # Filtrar para excluir el estado "ADHERIDO"
         df_inscriptos = df_inscriptos_raw[df_inscriptos_raw['N_ESTADO_FICHA'] != "ADHERIDO"].copy()
@@ -284,9 +233,15 @@ def load_and_preprocess_data(data, dates=None):
             
             if latest_date:
                 latest_date = pd.to_datetime(latest_date)
+                try:
+                    from zoneinfo import ZoneInfo
+                    latest_date = latest_date.tz_localize('UTC').tz_convert(ZoneInfo('America/Argentina/Buenos_Aires'))
+                except Exception:
+                    # Fallback si zoneinfo no está disponible
+                    latest_date = latest_date - pd.Timedelta(hours=3)
                 st.markdown(f"""
                     <div style="background-color:#e9ecef; padding:10px; border-radius:5px; margin-bottom:20px; font-size:0.9em;">
-                        <i class="fas fa-sync-alt"></i> <strong>Última actualización:</strong> {latest_date.strftime('%d/%m/%Y')}
+                        <i class="fas fa-sync-alt"></i> <strong>Última actualización:</strong> {latest_date.strftime('%d/%m/%Y %H:%M')}
                     </div>
                 """, unsafe_allow_html=True)
         
@@ -311,6 +266,7 @@ def load_and_preprocess_data(data, dates=None):
         has_fichas = True  # Si llegamos hasta aquí, tenemos datos de fichas
         
         # Preprocesar el dataframe de circuitos electorales si está disponible
+        df_inscriptos_cruzado = None  # Para debug visual
         if has_circuitos:
             try:
                 # Asegurarse de que las columnas estén correctamente tipadas
@@ -318,32 +274,34 @@ def load_and_preprocess_data(data, dates=None):
                     df_circuitos['ID_LOCALIDAD'] = pd.to_numeric(df_circuitos['ID_LOCALIDAD'], errors='coerce')
                 
                 # Limpiar datos si es necesario
-                df_circuitos = clean_thousand_separator(df_circuitos)
-                df_circuitos = convert_decimal_separator(df_circuitos)
+                #df_circuitos = clean_thousand_separator(df_circuitos)
+                #df_circuitos = convert_decimal_separator(df_circuitos)
                 
                 # Si hay datos de inscriptos y circuitos, intentar cruzarlos
                 if df_inscriptos is not None and not df_inscriptos.empty:
-                    # Verificar columnas comunes para el cruce
-                    common_cols = set(df_inscriptos.columns) & set(df_circuitos.columns)
-                    join_cols = [col for col in ['ID_LOCALIDAD', 'COD_LOCALIDAD'] if col in common_cols]
-                    
-                    if join_cols:
-                        # Realizar el cruce si hay columnas comunes
-                        join_col = join_cols[0]  # Usar la primera columna común encontrada
+                    if 'ID_LOCALIDAD_GOB' in df_inscriptos.columns and 'ID_LOCALIDAD' in df_circuitos.columns:
                         df_inscriptos = pd.merge(
                             df_inscriptos,
                             df_circuitos,
-                            on=join_col,
+                            left_on='ID_LOCALIDAD_GOB',
+                            right_on='ID_LOCALIDAD',
                             how='left',
                             suffixes=('', '_circuito')
                         )
-                        st.success(f"Datos de circuitos electorales integrados correctamente usando la columna {join_col}")
-                    else:
-                        st.warning("No se encontraron columnas comunes para cruzar los datos de inscriptos con circuitos electorales")
+                        st.success("Datos de circuitos electorales integrados correctamente usando 'ID_LOCALIDAD_GOB' (inscriptos) y 'ID_LOCALIDAD' (circuitos)")
+                    # Guardar copia para debug visual si estamos en modo desarrollo
+                    df_inscriptos_cruzado = df_inscriptos.copy()
+
             except Exception as e:
                 st.error(f"Error al procesar datos de circuitos electorales: {str(e)}")
                 has_circuitos = False
         
+        # Mostrar df_inscriptos cruzado solo en modo desarrollo
+        if is_development:
+            if df_inscriptos_cruzado is not None:
+                with st.expander('🔍 Visualización DEBUG: df_inscriptos cruzado (post-merge) NO RETORNA DE LA FUNCION DE CARGA', expanded=False):
+                    st.dataframe(df_inscriptos_cruzado.head(50))
+                    st.write(f"Filas: {df_inscriptos_cruzado.shape[0]}, Columnas: {df_inscriptos_cruzado.shape[1]}")
         # Retornar los dataframes procesados y los flags de disponibilidad
         return df_inscriptos_sin_adherido, df_empresas, df_poblacion, geojson_data, has_fichas, has_empresas, has_poblacion, has_geojson
 
@@ -963,12 +921,6 @@ def show_companies(df_empresas, geojson_data):
         # Extraer todos los programas únicos de la columna ADHERIDO
         todos_programas = df_display['ADHERIDO'].str.split(', ').explode().dropna().unique()
         programas_unicos = sorted(todos_programas)
-
-
-            
-
-            
-
     st.markdown("<hr style='border: 1px solid #e0e0e0; margin: 20px 0;'>", unsafe_allow_html=True)
     
     # Añadir filtros en la pestaña de empresas
@@ -1154,7 +1106,7 @@ def show_companies(df_empresas, geojson_data):
                 df_perfil_demanda.groupby('NOMBRE_TIPO_EMPRESA')['CUIT'].nunique()
                 .reset_index()
                 .rename(columns={'NOMBRE_TIPO_EMPRESA': 'Tipo de Empresa', 'CUIT': 'Cantidad'})
-)
+                )
                 fig_pie = px.pie(tipo_empresa_count, names='Tipo de Empresa', values='Cantidad',
                                  title='Distribución por Tipo de Empresa',
                                  color_discrete_sequence=px.colors.qualitative.Pastel)
@@ -1403,13 +1355,37 @@ def show_empleo_dashboard(data, dates, is_development=False):
         dates: Diccionario con las fechas de actualización
         is_development: Booleano que indica si estamos en modo desarrollo
     """
+    if data is None:
+        st.error("No se pudieron cargar los datos de Programas de Empleo.")
+        return
+    if is_development:
+        st.markdown("***")
+        st.caption("Información de Desarrollo (Columnas de DataFrames - Programas de Empleo)")
+        if isinstance(data, dict):
+            for name, df_item in data.items():
+                if df_item is not None and hasattr(df_item, 'empty') and not df_item.empty:
+                    with st.expander(f"Columnas en: `{name}`"):
+                        st.write(f"Nombre del DataFrame: {name}")
+                        st.write(f"Tipos de datos: {df_item.dtypes}")
+                        st.write("Primeras 5 filas:")
+                        df_head_display = df_item.head()
+                        if 'geometry' in df_head_display.columns:
+                            st.dataframe(df_head_display.drop(columns=['geometry']))
+                        else:
+                            st.dataframe(df_head_display)
+                        st.write(f"Total de registros: {len(df_item)}")
+                elif df_item is None:
+                    st.warning(f"DataFrame '{name}' no cargado (es None).")
+                else: # df_item is empty
+                    st.info(f"DataFrame '{name}' está vacío.")
+        else:
+            st.warning("Formato de datos inesperado para Programas de Empleo (se esperaba un diccionario de DataFrames).")
+        st.markdown("***")
     try:
         # Cargar y preprocesar los datos
-        df_inscriptos, df_empresas, df_poblacion, geojson_data, has_fichas, has_empresas, has_poblacion, has_geojson = load_and_preprocess_data(data, dates)
+        df_inscriptos, df_empresas, df_poblacion, geojson_data, has_fichas, has_empresas, has_poblacion, has_geojson = load_and_preprocess_data(data, dates, is_development)
+
         
-        if df_inscriptos is None or df_inscriptos.empty:
-            st.error("No se pudieron cargar los datos de inscripciones necesarios para el dashboard.")
-            return
         
         # Aplicar filtros
         df_filtered, selected_dpto, selected_loc, all_dpto_option, all_loc_option = render_filters(df_inscriptos)
@@ -1426,57 +1402,38 @@ def show_empleo_dashboard(data, dates, is_development=False):
             **¿Cómo se calcula la tasa de desocupación?**  
             La tasa de desempleo se calcula dividiendo el número de personas desocupadas por la Población Económicamente Activa (PEA) y multiplicando por 100. Fuente: INDEC.
             """)
-            df_censales = data.get('LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt')
+            df_censales = data.get('LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - DATOS_CENSALES.txt')
             if df_censales is not None and not getattr(df_censales, 'empty', True):
                 col1, col2 = st.columns(2)
                 with col1:
-                    departamentos_censales = sorted(df_censales['DEPARTAMENTO'].dropna().unique())
+                    departamentos_censales = sorted(df_censales['CODIGOS.Departamento'].dropna().unique())
                     depto_sel_censal = st.selectbox("Filtrar por Departamento (Censal):", options=["Todos"] + departamentos_censales, key="censo_depto")
                 with col2:
                     if depto_sel_censal != "Todos":
-                        df_censales_filtrado_loc = df_censales[df_censales['DEPARTAMENTO'] == depto_sel_censal]
+                        df_censales_filtrado_loc = df_censales[df_censales['CODIGOS.Departamento'] == depto_sel_censal]
                     else:
                         df_censales_filtrado_loc = df_censales
                     
-                    localidades_censales = sorted(df_censales_filtrado_loc['LOCALIDAD'].dropna().unique())
+                    localidades_censales = sorted(df_censales_filtrado_loc['CODIGOS.Localidad'].dropna().unique())
                     loc_sel_censal = st.selectbox("Filtrar por Localidad (Censal):", options=["Todas"] + localidades_censales, key="censo_loc")
                 
                 df_censales_display = df_censales.copy()
                 if depto_sel_censal != "Todos":
-                    df_censales_display = df_censales_display[df_censales_display['DEPARTAMENTO'] == depto_sel_censal]
+                    df_censales_display = df_censales_display[df_censales_display['CODIGOS.Departamento'] == depto_sel_censal]
                 if loc_sel_censal != "Todas":
-                    df_censales_display = df_censales_display[df_censales_display['LOCALIDAD'] == loc_sel_censal]
+                    df_censales_display = df_censales_display[df_censales_display['CODIGOS.Localidad'] == loc_sel_censal]
                 
-                cols_tabla_censal = ["DEPARTAMENTO", "LOCALIDAD", "Tasa de Actividad", "Tasa de Empleo", "Tasa de desocupación"]
+                cols_tabla_censal = ["CODIGOS.Departamento", "CODIGOS.Localidad", "Tasa de Actividad", "Tasa de Empleo", "Tasa de desocupación"]
                 df_tabla_censal = df_censales_display[cols_tabla_censal].copy()
                 
-                for col in ["Tasa de Actividad", "Tasa de Empleo", "Tasa de desocupación"]:
-                    if col in df_tabla_censal.columns:
-                        df_tabla_censal[col] = pd.to_numeric(df_tabla_censal[col], errors='coerce').round(2)
                 
-                if not df_tabla_censal.empty:
-                    total_row_censal = pd.DataFrame({
-                        "DEPARTAMENTO": ["Promedio General"],
-                        "LOCALIDAD": [""],
-                        "Tasa de Actividad": [round(df_tabla_censal["Tasa de Actividad"].mean(), 2)],
-                        "Tasa de Empleo": [round(df_tabla_censal["Tasa de Empleo"].mean(), 2)],
-                        "Tasa de desocupación": [round(df_tabla_censal["Tasa de desocupación"].mean(), 2)]
-                    })
-                    df_tabla_censal_tot = pd.concat([df_tabla_censal, total_row_censal], ignore_index=True)
-                else:
-                    df_tabla_censal_tot = df_tabla_censal
+                # Solo mostrar los datos originales, sin fila de totales
+                df_tabla_censal_tot = df_tabla_censal.copy()
 
-                # Forzar columnas a numéricas para evitar errores de formato
-                for col in ["Tasa de Actividad", "Tasa de Empleo", "Tasa de desocupación"]:
-                    if col in df_tabla_censal_tot.columns:
-                        df_tabla_censal_tot[col] = pd.to_numeric(df_tabla_censal_tot[col], errors='coerce')
-                df_tabla_censal_tot = df_tabla_censal_tot.fillna('—')
                 st.dataframe(
-                        df_tabla_censal_tot.style.format(
-                            {"Tasa de Actividad": "{:.2f}", "Tasa de Empleo": "{:.2f}", "Tasa de desocupación": "{:.2f}"},
-                            na_rep='—'
-                        )
-                    )
+                    df_tabla_censal_tot,
+                    use_container_width=True
+                )
             else:
                 st.warning("Datos censales no disponibles o vacíos.") 
 
@@ -1485,8 +1442,7 @@ def show_empleo_dashboard(data, dates, is_development=False):
                 df_ppp_excel = data.get('ppp_jesi.xlsx')
                 df_mas26_excel = data.get('mas26_jesi.xlsx')
                 
-                if df_ppp_excel is not None and not df_ppp_excel.empty and \
-                   df_mas26_excel is not None and not df_mas26_excel.empty:
+                if df_ppp_excel is not None and not df_ppp_excel.empty and df_mas26_excel is not None and not df_mas26_excel.empty:
 
                     ppp_cols_esperadas = ['Población de 15 a 24 años', 'TOTAL PEA', 'OCUPADA', 'DESOCUPADA']
                     mas26_cols_esperadas = ['Población mayor de 25 años', 'TOTAL PEA', 'OCUPADA', 'DESOCUPADA']
