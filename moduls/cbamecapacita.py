@@ -28,6 +28,28 @@ def load_and_preprocess_data(data):
     df_postulantes = clean_thousand_separator(df_postulantes)
     df_cursos = clean_thousand_separator(df_cursos)
 
+    # Cruce solicitado: agregar CUIL de postulantes a cursos directamente en df_cursos
+    if df_cursos is not None and df_postulantes is not None:
+        # Asegurar que ID_CERTIFICACION e ID_CAPACITACION sean enteros si existen
+        if 'ID_CAPACITACION' in df_postulantes.columns:
+            df_postulantes['ID_CAPACITACION'] = pd.to_numeric(df_postulantes['ID_CAPACITACION'], errors='coerce').fillna(0).astype(int)
+        if 'ID_CURSO' in df_cursos.columns and 'ID_CAPACITACION' in df_postulantes.columns and 'CUIL' in df_postulantes.columns:
+            # Agrupar por ID_CAPACITACION y contar CUILs no nulos
+            cuil_count = (
+                df_postulantes.groupby('ID_CAPACITACION')['CUIL']
+                .apply(lambda x: x.notnull().sum())
+                .reset_index()
+                .rename(columns={'CUIL': 'POSTULACIONES'})
+            )
+            df_cursos = df_cursos.merge(
+                cuil_count,
+                how='left',
+                left_on='ID_CURSO',
+                right_on='ID_CAPACITACION'
+            )
+        if 'POSTULACIONES' in df_cursos.columns:
+            df_cursos['POSTULACIONES'] = pd.to_numeric(df_cursos['POSTULACIONES'], errors='coerce').fillna(0).astype(int)
+    
     return df_postulantes, df_cursos
 
 def show_cba_capacita_dashboard(data, dates, is_development=False):
@@ -77,20 +99,6 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
     # --- Usar función de carga y preprocesamiento ---
     df_postulantes, df_cursos = load_and_preprocess_data(data)
 
-    # Marcador de posición para la implementación real
-    st.info("Dashboard de CBA ME CAPACITA en desarrollo.")
-    
-    # Mostrar información de actualización de datos
-    if dates and any(dates.values()):
-        latest_date = max([d for d in dates.values() if d is not None], default=None)
-        if latest_date:
-            st.caption(f"Última actualización de datos: {latest_date}")
-    
-    # KPIs reales usando VT_INSCRIPCIONES_PRG129.parquet (postulantes) y VT_CURSOS_SEDES_GEO.parquet (cursos)
-    total_postulantes = df_postulantes["CUIL"].nunique() if df_postulantes is not None else 0
-    cursos_activos = df_cursos["ID_PLANIFICACION"].nunique() if df_cursos is not None else 0
-    total_capacitaciones = df_postulantes["ID_CAPACITACION"].nunique() if df_postulantes is not None and "ID_CAPACITACION" in df_postulantes.columns else 0
-
     def safe_format(val):
         try:
             if val is None or (isinstance(val, float) and pd.isna(val)):
@@ -98,6 +106,11 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
             return f"{int(val):,}"
         except Exception:
             return str(val) if val is not None else "0"
+
+    # KPIs reales usando VT_INSCRIPCIONES_PRG129.parquet (postulantes) y VT_CURSOS_SEDES_GEO.parquet (cursos)
+    total_postulantes = df_postulantes["CUIL"].nunique() if df_postulantes is not None else 0
+    cursos_activos = df_cursos["ID_PLANIFICACION"].nunique() if df_cursos is not None else 0
+    total_capacitaciones = df_postulantes["ID_CAPACITACION"].nunique() if df_postulantes is not None and "ID_CAPACITACION" in df_postulantes.columns else 0
 
     kpi_data = [
         {
@@ -128,26 +141,86 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
     tab1, tab2 = st.tabs(["Alumnos", "Cursos"])
     
     with tab1:
-        st.subheader("Análisis de Alumnos")
-        st.write("A la espera de postulaciones y participantes...")
+        st.subheader("Análisis de Postulantes")
+        if df_postulantes is not None and not df_postulantes.empty:
+            # Filtros interactivos
+            col1, col2 = st.columns(2)
+            with col1:
+                departamentos = sorted(df_postulantes['N_DEPARTAMENTO'].dropna().unique())
+                selected_dpto = st.selectbox("Departamento:", ["Todos"] + departamentos)
+            with col2:
+                localidades = sorted(df_postulantes['N_LOCALIDAD'].dropna().unique())
+                selected_loc = st.selectbox("Localidad:", ["Todos"] + localidades)
+            df_filtered = df_postulantes.copy()
+            if selected_dpto != "Todos":
+                df_filtered = df_filtered[df_filtered['N_DEPARTAMENTO'] == selected_dpto]
+            if selected_loc != "Todos":
+                df_filtered = df_filtered[df_filtered['N_LOCALIDAD'] == selected_loc]
+            # 1. Cantidad de Postulaciones por N_DEPARTAMENTO y N_LOCALIDAD
+            st.subheader("Cantidad de Postulaciones por Departamento y Localidad")
+            df_group = df_filtered.groupby(['N_DEPARTAMENTO','N_LOCALIDAD']).size().reset_index(name='Cantidad')
+            st.dataframe(df_group, use_container_width=True, hide_index=True)
+            # 2. Distribución por rangos de edad
+            st.subheader("Distribución por Rangos de Edad")
+            today = pd.Timestamp.today()
+            if 'FEC_NACIMIENTO' in df_filtered.columns:
+                df_filtered = df_filtered.copy()
+                df_filtered['FEC_NACIMIENTO'] = pd.to_datetime(df_filtered['FEC_NACIMIENTO'], errors='coerce')
+                df_filtered['EDAD'] = ((today - df_filtered['FEC_NACIMIENTO']).dt.days // 365).astype('Int64')
+                bins = [0, 17, 24, 34, 44, 54, 64, 120]
+                labels = ['<18','18-24','25-34','35-44','45-54','55-64','65+']
+                df_filtered['RANGO_EDAD'] = pd.cut(df_filtered['EDAD'], bins=bins, labels=labels, right=True)
+                edad_group = df_filtered['RANGO_EDAD'].value_counts().sort_index().reset_index()
+                edad_group.columns = ['Rango de Edad','Cantidad']
+                fig_edad = px.bar(edad_group, x='Rango de Edad', y='Cantidad', title='Distribución por Rango de Edad', text_auto=True)
+                st.plotly_chart(fig_edad, use_container_width=True)
+            else:
+                st.info("No se encontró la columna FEC_NACIMIENTO para calcular edades.")
+            # 3. TOP 10 de CAPACITACION elegida
+            st.subheader("Top 10 de Capacitaciones Elegidas")
+            if 'CAPACITACION' in df_filtered.columns:
+                top_cap = df_filtered['CAPACITACION'].value_counts().head(10).reset_index()
+                top_cap.columns = ['Capacitación','Cantidad']
+                fig_topcap = px.bar(top_cap, x='Capacitación', y='Cantidad', title='Top 10 de Capacitaciones', text_auto=True)
+                st.plotly_chart(fig_topcap, use_container_width=True)
+            else:
+                st.info("No se encontró la columna CAPACITACION para el top de capacitaciones.")
+            # 4. Dos tortas: EDUCACION y TIPO_TRABAJO
+            st.subheader("Distribución por Nivel Educativo y Tipo de Trabajo")
+            cols = st.columns(2)
+            if 'EDUCACION' in df_filtered.columns:
+                edu_group = df_filtered['EDUCACION'].value_counts().reset_index()
+                edu_group.columns = ['Educación','Cantidad']
+                fig_edu = px.pie(edu_group, names='Educación', values='Cantidad', title='Nivel Educativo')
+                cols[0].plotly_chart(fig_edu, use_container_width=True)
+            else:
+                cols[0].info("No se encontró la columna EDUCACION.")
+            if 'TIPO_TRABAJO' in df_filtered.columns:
+                tipo_group = df_filtered['TIPO_TRABAJO'].value_counts().reset_index()
+                tipo_group.columns = ['Tipo de Trabajo','Cantidad']
+                fig_tipo = px.pie(tipo_group, names='Tipo de Trabajo', values='Cantidad', title='Tipo de Trabajo')
+                cols[1].plotly_chart(fig_tipo, use_container_width=True)
+            else:
+                cols[1].info("No se encontró la columna TIPO_TRABAJO.")
+        else:
+            st.warning("No hay datos de postulantes disponibles para mostrar reportes de alumnos.")
+    
+    # Mostrar información de actualización de datos
+    if dates and any(dates.values()):
+        latest_date = max([d for d in dates.values() if d is not None], default=None)
+        if latest_date:
+            st.caption(f"Última actualización de datos: {latest_date}")
+    
+    
     
     with tab2:
         st.markdown("## Sector Productivos por Departamento")
         # Botón para descargar el Excel con columnas seleccionadas
-        df_cursos = None
-        if isinstance(data, dict):
-            df_cursos = data.get("VT_CURSOS_SEDES_GEO.parquet")
-        elif isinstance(data, list):
-            for df in data:
-                if "N_SEDE" in df.columns and "LATITUD" in df.columns:
-                    df_cursos = df
-                    break
         # Mostrar botón solo si existe el DataFrame
         if df_cursos is not None:
             import io
-            import pandas as pd
             columnas_exportar = [
-                "SEPE_CURSOS.FC_OBTENER_NOMBRE_INSTITUCION(INS.CUIT,INS.CUE)",
+                "N_INSTITUCION",
                 "N_CURSO",
                 "HORA_INICIO",
                 "HORA_FIN",
@@ -155,7 +228,8 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                 "N_SEDE",
                 "CONVENIO_MUNICIPIO_COMUNA",
                 "N_DEPARTAMENTO",
-                "N_LOCALIDAD"
+                "N_LOCALIDAD",
+                "POSTULACIONES"
             ]
             # Filtrar solo columnas existentes
             columnas_existentes = [col for col in columnas_exportar if col in df_cursos.columns]
@@ -191,7 +265,10 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
             # Agrupar y contar para tabla (incluye ID_DEPARTAMENTO para relación con geojson)
             df_agrupado_tabla = df_cursos.groupby([
                 "ID_DEPARTAMENTO", "N_DEPARTAMENTO", "N_SECTOR_PRODUCTIVO"
-            ]).size().reset_index(name="Cantidad")
+            ]).agg(
+                Cantidad=("N_SECTOR_PRODUCTIVO", "size"),
+                POSTULACIONES =("POSTULACIONES","sum")
+            ).reset_index()
 
             # --- NUEVO MAPA: Choropleth por Departamento ---
             if geojson_departamentos is not None and 'ID_DEPARTAMENTO' in df_agrupado_tabla.columns:
@@ -203,7 +280,6 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                 col_map_depto, col_tabla_depto = st.columns([2, 3])
                 with col_map_depto:
                     st.markdown("### Mapa por Departamento (Sectores Productivos)")
-                    import plotly.express as px
                     fig_choro = px.choropleth_mapbox(
                         choropleth_data,
                         geojson=geojson_departamentos,
@@ -225,7 +301,11 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                     st.plotly_chart(fig_choro, use_container_width=True)
                 with col_tabla_depto:
                     st.markdown("### Tabla Sector Productivo por Departamento")
-                    st.dataframe(df_agrupado_tabla[["N_DEPARTAMENTO", "N_SECTOR_PRODUCTIVO", "Cantidad"]], use_container_width=True, hide_index=True)
+                    st.dataframe(
+                        df_agrupado_tabla[["N_DEPARTAMENTO", "N_SECTOR_PRODUCTIVO", "Cantidad", "POSTULACIONES"]],
+                        use_container_width=True,
+                        hide_index=True
+                    )
             else:
                 st.dataframe(df_agrupado_tabla[["N_DEPARTAMENTO", "N_SECTOR_PRODUCTIVO", "Cantidad"]], use_container_width=True, hide_index=True)
 
