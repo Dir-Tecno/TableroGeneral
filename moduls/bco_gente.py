@@ -1087,8 +1087,8 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
                 hoy = datetime.now().date()
                 df_edades['EDAD'] = df_edades['FEC_NACIMIENTO'].apply(lambda x: hoy.year - x.year - ((hoy.month, hoy.day) < (x.month, x.day)) if pd.notnull(x) else None)
                 # Definir rangos de edad
-                bins = [0, 17, 25, 35, 45, 55, 65, 200]
-                labels = ['<18', '18-25', '26-35', '36-45', '46-55', '56-65', '65+']
+                bins = [0, 17, 29, 39, 49, 59, 69, 200]
+                labels = ['<18', '18-29', '30-39', '40-49', '50-59', '60-69','70+']
                 df_edades['RANGO_EDAD'] = pd.cut(df_edades['EDAD'], bins=bins, labels=labels, right=True)
                 conteo_edades = df_edades['RANGO_EDAD'].value_counts(sort=False).reset_index()
                 conteo_edades.columns = ['Rango de Edad', 'Cantidad']

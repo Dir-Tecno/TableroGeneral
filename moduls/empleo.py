@@ -402,12 +402,13 @@ def render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has
     """
     with st.spinner("Generando visualizaciones..."):
         # Calcular KPIs importantes antes de aplicar filtros
-        total_beneficiarios = df_inscriptos[df_inscriptos['N_ESTADO_FICHA'] == "BENEFICIARIO"].shape[0]
+        total_beneficiarios = df_inscriptos[df_inscriptos['BEN_N_ESTADO'].isin(["BENEFICIARIO RETENIDO", "ACTIVO", "BAJA PEDIDO POR EMPRESA"])].shape[0]
         total_beneficiarios_cti = df_inscriptos[df_inscriptos['N_ESTADO_FICHA'] == "BENEFICIARIO- CTI"].shape[0]
         total_general = total_beneficiarios + total_beneficiarios_cti
         
         # Calcular beneficiarios por zona
-        beneficiarios_zona_favorecida = df_inscriptos[(df_inscriptos['N_ESTADO_FICHA'].isin(["BENEFICIARIO", "BENEFICIARIO- CTI"])) & 
+        beneficiarios_zona_favorecida = df_inscriptos[((df_inscriptos['N_ESTADO_FICHA'].isin(["BENEFICIARIO- CTI"])) | 
+                                        (df_inscriptos['BEN_N_ESTADO'].isin(["BENEFICIARIO RETENIDO", "ACTIVO", "BAJA PEDIDO POR EMPRESA"])))&
                                         (df_inscriptos['ZONA'] == 'ZONA FAVORECIDA')].shape[0]
         
         # Mostrar KPIs en la parte superior
@@ -417,7 +418,7 @@ def render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has
         kpi_data = [
             {
                 "title": "BENEFICIARIOS TOTALES",
-                "value_form": f"{total_beneficiarios:,}".replace(',', '.'),
+                "value_form": f"{total_general:,}".replace(',', '.'),
                 "color_class": "kpi-primary",
                 "tooltip": TOOLTIPS_DESCRIPTIVOS.get("BENEFICIARIOS TOTALES", "")
             },

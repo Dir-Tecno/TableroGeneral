@@ -167,12 +167,12 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                 df_filtered = df_filtered.copy()
                 df_filtered['FEC_NACIMIENTO'] = pd.to_datetime(df_filtered['FEC_NACIMIENTO'], errors='coerce')
                 df_filtered['EDAD'] = ((today - df_filtered['FEC_NACIMIENTO']).dt.days // 365).astype('Int64')
-                bins = [0, 17, 24, 34, 44, 54, 64, 120]
-                labels = ['<18','18-24','25-34','35-44','45-54','55-64','65+']
+                bins = [0, 17, 29, 39, 49, 59, 69, 200]
+                labels = ['<18', '18-29', '30-39', '40-49', '50-59', '60-69','70+']
                 df_filtered['RANGO_EDAD'] = pd.cut(df_filtered['EDAD'], bins=bins, labels=labels, right=True)
                 edad_group = df_filtered['RANGO_EDAD'].value_counts().sort_index().reset_index()
                 edad_group.columns = ['Rango de Edad','Cantidad']
-                fig_edad = px.bar(edad_group, x='Rango de Edad', y='Cantidad', title='Distribución por Rango de Edad', text_auto=True)
+                fig_edad = px.bar(edad_group, x='Rango de Edad', y='Cantidad', title='Distribución por Rango de Edad', text_auto=True, color='Rango de Edad', color_discrete_sequence=px.colors.qualitative.Pastel)
                 st.plotly_chart(fig_edad, use_container_width=True)
             else:
                 st.info("No se encontró la columna FEC_NACIMIENTO para calcular edades.")
