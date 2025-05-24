@@ -1,7 +1,7 @@
 from moduls.carga import load_data_from_gitlab
 import streamlit as st
 import moduls.carga as carga
-from moduls import bco_gente, cbamecapacita, empleo
+from moduls import bco_gente, cbamecapacita, empleo, emprendimientos 
 from utils.styles import setup_page
 import os
 import concurrent.futures
@@ -46,19 +46,21 @@ modules = {
     'bco_gente': ['vt_nomina_rep_dpto_localidad.parquet', 'VT_NOMINA_REP_RECUPERO_X_ANIO.parquet', 
                    'Detalle_recupero.csv', 'capa_departamentos_2010.geojson', 'LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt'],
     'cba_capacita': ['VT_INSCRIPCIONES_PRG129.parquet', 'VT_CURSOS_SEDES_GEO.parquet', 'capa_departamentos_2010.geojson'],
-    'empleo': ['ppp_jesi.xlsx','mas26_jesi.xlsx','LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt','LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - DATOS_CENSALES.txt','VT_REPORTES_PPP_MAS26.parquet', 'vt_empresas_adheridas.parquet','vt_empresas_ARCA.parquet', 'VT_PUESTOS_X_FICHAS.parquet','capa_departamentos_2010.geojson', 'VT_REPORTE_LIQUIDACION_LOCALIDAD.parquet']
+    'empleo': ['ppp_jesi.xlsx','mas26_jesi.xlsx','LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt','LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - DATOS_CENSALES.txt','VT_REPORTES_PPP_MAS26.parquet', 'vt_empresas_adheridas.parquet','vt_empresas_ARCA.parquet', 'VT_PUESTOS_X_FICHAS.parquet','capa_departamentos_2010.geojson', 'VT_REPORTE_LIQUIDACION_LOCALIDAD.parquet'],
+    'empredimientos': ['desarrollo_emprendedor.xlsx']
 }
 
 
 
 # Crear pestañas
-tab_names = ["Banco de la Gente", "CBA Me Capacita", "Programas de Empleo"]
+tab_names = ["CBA Me Capacita", "Banco de la Gente",  "Programas de Empleo","Empredimientos"]
 tabs = st.tabs(tab_names)
-tab_keys = ['bco_gente', 'cba_capacita', 'empleo']
+tab_keys = ['cba_capacita', 'bco_gente', 'empleo','empredimientos']
 tab_functions = [
-    bco_gente.show_bco_gente_dashboard,
     cbamecapacita.show_cba_capacita_dashboard,
-    empleo.show_empleo_dashboard
+    bco_gente.show_bco_gente_dashboard,
+    empleo.show_empleo_dashboard,
+    emprendimientos.show_emprendimientos_dashboard
 ]
 
 for idx, tab in enumerate(tabs):

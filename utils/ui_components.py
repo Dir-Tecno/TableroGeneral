@@ -1,4 +1,65 @@
 import streamlit as st
+import pandas as pd
+
+def show_dev_dataframe_info(data, modulo_nombre="Módulo", info_caption=None):
+    """
+    Muestra información útil de uno o varios DataFrames en modo desarrollo.
+    Args:
+        data: pd.DataFrame o dict de DataFrames
+        modulo_nombre: str, nombre del módulo
+        info_caption: str, texto opcional para el caption
+    """
+    st.markdown("***")
+    st.caption(info_caption or f"Información de Desarrollo ({modulo_nombre})")
+    def _show_single(df, name):
+        if df is None:
+            st.warning(f"DataFrame '{name}' no cargado (es None).")
+        elif hasattr(df, 'empty') and df.empty:
+            st.info(f"DataFrame '{name}' está vacío.")
+        elif hasattr(df, 'head') and hasattr(df, 'columns'):
+            with st.expander(f"Columnas en: `{name}`"):
+                st.write(f"Nombre del DataFrame: {name}")
+                st.write(f"Shape: {df.shape}")
+                st.write(f"Columnas: {', '.join(df.columns)}")
+                st.write(f"Tipos de datos: {df.dtypes}")
+                st.write("Primeras 5 filas:")
+                df_head_display = df.head()
+                if 'geometry' in df_head_display.columns:
+                    st.dataframe(df_head_display.drop(columns=['geometry']))
+                else:
+                    st.dataframe(df_head_display)
+                st.write(f"Total de registros: {len(df)}")
+        else:
+            st.warning(f"Objeto '{name}' no es un DataFrame válido (tipo: {type(df)})")
+    if isinstance(data, dict):
+        for name, df in data.items():
+            _show_single(df, name)
+    else:
+        _show_single(data, "DataFrame")
+    st.markdown("***")
+    
+def show_last_update(dates, file_substring, mensaje="Última actualización"):
+    """
+    Muestra la fecha de última actualización para un archivo específico.
+    Args:
+        dates: dict con fechas de actualización.
+        file_substring: substring para buscar la clave relevante en dates.
+        mensaje: texto a mostrar antes de la fecha.
+    """
+    file_dates = [dates.get(k) for k in dates.keys() if file_substring in k]
+    latest_date = file_dates[0] if file_dates else None
+    if latest_date:
+        latest_date = pd.to_datetime(latest_date)
+        try:
+            from zoneinfo import ZoneInfo
+            latest_date = latest_date.tz_localize('UTC').tz_convert(ZoneInfo('America/Argentina/Buenos_Aires'))
+        except Exception:
+            latest_date = latest_date - pd.Timedelta(hours=3)
+        st.markdown(f"""
+            <div style="background-color:#e9ecef; padding:10px; border-radius:5px; margin-bottom:20px; font-size:0.9em;">
+                <i class="fas fa-sync-alt"></i> <strong>{mensaje}:</strong> {latest_date.strftime('%d/%m/%Y %H:%M')}
+            </div>
+        """, unsafe_allow_html=True)
 
 def create_kpi_card(title, color_class="kpi-primary", delta=None, delta_color="#d4f7d4", tooltip=None, detalle_html=None, value_form=None, value_pers=None):
     """

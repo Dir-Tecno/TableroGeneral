@@ -458,6 +458,7 @@ def render_filters(df_filtrado_global):
         
         return df_filtrado, selected_dpto, selected_loc, selected_lineas
 
+
 def show_bco_gente_dashboard(data, dates, is_development=False):
     """
     Muestra el dashboard de Banco de la Gente.
@@ -471,32 +472,9 @@ def show_bco_gente_dashboard(data, dates, is_development=False):
     
     # Mostrar columnas en modo desarrollo
     if is_development:
-        st.markdown("***")
-        st.caption("Información de Desarrollo (Columnas de DataFrames - Bco. Gente)")
-        if isinstance(data, dict):
-            for name, df_item in data.items(): # Renombrado df a df_item para claridad
-                if df_item is not None and not df_item.empty: # Añadido chequeo de no vacío
-                    with st.expander(f"Columnas en: `{name}`"):
-                        st.write(f"Nombre del DataFrame: {name}")
-                        st.write(f"Tipos de datos: {df_item.dtypes}")
-                        st.write("Primeras 5 filas:")
-                        
-                        # Aplicar la corrección aquí para el df_item.head()
-                        df_head_display = df_item.head()
-                        if 'geometry' in df_head_display.columns:
-                            st.dataframe(df_head_display.drop(columns=['geometry']))
-                        else:
-                            st.dataframe(df_head_display)
-                        
-                        st.write(f"Total de registros: {len(df_item)}")
-                elif df_item is None:
-                    st.warning(f"DataFrame '{name}' no cargado (es None).")
-                else: # df_item is empty
-                    st.info(f"DataFrame '{name}' está vacío.")
-        else:
-            st.warning("Formato de datos inesperado para Banco de la Gente (se esperaba un diccionario).")
-        st.markdown("***")
-    
+        from utils.ui_components import show_dev_dataframe_info
+        show_dev_dataframe_info(data, modulo_nombre="Banco de la Gente")
+
     df_global = None
     df_recupero = None
     
@@ -528,11 +506,9 @@ def show_bco_gente_dashboard(data, dates, is_development=False):
     # Crear una copia del DataFrame para trabajar con él
     df_filtrado_global = df_global.copy()
     
-    # Mostrar información de actualización de datos
-    if dates and any(dates.values()):
-        latest_date = max([d for d in dates.values() if d is not None], default=None)
-        if latest_date:
-            st.caption(f"Última actualización de datos: {latest_date}")
+    # Mostrar última actualización
+    from utils.ui_components import show_last_update
+    show_last_update(dates, 'vt_nomina_rep_dpto_localidad.parquet')
     
     # Crear pestañas para las diferentes vistas
     tab_global, tab_recupero = st.tabs(["GLOBAL", "RECUPERO"])

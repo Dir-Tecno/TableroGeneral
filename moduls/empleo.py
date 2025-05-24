@@ -83,6 +83,233 @@ def calculate_cupo(cantidad_empleados, empleador, adherido):
     
     return 0
 
+def render_filters(df_inscriptos, key_prefix=""):
+    """
+    Renderiza los filtros de la interfaz de usuario.
+    
+    Args:
+        df_inscriptos: DataFrame con los datos de inscripciones
+        
+    Returns:
+        Tupla con el DataFrame filtrado y los filtros seleccionados
+    """
+    # Mantener una copia del DataFrame original para no modificarlo
+    df_filtered = df_inscriptos.copy()
+    
+    # Inicializar la lista de filtros aplicados
+    filtros_aplicados = []
+    
+    with st.container():
+        # Contenedor de filtros con 2 columnas
+        col1, col2= st.columns(2)
+        
+        # Filtro de departamento en la primera columna
+        with col1:
+            # Solo mostrar el filtro de departamento si la columna existe en el dataframe
+            if 'N_DEPARTAMENTO' in df_inscriptos.columns:
+                departamentos = sorted(df_inscriptos['N_DEPARTAMENTO'].dropna().unique())
+                all_dpto_option = "Todos los departamentos"
+                selected_dpto = st.selectbox("Departamento (Beneficiarios):", [all_dpto_option] + list(departamentos), key=f"{key_prefix}_dpto_filter")
+                
+                # Inicializar variables con valores por defecto
+                selected_loc = None
+                all_loc_option = None
+                
+                # Filtrar por departamento si se seleccionó uno
+                if selected_dpto != all_dpto_option:
+                    df_filtered = df_filtered[df_filtered['N_DEPARTAMENTO'] == selected_dpto]
+                    
+                    # Solo mostrar el filtro de localidad si la columna existe en el dataframe
+                    if 'N_LOCALIDAD' in df_inscriptos.columns:
+                        localidades = sorted(df_filtered['N_LOCALIDAD'].dropna().unique())
+                        all_loc_option = "Todas las localidades"
+                        selected_loc = st.selectbox("Localidad:", [all_loc_option] + list(localidades), key=f"{key_prefix}_loc_filter")
+                        
+                        # Filtrar por localidad si se seleccionó una
+                        if selected_loc != all_loc_option:
+                            df_filtered = df_filtered[df_filtered['N_LOCALIDAD'] == selected_loc]
+                    else:
+                        all_loc_option = None
+                        selected_loc = None
+            else:
+                # Si no existe la columna N_DEPARTAMENTO, establecer valores por defecto
+                selected_dpto = None
+                all_dpto_option = None
+                selected_loc = None
+                all_loc_option = None
+        
+        # Filtro de zona favorecida en la segunda columna
+        with col2:
+            # Solo mostrar el filtro de ZONA si la columna existe en el dataframe
+            if 'ZONA' in df_inscriptos.columns:
+                zonas = sorted(df_inscriptos['ZONA'].dropna().unique())
+                all_zona_option = "Todas las zonas"
+                selected_zona = st.selectbox("Zona:", [all_zona_option] + list(zonas), key=f"{key_prefix}_zona_filter")
+            else:
+                all_zona_option = "Todas las zonas"
+                selected_zona = all_zona_option
+                
+    
+    if selected_dpto != all_dpto_option:
+        filtros_aplicados.append(f"Departamento: {selected_dpto}")
+        if selected_loc is not None and selected_loc != all_loc_option:
+            filtros_aplicados.append(f"Localidad: {selected_loc}")
+            
+    if 'ZONA' in df_inscriptos.columns and selected_zona != all_zona_option:
+        filtros_aplicados.append(f"Zona: {selected_zona}")
+    
+    if filtros_aplicados:
+        filtros_texto = ", ".join(filtros_aplicados)
+        st.markdown(f"**Filtros aplicados:** {filtros_texto}")
+    else:
+        st.markdown("**Mostrando todos los datos**")
+    
+    return df_filtered, selected_dpto, selected_loc, all_dpto_option, all_loc_option
+
+def show_empleo_dashboard(data, dates, is_development=False):
+    """
+    Función principal que muestra el dashboard de empleo.
+    
+    Args:
+        data: Diccionario con los dataframes cargados
+        dates: Diccionario con las fechas de actualización
+        is_development: Booleano que indica si estamos en modo desarrollo
+    """
+    if data is None:
+        st.error("No se pudieron cargar los datos de Programas de Empleo.")
+        return
+    # Mostrar info de desarrollo de los DataFrames
+    if is_development:
+        from utils.ui_components import show_dev_dataframe_info
+        show_dev_dataframe_info(data, modulo_nombre="Empleo")
+    try:
+        # Cargar y preprocesar los datos
+        df_inscriptos, df_empresas, df_poblacion, geojson_data, has_fichas, has_empresas, has_poblacion, has_geojson = load_and_preprocess_data(data, dates, is_development)
+        
+        # Renderizar el dashboard principal
+        render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has_empresas, has_geojson)
+        
+        # Agregar sección específica para datos censales
+        st.markdown("### Información Demográfica y Estadísticas Laborales por Localidad")
+        st.markdown("Esta sección presenta indicadores demográficos y laborales clave por localidad según datos censales")
+        
+        with st.expander("Ver Datos Censales de Localidades", expanded=False):
+            st.info("""
+            **¿Cómo se calcula la tasa de desocupación?**  
+            La tasa de desempleo se calcula dividiendo el número de personas desocupadas por la Población Económicamente Activa (PEA) y multiplicando por 100. Fuente: INDEC.
+            """)
+            df_censales = data.get('LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - DATOS_CENSALES.txt')
+            if df_censales is not None and not getattr(df_censales, 'empty', True):
+                col1, col2 = st.columns(2)
+                with col1:
+                    departamentos_censales = sorted(df_censales['CODIGOS.Departamento'].dropna().unique())
+                    depto_sel_censal = st.selectbox("Filtrar por Departamento (Censal):", options=["Todos"] + departamentos_censales, key="censo_depto")
+                with col2:
+                    if depto_sel_censal != "Todos":
+                        df_censales_filtrado_loc = df_censales[df_censales['CODIGOS.Departamento'] == depto_sel_censal]
+                    else:
+                        df_censales_filtrado_loc = df_censales
+                    
+                    localidades_censales = sorted(df_censales_filtrado_loc['CODIGOS.Localidad'].dropna().unique())
+                    loc_sel_censal = st.selectbox("Filtrar por Localidad (Censal):", options=["Todas"] + localidades_censales, key="censo_loc")
+                
+                df_censales_display = df_censales.copy()
+                if depto_sel_censal != "Todos":
+                    df_censales_display = df_censales_display[df_censales_display['CODIGOS.Departamento'] == depto_sel_censal]
+                if loc_sel_censal != "Todas":
+                    df_censales_display = df_censales_display[df_censales_display['CODIGOS.Localidad'] == loc_sel_censal]
+                
+                cols_tabla_censal = ["CODIGOS.Departamento", "CODIGOS.Localidad", "Tasa de Actividad", "Tasa de Empleo", "Tasa de desocupación"]
+                df_tabla_censal = df_censales_display[cols_tabla_censal].copy()
+                
+                
+                # Solo mostrar los datos originales, sin fila de totales
+                df_tabla_censal_tot = df_tabla_censal.copy()
+
+                st.dataframe(
+                    df_tabla_censal_tot,
+                    use_container_width=True
+                )
+            else:
+                st.warning("Datos censales no disponibles o vacíos.") 
+
+        with st.expander("Ver datos de población (basado en ppp_jesi.xlsx y mas26_jesi.xlsx)"):
+            try:
+                df_ppp_excel = data.get('ppp_jesi.xlsx')
+                df_mas26_excel = data.get('mas26_jesi.xlsx')
+                
+                if df_ppp_excel is not None and not df_ppp_excel.empty and df_mas26_excel is not None and not df_mas26_excel.empty:
+
+                    ppp_cols_esperadas = ['Población de 15 a 24 años', 'TOTAL PEA', 'OCUPADA', 'DESOCUPADA']
+                    mas26_cols_esperadas = ['Población mayor de 25 años', 'TOTAL PEA', 'OCUPADA', 'DESOCUPADA']
+
+                    if not all(col in df_ppp_excel.columns for col in ppp_cols_esperadas):
+                        st.warning(f"El archivo 'ppp_jesi.xlsx' no contiene todas las columnas esperadas: {', '.join(ppp_cols_esperadas)}")
+                    elif not all(col in df_mas26_excel.columns for col in mas26_cols_esperadas):
+                        st.warning(f"El archivo 'mas26_jesi.xlsx' no contiene todas las columnas esperadas: {', '.join(mas26_cols_esperadas)}")
+                    else:
+                        df_ppp_clean = df_ppp_excel[ppp_cols_esperadas].copy()
+                        df_mas26_clean = df_mas26_excel[mas26_cols_esperadas].copy()
+                        
+                        df_ppp_clean = df_ppp_clean.rename(columns={'Población de 15 a 24 años': 'POBLACION'})
+                        df_mas26_clean = df_mas26_clean.rename(columns={'Población mayor de 25 años': 'POBLACION'})
+                        
+                        df_ppp_clean['GRUPO'] = 'Población de 15 a 24 años'
+                        df_mas26_clean['GRUPO'] = 'Población mayor de 25 años'
+                        
+                        df_poblacion_completo = pd.concat([df_ppp_clean, df_mas26_clean], ignore_index=True)
+                        
+                        st.subheader("Datos de Población por Grupo Etario")
+                        st.dataframe(df_poblacion_completo)
+                        
+                        colores_grafico = []
+                        if COLORES_IDENTIDAD and isinstance(COLORES_IDENTIDAD, dict) and len(COLORES_IDENTIDAD.values()) >= 3:
+                            colores_grafico = list(COLORES_IDENTIDAD.values())[:3]
+                        else:
+                            colores_grafico = px.colors.qualitative.Plotly[:3]
+
+                        fig_poblacion = px.bar(
+                            df_poblacion_completo, 
+                            x='GRUPO', 
+                            y=['TOTAL PEA', 'OCUPADA', 'DESOCUPADA'],
+                            barmode='group', 
+                            title="Distribución de la Población por Situación Laboral",
+                            color_discrete_sequence=colores_grafico
+                        )
+                        fig_poblacion.update_layout(xaxis_title="Grupo Etario", yaxis_title="Cantidad de Personas", legend_title="Situación Laboral", height=500)
+                        st.plotly_chart(fig_poblacion, use_container_width=True)
+                        
+                        st.subheader("Tasas de Empleo y Desocupación")
+                        df_tasas = df_poblacion_completo.copy()
+                        df_tasas['Tasa de Actividad'] = np.where(df_tasas['POBLACION'] != 0, (df_tasas['TOTAL PEA'] / df_tasas['POBLACION'] * 100), 0).round(2)
+                        df_tasas['Tasa de Empleo'] = np.where(df_tasas['POBLACION'] != 0, (df_tasas['OCUPADA'] / df_tasas['POBLACION'] * 100), 0).round(2)
+                        df_tasas['Tasa de Desocupación'] = np.where(df_tasas['TOTAL PEA'] != 0, (df_tasas['DESOCUPADA'] / df_tasas['TOTAL PEA'] * 100), 0).round(2)
+                        
+                        st.dataframe(df_tasas[['GRUPO', 'Tasa de Actividad', 'Tasa de Empleo', 'Tasa de Desocupación']])
+                        
+                        colores_tasas = []
+                        if COLORES_IDENTIDAD and isinstance(COLORES_IDENTIDAD, dict) and len(COLORES_IDENTIDAD.values()) >= 6:
+                            colores_tasas = list(COLORES_IDENTIDAD.values())[3:6]
+                        else:
+                            colores_tasas = px.colors.qualitative.Plotly[3:6]
+
+                        fig_tasas = px.bar(
+                            df_tasas, 
+                            x='GRUPO', 
+                            y=['Tasa de Actividad', 'Tasa de Empleo', 'Tasa de Desocupación'],
+                            barmode='group', 
+                            title="Tasas de Empleo por Grupo Etario",
+                            color_discrete_sequence=colores_tasas
+                        )
+                        fig_tasas.update_layout(xaxis_title="Grupo Etario", yaxis_title="Porcentaje (%)", legend_title="Indicador", height=500)
+                        st.plotly_chart(fig_tasas, use_container_width=True)
+                else:
+                    st.warning("No se pudieron cargar los archivos de población (ppp_jesi.xlsx y/o mas26_jesi.xlsx) para esta sección o están vacíos.")
+            except Exception as e:
+                st.error(f"Error al procesar los datos de población en esta sección: {str(e)}")
+
+    except Exception as e:
+        st.error(f"Error al mostrar el dashboard de empleo: {str(e)}")
 
 def load_and_preprocess_data(data, dates=None, is_development=False):
     """
@@ -119,6 +346,8 @@ def load_and_preprocess_data(data, dates=None, is_development=False):
         # Cargar el dataset de empresas
         df_empresas = data.get('vt_empresas_adheridas.parquet')
         has_empresas = df_empresas is not None and not df_empresas.empty
+
+
 
         # --- NUEVO: Cruce con ARCA ---
         df_arca = data.get('vt_empresas_ARCA.parquet')
@@ -225,25 +454,11 @@ def load_and_preprocess_data(data, dates=None, is_development=False):
             df_empresas['ZONA'] = df_empresas['N_DEPARTAMENTO'].apply(
                 lambda x: 'ZONA FAVORECIDA' if x in zonas_favorecidas else 'ZONA REGULAR'
             )
+                # Mostrar la fecha de última actualización
+        from utils.ui_components import show_last_update
+        show_last_update(dates, 'VT_REPORTES_PPP_MAS26.parquet')
         
-        # Obtener la fecha de última actualización
-        if dates:
-            file_dates = [dates.get(k) for k in dates.keys() if 'VT_REPORTES_PPP_MAS26.parquet' in k]
-            latest_date = file_dates[0] if file_dates else None
-            
-            if latest_date:
-                latest_date = pd.to_datetime(latest_date)
-                try:
-                    from zoneinfo import ZoneInfo
-                    latest_date = latest_date.tz_localize('UTC').tz_convert(ZoneInfo('America/Argentina/Buenos_Aires'))
-                except Exception:
-                    # Fallback si zoneinfo no está disponible
-                    latest_date = latest_date - pd.Timedelta(hours=3)
-                st.markdown(f"""
-                    <div style="background-color:#e9ecef; padding:10px; border-radius:5px; margin-bottom:20px; font-size:0.9em;">
-                        <i class="fas fa-sync-alt"></i> <strong>Última actualización:</strong> {latest_date.strftime('%d/%m/%Y %H:%M')}
-                    </div>
-                """, unsafe_allow_html=True)
+
         
         # Preparar datos para los filtros
         # Limpiar y preparar los datos
@@ -288,7 +503,6 @@ def load_and_preprocess_data(data, dates=None, is_development=False):
                             how='left',
                             suffixes=('', '_circuito')
                         )
-                        st.success("Datos de circuitos electorales integrados correctamente usando 'ID_LOCALIDAD_GOB' (inscriptos) y 'ID_LOCALIDAD' (circuitos)")
                     # Guardar copia para debug visual si estamos en modo desarrollo
                     df_inscriptos_cruzado = df_inscriptos.copy()
 
@@ -305,96 +519,7 @@ def load_and_preprocess_data(data, dates=None, is_development=False):
         # Retornar los dataframes procesados y los flags de disponibilidad
         return df_inscriptos_sin_adherido, df_empresas, df_poblacion, geojson_data, has_fichas, has_empresas, has_poblacion, has_geojson
 
-def render_filters(df_inscriptos, key_prefix=""):
-    """
-    Renderiza los filtros de la interfaz de usuario.
-    
-    Args:
-        df_inscriptos: DataFrame con los datos de inscripciones
-        
-    Returns:
-        Tupla con el DataFrame filtrado y los filtros seleccionados
-    """
-    # Mantener una copia del DataFrame original para no modificarlo
-    df_filtered = df_inscriptos.copy()
-    
-    with st.container():
-        # Contenedor de filtros con 3 columnas
-        col1, col2, col3 = st.columns(3)
-        
-        # Filtro de departamento en la primera columna
-        with col1:
-            # Solo mostrar el filtro de departamento si la columna existe en el dataframe
-            if 'N_DEPARTAMENTO' in df_inscriptos.columns:
-                departamentos = sorted(df_inscriptos['N_DEPARTAMENTO'].dropna().unique())
-                all_dpto_option = "Todos los departamentos"
-                selected_dpto = st.selectbox("Departamento (Beneficiarios):", [all_dpto_option] + list(departamentos), key=f"{key_prefix}_dpto_filter")
-                
-                # Inicializar variables con valores por defecto
-                selected_loc = None
-                all_loc_option = None
-                
-                # Filtrar por departamento si se seleccionó uno
-                if selected_dpto != all_dpto_option:
-                    df_filtered = df_filtered[df_filtered['N_DEPARTAMENTO'] == selected_dpto]
-                    
-                    # Solo mostrar el filtro de localidad si la columna existe en el dataframe
-                    if 'N_LOCALIDAD' in df_inscriptos.columns:
-                        localidades = sorted(df_filtered['N_LOCALIDAD'].dropna().unique())
-                        all_loc_option = "Todas las localidades"
-                        selected_loc = st.selectbox("Localidad:", [all_loc_option] + list(localidades), key=f"{key_prefix}_loc_filter")
-                        
-                        # Filtrar por localidad si se seleccionó una
-                        if selected_loc != all_loc_option:
-                            df_filtered = df_filtered[df_filtered['N_LOCALIDAD'] == selected_loc]
-                    else:
-                        all_loc_option = None
-                        selected_loc = None
-            else:
-                # Si no existe la columna N_DEPARTAMENTO, establecer valores por defecto
-                selected_dpto = None
-                all_dpto_option = None
-                selected_loc = None
-                all_loc_option = None
-        
-        # Filtro de zona favorecida en la segunda columna
-        with col2:
-            # Solo mostrar el filtro de ZONA si la columna existe en el dataframe
-            if 'ZONA' in df_inscriptos.columns:
-                zonas = sorted(df_inscriptos['ZONA'].dropna().unique())
-                all_zona_option = "Todas las zonas"
-                selected_zona = st.selectbox("Zona:", [all_zona_option] + list(zonas), key=f"{key_prefix}_zona_filter")
-            else:
-                all_zona_option = "Todas las zonas"
-                selected_zona = all_zona_option
-                
-        # Añadir más filtros en la tercera columna si es necesario
-        with col3:
-            # Puedes añadir más filtros aquí si lo deseas
-            pass
-            
-    # Filtrar por zona si se seleccionó una y la columna existe
-    if 'ZONA' in df_inscriptos.columns and selected_zona != all_zona_option:
-        df_filtered = df_filtered[df_filtered['ZONA'] == selected_zona]
-    
-    # Mostrar resumen de filtros aplicados
-    filtros_aplicados = []
-    
-    if selected_dpto != all_dpto_option:
-        filtros_aplicados.append(f"Departamento: {selected_dpto}")
-        if selected_loc is not None and selected_loc != all_loc_option:
-            filtros_aplicados.append(f"Localidad: {selected_loc}")
-            
-    if 'ZONA' in df_inscriptos.columns and selected_zona != all_zona_option:
-        filtros_aplicados.append(f"Zona: {selected_zona}")
-    
-    if filtros_aplicados:
-        filtros_texto = ", ".join(filtros_aplicados)
-        st.markdown(f"**Filtros aplicados:** {filtros_texto}")
-    else:
-        st.markdown("**Mostrando todos los datos**")
-    
-    return df_filtered, selected_dpto, selected_loc, all_dpto_option, all_loc_option
+
 
 def render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has_empresas, has_geojson):
     """
@@ -451,9 +576,7 @@ def render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has
         # Contenido de la pestaña Beneficiarios
         with tab_beneficiarios:
             # Contenedor para los filtros específicos de la pestaña Beneficiarios
-            with st.container():
-                # Filtros específicos para la pestaña Beneficiarios
-                df_filtered, selected_dpto, selected_loc, all_dpto_option, all_loc_option = render_filters(df_inscriptos, key_prefix="benef_tab")
+            df_filtered, selected_dpto, selected_loc, all_dpto_option, all_loc_option = render_filters(df_inscriptos, key_prefix="benef_tab")
             
             # Conteo de ID_FICHA por PROGRAMA y ESTADO_FICHA
             pivot_table = df_filtered.pivot_table(
@@ -1246,8 +1369,6 @@ def show_inscriptions(df_inscriptos, df_poblacion, geojson_data, file_date):
             st.markdown('<div style="background-color: #f0f2f6; padding: 15px; border-radius: 10px; margin-bottom: 20px;">', unsafe_allow_html=True)
             st.markdown('<h3 style="font-size: 18px; margin: 0 0 10px 0;">Seleccionar Programa</h3>', unsafe_allow_html=True)
             
-            # Determinar el programa por defecto (usar el primero disponible)
-            programa_default = etapas_validas[0] if etapas_validas else 53
             
             # Crear opciones para el selector
             opciones_programa = {programas.get(etapa, f"Programa {etapa}"): etapa for etapa in etapas_validas}
@@ -1347,171 +1468,3 @@ def show_inscriptions(df_inscriptos, df_poblacion, geojson_data, file_date):
             </div>
         """, unsafe_allow_html=True)
 
-def show_empleo_dashboard(data, dates, is_development=False):
-    """
-    Función principal que muestra el dashboard de empleo.
-    
-    Args:
-        data: Diccionario con los dataframes cargados
-        dates: Diccionario con las fechas de actualización
-        is_development: Booleano que indica si estamos en modo desarrollo
-    """
-    if data is None:
-        st.error("No se pudieron cargar los datos de Programas de Empleo.")
-        return
-    if is_development:
-        st.markdown("***")
-        st.caption("Información de Desarrollo (Columnas de DataFrames - Programas de Empleo)")
-        if isinstance(data, dict):
-            for name, df_item in data.items():
-                if df_item is not None and hasattr(df_item, 'empty') and not df_item.empty:
-                    with st.expander(f"Columnas en: `{name}`"):
-                        st.write(f"Nombre del DataFrame: {name}")
-                        st.write(f"Tipos de datos: {df_item.dtypes}")
-                        st.write("Primeras 5 filas:")
-                        df_head_display = df_item.head()
-                        if 'geometry' in df_head_display.columns:
-                            st.dataframe(df_head_display.drop(columns=['geometry']))
-                        else:
-                            st.dataframe(df_head_display)
-                        st.write(f"Total de registros: {len(df_item)}")
-                elif df_item is None:
-                    st.warning(f"DataFrame '{name}' no cargado (es None).")
-                else: # df_item is empty
-                    st.info(f"DataFrame '{name}' está vacío.")
-        else:
-            st.warning("Formato de datos inesperado para Programas de Empleo (se esperaba un diccionario de DataFrames).")
-        st.markdown("***")
-    try:
-        # Cargar y preprocesar los datos
-        df_inscriptos, df_empresas, df_poblacion, geojson_data, has_fichas, has_empresas, has_poblacion, has_geojson = load_and_preprocess_data(data, dates, is_development)
-
-        
-        
-        # Aplicar filtros
-        df_filtered, selected_dpto, selected_loc, all_dpto_option, all_loc_option = render_filters(df_inscriptos)
-        
-        # Renderizar el dashboard principal
-        render_dashboard(df_filtered, df_empresas, df_poblacion, geojson_data, has_empresas, has_geojson)
-        
-        # Agregar sección específica para datos censales
-        st.markdown("### Información Demográfica y Estadísticas Laborales por Localidad")
-        st.markdown("Esta sección presenta indicadores demográficos y laborales clave por localidad según datos censales")
-        
-        with st.expander("Ver Datos Censales de Localidades", expanded=False):
-            st.info("""
-            **¿Cómo se calcula la tasa de desocupación?**  
-            La tasa de desempleo se calcula dividiendo el número de personas desocupadas por la Población Económicamente Activa (PEA) y multiplicando por 100. Fuente: INDEC.
-            """)
-            df_censales = data.get('LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - DATOS_CENSALES.txt')
-            if df_censales is not None and not getattr(df_censales, 'empty', True):
-                col1, col2 = st.columns(2)
-                with col1:
-                    departamentos_censales = sorted(df_censales['CODIGOS.Departamento'].dropna().unique())
-                    depto_sel_censal = st.selectbox("Filtrar por Departamento (Censal):", options=["Todos"] + departamentos_censales, key="censo_depto")
-                with col2:
-                    if depto_sel_censal != "Todos":
-                        df_censales_filtrado_loc = df_censales[df_censales['CODIGOS.Departamento'] == depto_sel_censal]
-                    else:
-                        df_censales_filtrado_loc = df_censales
-                    
-                    localidades_censales = sorted(df_censales_filtrado_loc['CODIGOS.Localidad'].dropna().unique())
-                    loc_sel_censal = st.selectbox("Filtrar por Localidad (Censal):", options=["Todas"] + localidades_censales, key="censo_loc")
-                
-                df_censales_display = df_censales.copy()
-                if depto_sel_censal != "Todos":
-                    df_censales_display = df_censales_display[df_censales_display['CODIGOS.Departamento'] == depto_sel_censal]
-                if loc_sel_censal != "Todas":
-                    df_censales_display = df_censales_display[df_censales_display['CODIGOS.Localidad'] == loc_sel_censal]
-                
-                cols_tabla_censal = ["CODIGOS.Departamento", "CODIGOS.Localidad", "Tasa de Actividad", "Tasa de Empleo", "Tasa de desocupación"]
-                df_tabla_censal = df_censales_display[cols_tabla_censal].copy()
-                
-                
-                # Solo mostrar los datos originales, sin fila de totales
-                df_tabla_censal_tot = df_tabla_censal.copy()
-
-                st.dataframe(
-                    df_tabla_censal_tot,
-                    use_container_width=True
-                )
-            else:
-                st.warning("Datos censales no disponibles o vacíos.") 
-
-        with st.expander("Ver datos de población (basado en ppp_jesi.xlsx y mas26_jesi.xlsx)"):
-            try:
-                df_ppp_excel = data.get('ppp_jesi.xlsx')
-                df_mas26_excel = data.get('mas26_jesi.xlsx')
-                
-                if df_ppp_excel is not None and not df_ppp_excel.empty and df_mas26_excel is not None and not df_mas26_excel.empty:
-
-                    ppp_cols_esperadas = ['Población de 15 a 24 años', 'TOTAL PEA', 'OCUPADA', 'DESOCUPADA']
-                    mas26_cols_esperadas = ['Población mayor de 25 años', 'TOTAL PEA', 'OCUPADA', 'DESOCUPADA']
-
-                    if not all(col in df_ppp_excel.columns for col in ppp_cols_esperadas):
-                        st.warning(f"El archivo 'ppp_jesi.xlsx' no contiene todas las columnas esperadas: {', '.join(ppp_cols_esperadas)}")
-                    elif not all(col in df_mas26_excel.columns for col in mas26_cols_esperadas):
-                        st.warning(f"El archivo 'mas26_jesi.xlsx' no contiene todas las columnas esperadas: {', '.join(mas26_cols_esperadas)}")
-                    else:
-                        df_ppp_clean = df_ppp_excel[ppp_cols_esperadas].copy()
-                        df_mas26_clean = df_mas26_excel[mas26_cols_esperadas].copy()
-                        
-                        df_ppp_clean = df_ppp_clean.rename(columns={'Población de 15 a 24 años': 'POBLACION'})
-                        df_mas26_clean = df_mas26_clean.rename(columns={'Población mayor de 25 años': 'POBLACION'})
-                        
-                        df_ppp_clean['GRUPO'] = 'Población de 15 a 24 años'
-                        df_mas26_clean['GRUPO'] = 'Población mayor de 25 años'
-                        
-                        df_poblacion_completo = pd.concat([df_ppp_clean, df_mas26_clean], ignore_index=True)
-                        
-                        st.subheader("Datos de Población por Grupo Etario")
-                        st.dataframe(df_poblacion_completo)
-                        
-                        colores_grafico = []
-                        if COLORES_IDENTIDAD and isinstance(COLORES_IDENTIDAD, dict) and len(COLORES_IDENTIDAD.values()) >= 3:
-                            colores_grafico = list(COLORES_IDENTIDAD.values())[:3]
-                        else:
-                            colores_grafico = px.colors.qualitative.Plotly[:3]
-
-                        fig_poblacion = px.bar(
-                            df_poblacion_completo, 
-                            x='GRUPO', 
-                            y=['TOTAL PEA', 'OCUPADA', 'DESOCUPADA'],
-                            barmode='group', 
-                            title="Distribución de la Población por Situación Laboral",
-                            color_discrete_sequence=colores_grafico
-                        )
-                        fig_poblacion.update_layout(xaxis_title="Grupo Etario", yaxis_title="Cantidad de Personas", legend_title="Situación Laboral", height=500)
-                        st.plotly_chart(fig_poblacion, use_container_width=True)
-                        
-                        st.subheader("Tasas de Empleo y Desocupación")
-                        df_tasas = df_poblacion_completo.copy()
-                        df_tasas['Tasa de Actividad'] = np.where(df_tasas['POBLACION'] != 0, (df_tasas['TOTAL PEA'] / df_tasas['POBLACION'] * 100), 0).round(2)
-                        df_tasas['Tasa de Empleo'] = np.where(df_tasas['POBLACION'] != 0, (df_tasas['OCUPADA'] / df_tasas['POBLACION'] * 100), 0).round(2)
-                        df_tasas['Tasa de Desocupación'] = np.where(df_tasas['TOTAL PEA'] != 0, (df_tasas['DESOCUPADA'] / df_tasas['TOTAL PEA'] * 100), 0).round(2)
-                        
-                        st.dataframe(df_tasas[['GRUPO', 'Tasa de Actividad', 'Tasa de Empleo', 'Tasa de Desocupación']])
-                        
-                        colores_tasas = []
-                        if COLORES_IDENTIDAD and isinstance(COLORES_IDENTIDAD, dict) and len(COLORES_IDENTIDAD.values()) >= 6:
-                            colores_tasas = list(COLORES_IDENTIDAD.values())[3:6]
-                        else:
-                            colores_tasas = px.colors.qualitative.Plotly[3:6]
-
-                        fig_tasas = px.bar(
-                            df_tasas, 
-                            x='GRUPO', 
-                            y=['Tasa de Actividad', 'Tasa de Empleo', 'Tasa de Desocupación'],
-                            barmode='group', 
-                            title="Tasas de Empleo por Grupo Etario",
-                            color_discrete_sequence=colores_tasas
-                        )
-                        fig_tasas.update_layout(xaxis_title="Grupo Etario", yaxis_title="Porcentaje (%)", legend_title="Indicador", height=500)
-                        st.plotly_chart(fig_tasas, use_container_width=True)
-                else:
-                    st.warning("No se pudieron cargar los archivos de población (ppp_jesi.xlsx y/o mas26_jesi.xlsx) para esta sección o están vacíos.")
-            except Exception as e:
-                st.error(f"Error al procesar los datos de población en esta sección: {str(e)}")
-
-    except Exception as e:
-        st.error(f"Error al mostrar el dashboard de empleo: {str(e)}")

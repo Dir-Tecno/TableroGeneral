@@ -282,6 +282,15 @@ def procesar_archivo(nombre, contenido, es_buffer):
                 df, error = safe_read_parquet(contenido)
                 fecha = datetime.datetime.fromtimestamp(os.path.getmtime(contenido))
             return df, fecha
+        # Excel
+        elif nombre.endswith('.xlsx'):
+            if es_buffer:
+                df = pd.read_excel(io.BytesIO(contenido), engine='openpyxl')
+                fecha = datetime.datetime.now()
+            else:
+                df = pd.read_excel(contenido, engine='openpyxl')
+                fecha = datetime.datetime.fromtimestamp(os.path.getmtime(contenido))
+            return df, fecha
         # CSV o TXT
         elif nombre.endswith('.csv') or nombre.endswith('.txt'):
             if es_buffer:
@@ -328,7 +337,7 @@ def load_data_from_gitlab(repo_id, branch='main', token=None, use_local=False, l
             st.info(f"Cargando datos desde carpeta local: {local_path}")
             
             # Buscar archivos con extensiones soportadas en la carpeta local
-            extensiones = ['.parquet', '.csv', '.geojson', '.txt']
+            extensiones = ['.parquet', '.csv', '.geojson', '.txt', '.xlsx']
             archivos_filtrados = []
             
             for ext in extensiones:
@@ -378,7 +387,7 @@ def load_data_from_gitlab(repo_id, branch='main', token=None, use_local=False, l
                 return {}, {}
             
             # Filtrar por extensiones soportadas
-            extensiones = ['.parquet', '.csv', '.geojson', '.txt']
+            extensiones = ['.parquet', '.csv', '.geojson', '.txt', '.xlsx']
             archivos_filtrados = [a for a in archivos if any(a.endswith(ext) for ext in extensiones)]
             
             # Barra de progreso

@@ -66,52 +66,24 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
         return
 
     # Mostrar columnas en modo desarrollo
+    from utils.ui_components import show_dev_dataframe_info
     if is_development:
-        st.markdown("***")
-        st.caption("Información de Desarrollo (Columnas de DataFrames - CBA Me Capacita)")
-        if isinstance(data, dict):
-            for name, df_item in data.items(): # Usar df_item para claridad
-                if df_item is not None and not df_item.empty:
-                    with st.expander(f"Columnas en: `{name}`"):
-                        st.write(f"Nombre del DataFrame: {name}")
-                        st.write(f"Tipos de datos: {df_item.dtypes}")
-                        st.write("Primeras 5 filas:")
-                        
-                        # Aplicar la corrección aquí para df_item.head()
-                        # Esta es la sección que corresponde a la línea 56 del traceback
-                        df_head_display = df_item.head()
-                        if 'geometry' in df_head_display.columns:
-                            st.dataframe(df_head_display.drop(columns=['geometry']))
-                        else:
-                            st.dataframe(df_head_display)
-                        
-                        st.write(f"Total de registros: {len(df_item)}")
-                elif df_item is None:
-                    st.warning(f"DataFrame '{name}' no cargado (es None).")
-                else: # df_item is empty
-                    st.info(f"DataFrame '{name}' está vacío.")
-        else:
-            st.warning("Formato de datos inesperado para CBA Me Capacita (se esperaba un diccionario).")
-        st.markdown("***")
+        show_dev_dataframe_info(data, modulo_nombre="CBA Me Capacita")
 
     
 
     # --- Usar función de carga y preprocesamiento ---
     df_postulantes, df_cursos = load_and_preprocess_data(data)
 
-    def safe_format(val):
-        try:
-            if val is None or (isinstance(val, float) and pd.isna(val)):
-                return "0"
-            return f"{int(val):,}"
-        except Exception:
-            return str(val) if val is not None else "0"
+
 
     # KPIs reales usando VT_INSCRIPCIONES_PRG129.parquet (postulantes) y VT_CURSOS_SEDES_GEO.parquet (cursos)
     total_postulantes = df_postulantes["CUIL"].nunique() if df_postulantes is not None else 0
     cursos_activos = df_cursos["ID_PLANIFICACION"].nunique() if df_cursos is not None else 0
     total_capacitaciones = df_postulantes["ID_CAPACITACION"].nunique() if df_postulantes is not None and "ID_CAPACITACION" in df_postulantes.columns else 0
-
+    # Mostrar información de actualización de datos
+    from utils.ui_components import show_last_update
+    show_last_update(dates, 'VT_INSCRIPCIONES_PRG129.parquet')
     kpi_data = [
         {
             "title": "Postulantes",
@@ -193,6 +165,22 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                 edu_group.columns = ['Educación','Cantidad']
                 fig_edu = px.pie(edu_group, names='Educación', values='Cantidad', title='Nivel Educativo')
                 cols[0].plotly_chart(fig_edu, use_container_width=True)
+                # Tabla TOP 10 cursos por cada Nivel Educativo
+                if 'CAPACITACION' in df_filtered.columns:
+                    cols[0].markdown('**Top 10 cursos más seleccionados por Nivel Educativo:**')
+                    for nivel in df_filtered['EDUCACION'].dropna().unique():
+                        top_cursos = (
+                            df_filtered[df_filtered['EDUCACION'] == nivel]
+                            .groupby('CAPACITACION')
+                            .size()
+                            .reset_index(name='Cantidad')
+                            .sort_values('Cantidad', ascending=False)
+                            .head(10)
+                        )
+                        with cols[0].expander(f"Nivel Educativo: {nivel}"):
+                            st.dataframe(top_cursos, hide_index=True)
+                else:
+                    cols[0].info("No se encontró la columna CAPACITACION para mostrar los cursos.")
             else:
                 cols[0].info("No se encontró la columna EDUCACION.")
             if 'TIPO_TRABAJO' in df_filtered.columns:
@@ -200,18 +188,26 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                 tipo_group.columns = ['Tipo de Trabajo','Cantidad']
                 fig_tipo = px.pie(tipo_group, names='Tipo de Trabajo', values='Cantidad', title='Tipo de Trabajo')
                 cols[1].plotly_chart(fig_tipo, use_container_width=True)
+                # Tabla TOP 10 cursos por cada Tipo de Trabajo
+                if 'CAPACITACION' in df_filtered.columns:
+                    cols[1].markdown('**Top 10 cursos más seleccionados por Tipo de Trabajo:**')
+                    for tipo in df_filtered['TIPO_TRABAJO'].dropna().unique():
+                        top_cursos = (
+                            df_filtered[df_filtered['TIPO_TRABAJO'] == tipo]
+                            .groupby('CAPACITACION')
+                            .size()
+                            .reset_index(name='Cantidad')
+                            .sort_values('Cantidad', ascending=False)
+                            .head(10)
+                        )
+                        with cols[1].expander(f"Tipo de Trabajo: {tipo}"):
+                            st.dataframe(top_cursos, hide_index=True)
+                else:
+                    cols[1].info("No se encontró la columna CAPACITACION para mostrar los cursos.")
             else:
                 cols[1].info("No se encontró la columna TIPO_TRABAJO.")
         else:
             st.warning("No hay datos de postulantes disponibles para mostrar reportes de alumnos.")
-    
-    # Mostrar información de actualización de datos
-    if dates and any(dates.values()):
-        latest_date = max([d for d in dates.values() if d is not None], default=None)
-        if latest_date:
-            st.caption(f"Última actualización de datos: {latest_date}")
-    
-    
     
     with tab2:
         st.markdown("## Sector Productivos por Departamento")
