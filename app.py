@@ -3,6 +3,7 @@ import streamlit as st
 import moduls.carga as carga
 from moduls import bco_gente, cbamecapacita, empleo, emprendimientos 
 from utils.styles import setup_page
+from utils.ui_components import render_footer
 import os
 import concurrent.futures
 
@@ -98,3 +99,6 @@ for idx, tab in enumerate(tabs):
                 st.exception(e)  # Muestra el traceback completo
         else:
             st.error(f"Error: Faltan datos necesarios. data_key: {data_key in st.session_state}, dates_key: {dates_key in st.session_state}")
+
+# Renderizar el footer al final de la página, fuera de las pestañas
+#render_footer()

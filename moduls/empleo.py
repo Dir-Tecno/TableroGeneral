@@ -19,36 +19,43 @@ import altair as alt
 from io import StringIO
 import os
 
-
-def enviar_a_slack(mensaje, valoracion):
+def create_empleo_kpis(resultados, programa_nombre=""):
     """
-    Envía un mensaje a Slack con la valoración del usuario.
+    Crea los KPIs específicos para el módulo Programas de Empleo.
     
     Args:
-        mensaje: El mensaje del usuario
-        valoracion: La valoración del 1 al 5
-    
+        resultados (dict): Diccionario con los resultados de conteo por categoría
+        programa_nombre (str): Nombre del programa seleccionado para mostrar en los títulos
     Returns:
-        bool: True si el mensaje se envió correctamente, False en caso contrario
+        list: Lista de diccionarios con datos de KPI para Programas de Empleo
     """
-    try:
-        # URL del webhook de Slack (reemplazar con la URL real)
-        webhook_url = "https://hooks.slack.com/services/your/webhook/url"
-        
-        # Crear el mensaje con formato
-        estrellas = "⭐" * valoracion
-        payload = {
-            "text": f"*Nueva valoración del reporte:* {estrellas}\n*Comentario:* {mensaje}"
+    kpis = [
+        {
+            "title": f"TOTAL MATCH {programa_nombre}",
+            "value_form": f"{resultados.get('total_match', 0):,}".replace(',', '.'),
+            "color_class": "kpi-primary",
+            "delta": "",
+            "delta_color": "#d4f7d4"
+        },
+        {
+            "title": f"TOTAL BENEFICIARIOS {programa_nombre}",
+            "value_form": f"{resultados.get('total_benef', 0):,}".replace(',', '.'),
+            "color_class": "kpi-secondary",
+            "delta": "",
+            "delta_color": "#d4f7d4"
+        },
+        {
+            "title": f"POSTULANTES VALIDADOS",
+            "value_form": f"{resultados.get('total_validos', 0):,}".replace(',', '.'),
+            "color_class": "kpi-accent-1",
+            "delta": "",
+            "delta_color": "#d4f7d4"
         }
-        
-        # Enviar la solicitud POST a Slack
-        response = requests.post(webhook_url, json=payload)
-        
-        # Verificar si la solicitud fue exitosa
-        return response.status_code == 200
-    except Exception as e:
-        st.error(f"Error al enviar a Slack: {str(e)}")
-        return False
+    ]
+    return kpis
+
+
+
 
 def calculate_cupo(cantidad_empleados, empleador, adherido):
     # Condición para el programa PPP
@@ -1439,24 +1446,20 @@ def show_inscriptions(df_inscriptos, df_poblacion, geojson_data, file_date):
             total_pendientes = 0
             total_rechazados = 0
         
-        # Crear tarjetas de métricas con mejor estilo
-        col1, col2, col3 = st.columns(3)
+        # Crear un diccionario con los resultados para pasarlo a la función de KPIs
+        resultados = {
+            "total_match": total_match,
+            "total_benef": total_benef,
+            "total_validos": total_validos,
+            "total_inscriptos": total_inscriptos,
+            "total_pendientes": total_pendientes,
+            "total_rechazados": total_rechazados,
+            "total_empresa_no_apta": total_empresa_no_apta
+        }
         
-        with col1:
-            st.markdown(f"""
-                <div class="metric-card status-info">
-                     <div class="metric-label">Total Match {programa_seleccionado_nombre}</div>
-                     <div class="metric-value">{total_match}</div>
-                </div>
-            """)
-        
-        with col2:
-            st.markdown(f"""
-                <div class="metric-card status-info">
-                    <div class="metric-label">Total Beneficiarios {programa_seleccionado_nombre}</div>
-                    <div class="metric-value">{total_benef}</div>
-                </div>
-            """)
+        # Usar la función para crear los KPIs
+        kpi_data = create_empleo_kpis(resultados, programa_seleccionado_nombre)
+        display_kpi_row(kpi_data)
         
         # Resto del código de visualización con mejoras visuales
         # Aquí puedes añadir más visualizaciones según sea necesario

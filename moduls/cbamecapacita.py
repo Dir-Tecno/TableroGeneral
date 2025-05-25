@@ -6,6 +6,40 @@ from utils.data_cleaning import clean_thousand_separator, convert_decimal_separa
 import geopandas as gpd
 import json
 
+def create_cbamecapacita_kpi(resultados):
+    """
+    Crea los KPIs específicos para el módulo CBA Me Capacita.
+    
+    Args:
+        resultados (dict): Diccionario con los resultados de conteo por categoría
+    Returns:
+        list: Lista de diccionarios con datos de KPI para CBA Me Capacita
+    """
+    kpis = [
+        {
+            "title": "POSTULANTES",
+            "value_form": f"{resultados.get('Postulantes', 0):,}".replace(',', '.'),
+            "color_class": "kpi-primary",
+            "delta": "",
+            "delta_color": "#d4f7d4"
+        },
+        {
+            "title": "CURSOS ACTIVOS",
+            "value_form": f"{resultados.get('Cursos Activos', 0):,}".replace(',', '.'),
+            "color_class": "kpi-secondary",
+            "delta": "",
+            "delta_color": "#d4f7d4"
+        },
+        {
+            "title": "CAPACITACIONES ELEGIDAS",
+            "value_form": f"{resultados.get('Capacitaciones Elegidas', 0):,}".replace(',', '.'),
+            "color_class": "kpi-accent-2",
+            "delta": "",
+            "delta_color": "#d4f7d4"
+        }
+    ]
+    return kpis
+
 def load_and_preprocess_data(data):
     """
     Carga y preprocesa los datos principales del dashboard CBA ME CAPACITA.
@@ -84,29 +118,16 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
     # Mostrar información de actualización de datos
     from utils.ui_components import show_last_update
     show_last_update(dates, 'VT_INSCRIPCIONES_PRG129.parquet')
-    kpi_data = [
-        {
-            "title": "Postulantes",
-            "value_form": f"{total_postulantes:,}".replace(',', '.'),
-            "color_class": "kpi-primary",
-            "delta": "",
-            "delta_color": "#d4f7d4"
-        },
-        {
-            "title": "Cursos Activos",
-            "value_form": f"{cursos_activos:,}".replace(',', '.'),
-            "color_class": "kpi-secondary",
-            "delta": "",
-            "delta_color": "#d4f7d4"
-        },
-        {
-            "title": "Capacitaciones Elegidas",
-            "value_form": f"{total_capacitaciones:,}".replace(',', '.'),
-            "color_class": "kpi-accent-2",
-            "delta": "",
-            "delta_color": "#d4f7d4"
-        }
-    ]
+    
+    # Crear un diccionario con los resultados para pasarlo a la función de KPIs
+    resultados = {
+        "Postulantes": total_postulantes,
+        "Cursos Activos": cursos_activos,
+        "Capacitaciones Elegidas": total_capacitaciones
+    }
+    
+    # Usar la función para crear los KPIs
+    kpi_data = create_cbamecapacita_kpi(resultados)
     display_kpi_row(kpi_data)
 
     # Crear pestañas para diferentes vistas

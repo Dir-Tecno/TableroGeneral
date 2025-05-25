@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import requests
 
 def show_dev_dataframe_info(data, modulo_nombre="Módulo", info_caption=None):
     """
@@ -61,6 +62,90 @@ def show_last_update(dates, file_substring, mensaje="Última actualización"):
             </div>
         """, unsafe_allow_html=True)
 
+
+def enviar_a_slack(mensaje, valoracion):
+    """
+    Envía un mensaje a Slack con la valoración del usuario.
+    
+    Args:
+        mensaje: El mensaje del usuario
+        valoracion: La valoración del 1 al 5
+    
+    Returns:
+        bool: True si el mensaje se envió correctamente, False en caso contrario
+    """
+    try:
+        # URL del webhook de Slack (se obtiene desde secrets)
+        try:
+            webhook_url = st.secrets["slack"]["webhook_url"]
+        except Exception:
+            webhook_url = "https://hooks.slack.com/services/your/webhook/url"
+            st.warning("No se encontró la URL del webhook de Slack en secrets. Se usará una URL de ejemplo.")
+        
+        # Crear el mensaje con formato
+        estrellas = "⭐" * valoracion
+        payload = {
+            "text": f"*Nueva valoración del reporte:* {estrellas}\n*Comentario:* {mensaje}"
+        }
+        
+        # Enviar la solicitud POST a Slack
+        response = requests.post(webhook_url, json=payload)
+        
+        # Verificar si la solicitud fue exitosa
+        return response.status_code == 200
+    except Exception as e:
+        st.error(f"Error al enviar a Slack: {str(e)}")
+        return False
+
+
+def render_footer():
+    """
+    Renderiza un footer con un corazón y un icono de comentario que invita a los usuarios a dejar feedback.
+    Incluye un formulario para enviar comentarios a Slack.
+    """
+    st.markdown("""<hr style='margin-top: 50px; margin-bottom: 20px;'>""", unsafe_allow_html=True)
+    
+    # Crear columnas para el footer
+    col1, col2 = st.columns([3, 1])
+    
+    with col1:
+        st.markdown("""
+            <div style="text-align: left; color: #666; font-size: 0.9em;">
+                Realizado con ❤️ por la Dirección de Tecnología y Análisis de Datos del Ministerio de Desarrollo Social y Promoción del Empleo.
+            </div>
+        """, unsafe_allow_html=True)
+    
+    with col2:
+        # Botón para abrir el formulario de comentarios
+        if st.button("💬 Dejar comentario", key="btn_comentario"):
+            st.session_state["mostrar_form_comentario"] = True
+    
+    # Mostrar formulario de comentarios si se ha hecho clic en el botón
+    if "mostrar_form_comentario" in st.session_state and st.session_state["mostrar_form_comentario"]:
+        with st.form(key="form_comentario"):
+            st.markdown("### Envíanos tu comentario")
+            comentario = st.text_area("Comentario:", height=100)
+            valoracion = st.slider("Valoración:", min_value=1, max_value=5, value=3, help="1 = Muy malo, 5 = Excelente")
+            
+            # Botón para enviar el formulario
+            submit_button = st.form_submit_button(label="Enviar comentario")
+            
+            if submit_button:
+                if comentario.strip():
+                    # Enviar comentario a Slack
+                    if enviar_a_slack(comentario, valoracion):
+                        st.success("¡Gracias por tu comentario! Ha sido enviado correctamente.")
+                        # Cerrar el formulario
+                        st.session_state["mostrar_form_comentario"] = False
+                    else:
+                        st.error("No se pudo enviar el comentario. Por favor, inténtalo de nuevo más tarde.")
+                else:
+                    st.warning("Por favor, escribe un comentario antes de enviar.")
+        
+        # Botón para cerrar el formulario
+        if st.button("Cerrar", key="btn_cerrar_comentario"):
+            st.session_state["mostrar_form_comentario"] = False
+
 def create_kpi_card(title, color_class="kpi-primary", delta=None, delta_color="#d4f7d4", tooltip=None, detalle_html=None, value_form=None, value_pers=None):
     """
     Crea una tarjeta KPI con un estilo consistente en toda la aplicación.
@@ -113,55 +198,7 @@ def create_kpi_card(title, color_class="kpi-primary", delta=None, delta_color="#
     return html
 
 
-def create_bco_gente_kpis(resultados, tooltips):
-    """
-    Crea los KPIs específicos para el módulo Banco de la Gente.
-    Cada KPI incluye una clave 'categoria' con el valor exacto de la categoría para facilitar el mapeo y procesamiento posterior.
-    
-    Args:
-        resultados (dict): Diccionario con los resultados de conteo por categoría
-        tooltips (dict): Diccionario con los tooltips para cada KPI
-    Returns:
-        list: Lista de diccionarios con datos de KPI para Banco de la Gente
-    """
-    kpis = [
-        {
-            "title": "FORMULARIOS EN EVALUACIÓN",
-            "categoria": "En Evaluación",
-            "value_form": f"{resultados.get('En Evaluación', 0):,}".replace(',', '.'),
-            "color_class": "kpi-primary",
-            "tooltip": tooltips.get("En Evaluación")
-        },
-        {
-            "title": "FORMULARIOS A PAGAR / CONVOCATORIA",
-            "categoria": "A Pagar - Convocatoria",
-            "value_form": f"{resultados.get('A Pagar - Convocatoria', 0):,}".replace(',', '.'),
-            "color_class": "kpi-accent-3",
-            "tooltip": tooltips.get("A Pagar - Convocatoria")
-        },
-        {
-            "title": "FORMULARIOS PAGADOS",
-            "categoria": "Pagados",
-            "value_form": f"{resultados.get('Pagados', 0):,}".replace(',', '.'),
-            "color_class": "kpi-accent-2",
-            "tooltip": tooltips.get("Pagados")
-        },
-        {
-            "title": "FORMULARIOS EN PROCESO DE PAGO",
-            "categoria": "En proceso de pago",
-            "value_form": f"{resultados.get('En proceso de pago', 0):,}".replace(',', '.'),
-            "color_class": "kpi-accent-1",
-            "tooltip": tooltips.get("En proceso de pago")
-        },
-        {
-            "title": "FORMULARIOS PAGADOS - FINALIZADOS",
-            "categoria": "Pagados-Finalizados",
-            "value_form": f"{resultados.get('Pagados-Finalizados', 0):,}".replace(',', '.'),
-            "color_class": "kpi-success",
-            "tooltip": tooltips.get("Pagados-Finalizados")
-        }
-    ]
-    return kpis
+
 
 def display_kpi_row(kpi_data, num_columns=5):
     """

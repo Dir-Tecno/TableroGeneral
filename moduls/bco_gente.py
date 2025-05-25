@@ -2,14 +2,63 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
-from utils.ui_components import display_kpi_row, create_bco_gente_kpis
+from utils.ui_components import display_kpi_row
 from utils.styles import COLORES_IDENTIDAD
 from utils.kpi_tooltips import ESTADO_CATEGORIAS, TOOLTIPS_DESCRIPTIVOS
-from utils.ui_components import create_bco_gente_kpis
 from utils.data_cleaning import convert_decimal_separator
 
 # Crear diccionario para tooltips de categorías (técnico, lista de estados)
 tooltips_categorias = {k: ", ".join(v) for k, v in ESTADO_CATEGORIAS.items()}
+
+def create_bco_gente_kpis(resultados, tooltips):
+    """
+    Crea los KPIs específicos para el módulo Banco de la Gente.
+    Cada KPI incluye una clave 'categoria' con el valor exacto de la categoría para facilitar el mapeo y procesamiento posterior.
+    
+    Args:
+        resultados (dict): Diccionario con los resultados de conteo por categoría
+        tooltips (dict): Diccionario con los tooltips para cada KPI
+    Returns:
+        list: Lista de diccionarios con datos de KPI para Banco de la Gente
+    """
+    kpis = [
+        {
+            "title": "FORMULARIOS EN EVALUACIÓN",
+            "categoria": "En Evaluación",
+            "value_form": f"{resultados.get('En Evaluación', 0):,}".replace(',', '.'),
+            "color_class": "kpi-primary",
+            "tooltip": tooltips.get("En Evaluación")
+        },
+        {
+            "title": "FORMULARIOS A PAGAR / CONVOCATORIA",
+            "categoria": "A Pagar - Convocatoria",
+            "value_form": f"{resultados.get('A Pagar - Convocatoria', 0):,}".replace(',', '.'),
+            "color_class": "kpi-accent-3",
+            "tooltip": tooltips.get("A Pagar - Convocatoria")
+        },
+        {
+            "title": "FORMULARIOS PAGADOS",
+            "categoria": "Pagados",
+            "value_form": f"{resultados.get('Pagados', 0):,}".replace(',', '.'),
+            "color_class": "kpi-accent-2",
+            "tooltip": tooltips.get("Pagados")
+        },
+        {
+            "title": "FORMULARIOS EN PROCESO DE PAGO",
+            "categoria": "En proceso de pago",
+            "value_form": f"{resultados.get('En proceso de pago', 0):,}".replace(',', '.'),
+            "color_class": "kpi-accent-1",
+            "tooltip": tooltips.get("En proceso de pago")
+        },
+        {
+            "title": "FORMULARIOS PAGADOS - FINALIZADOS",
+            "categoria": "Pagados-Finalizados",
+            "value_form": f"{resultados.get('Pagados-Finalizados', 0):,}".replace(',', '.'),
+            "color_class": "kpi-success",
+            "tooltip": tooltips.get("Pagados-Finalizados")
+        }
+    ]
+    return kpis
 
 # --- KPIs de Datos Fiscales ---
 def mostrar_kpis_fiscales(df_global):
