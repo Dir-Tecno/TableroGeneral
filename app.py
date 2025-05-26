@@ -101,4 +101,4 @@ for idx, tab in enumerate(tabs):
             st.error(f"Error: Faltan datos necesarios. data_key: {data_key in st.session_state}, dates_key: {dates_key in st.session_state}")
 
 # Renderizar el footer al final de la página, fuera de las pestañas
-#render_footer()
+render_footer()

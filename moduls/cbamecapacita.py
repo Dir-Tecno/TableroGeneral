@@ -178,14 +178,30 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                 st.plotly_chart(fig_topcap, use_container_width=True)
             else:
                 st.info("No se encontró la columna CAPACITACION para el top de capacitaciones.")
-            # 4. Dos tortas: EDUCACION y TIPO_TRABAJO
-            st.subheader("Distribución por Nivel Educativo y Tipo de Trabajo")
-            cols = st.columns(2)
+            # 4. Tres tortas: EDUCACION, TIPO_TRABAJO y SEXO
+            st.subheader("Distribución por Nivel Educativo, Tipo de Trabajo y Género")
+            cols = st.columns(3)
+            
+            # Generar colores para los gráficos
+            color_sequence_edu = px.colors.qualitative.Pastel
+            color_sequence_trabajo = px.colors.qualitative.Set2
+            color_sequence_sexo = px.colors.qualitative.Vivid
+            
+            # 4.1 Gráfico de Nivel Educativo
             if 'EDUCACION' in df_filtered.columns:
                 edu_group = df_filtered['EDUCACION'].value_counts().reset_index()
                 edu_group.columns = ['Educación','Cantidad']
-                fig_edu = px.pie(edu_group, names='Educación', values='Cantidad', title='Nivel Educativo')
+                
+                # Crear un diccionario de colores para cada nivel educativo
+                edu_colors = {}
+                for i, nivel in enumerate(edu_group['Educación']):
+                    color_idx = i % len(color_sequence_edu)
+                    edu_colors[nivel] = color_sequence_edu[color_idx]
+                
+                fig_edu = px.pie(edu_group, names='Educación', values='Cantidad', title='Nivel Educativo',
+                                 color='Educación', color_discrete_map=edu_colors)
                 cols[0].plotly_chart(fig_edu, use_container_width=True)
+                
                 # Tabla TOP 10 cursos por cada Nivel Educativo
                 if 'CAPACITACION' in df_filtered.columns:
                     cols[0].markdown('**Top 10 cursos más seleccionados por Nivel Educativo:**')
@@ -198,17 +214,68 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                             .sort_values('Cantidad', ascending=False)
                             .head(10)
                         )
-                        with cols[0].expander(f"Nivel Educativo: {nivel}"):
-                            st.dataframe(top_cursos, hide_index=True)
+                        # Usar el color correspondiente al nivel educativo
+                        color = edu_colors.get(nivel, '#f0f2f6')
+                        # Barra visual sin texto antes del expander, usando el CSS ajustado por el usuario
+                        cols[0].markdown(
+                            f'<hr style="border-top: none; border-right: none; border-bottom: none; border-left: 12px solid {color}; height: 14px; width: 32px; margin: 0px 0px -71px; display: inline-block; vertical-align: middle;">',
+                            unsafe_allow_html=True
+                        )
+                        # Crear el expander con texto normal
+                        with cols[0].expander(f"Nivel Educativo: {nivel}", expanded=False):
+                            # Crear gráfico de barras horizontal con Plotly
+                            if not top_cursos.empty:
+                                # Limitar el texto de los cursos para mejor visualización
+                                top_cursos['CAPACITACION_CORTO'] = top_cursos['CAPACITACION'].apply(lambda x: x[:40] + '...' if len(x) > 40 else x)
+                                
+                                # Crear el gráfico de barras horizontales
+                                fig = px.bar(
+                                    top_cursos,
+                                    x='Cantidad',
+                                    y='CAPACITACION_CORTO',
+                                    orientation='h',
+                                    color_discrete_sequence=[color],
+                                    text='Cantidad',  # Mostrar la cantidad dentro de la barra
+                                    height=400
+                                )
+                                
+                                # Personalizar el gráfico
+                                fig.update_traces(
+                                    textposition='inside',
+                                    textfont=dict(color='white'),
+                                    hovertemplate='<b>%{y}</b><br>Cantidad: %{x}'
+                                )
+                                
+                                fig.update_layout(
+                                    margin=dict(l=10, r=10, t=10, b=10),
+                                    xaxis_title=None,
+                                    yaxis_title=None,
+                                    yaxis=dict(autorange="reversed")  # Invertir el eje Y para que el mayor valor esté arriba
+                                )
+                                
+                                st.plotly_chart(fig, use_container_width=True)
+                            else:
+                                st.info("No hay datos disponibles para este nivel educativo.")
                 else:
                     cols[0].info("No se encontró la columna CAPACITACION para mostrar los cursos.")
             else:
                 cols[0].info("No se encontró la columna EDUCACION.")
+            
+            # 4.2 Gráfico de Tipo de Trabajo
             if 'TIPO_TRABAJO' in df_filtered.columns:
                 tipo_group = df_filtered['TIPO_TRABAJO'].value_counts().reset_index()
                 tipo_group.columns = ['Tipo de Trabajo','Cantidad']
-                fig_tipo = px.pie(tipo_group, names='Tipo de Trabajo', values='Cantidad', title='Tipo de Trabajo')
+                
+                # Crear un diccionario de colores para cada tipo de trabajo
+                trabajo_colors = {}
+                for i, tipo in enumerate(tipo_group['Tipo de Trabajo']):
+                    color_idx = i % len(color_sequence_trabajo)
+                    trabajo_colors[tipo] = color_sequence_trabajo[color_idx]
+                
+                fig_tipo = px.pie(tipo_group, names='Tipo de Trabajo', values='Cantidad', title='Tipo de Trabajo',
+                                  color='Tipo de Trabajo', color_discrete_map=trabajo_colors)
                 cols[1].plotly_chart(fig_tipo, use_container_width=True)
+                
                 # Tabla TOP 10 cursos por cada Tipo de Trabajo
                 if 'CAPACITACION' in df_filtered.columns:
                     cols[1].markdown('**Top 10 cursos más seleccionados por Tipo de Trabajo:**')
@@ -221,12 +288,150 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                             .sort_values('Cantidad', ascending=False)
                             .head(10)
                         )
-                        with cols[1].expander(f"Tipo de Trabajo: {tipo}"):
-                            st.dataframe(top_cursos, hide_index=True)
+                        # Usar el color correspondiente al tipo de trabajo
+                        color = trabajo_colors.get(tipo, '#f0f2f6')
+                        # Barra visual sin texto antes del expander, usando el CSS ajustado por el usuario
+                        cols[1].markdown(
+                            f'<hr style="border-top: none; border-right: none; border-bottom: none; border-left: 12px solid {color}; height: 14px; width: 32px; margin: 0px 0px -71px; display: inline-block; vertical-align: middle;">',
+                            unsafe_allow_html=True
+                        )
+                        # Crear el expander con texto normal
+                        with cols[1].expander(f"Tipo de Trabajo: {tipo}", expanded=False):
+                            # Crear gráfico de barras horizontal con Plotly
+                            if not top_cursos.empty:
+                                # Limitar el texto de los cursos para mejor visualización
+                                top_cursos['CAPACITACION_CORTO'] = top_cursos['CAPACITACION'].apply(lambda x: x[:40] + '...' if len(x) > 40 else x)
+                                
+                                # Crear el gráfico de barras horizontales
+                                fig = px.bar(
+                                    top_cursos,
+                                    x='Cantidad',
+                                    y='CAPACITACION_CORTO',
+                                    orientation='h',
+                                    color_discrete_sequence=[color],
+                                    text='Cantidad',  # Mostrar la cantidad dentro de la barra
+                                    height=400
+                                )
+                                
+                                # Personalizar el gráfico
+                                fig.update_traces(
+                                    textposition='inside',
+                                    textfont=dict(color='white'),
+                                    hovertemplate='<b>%{y}</b><br>Cantidad: %{x}'
+                                )
+                                
+                                fig.update_layout(
+                                    margin=dict(l=10, r=10, t=10, b=10),
+                                    xaxis_title=None,
+                                    yaxis_title=None,
+                                    yaxis=dict(autorange="reversed")  # Invertir el eje Y para que el mayor valor esté arriba
+                                )
+                                
+                                st.plotly_chart(fig, use_container_width=True)
+                            else:
+                                st.info("No hay datos disponibles para este tipo de trabajo.")
                 else:
                     cols[1].info("No se encontró la columna CAPACITACION para mostrar los cursos.")
             else:
                 cols[1].info("No se encontró la columna TIPO_TRABAJO.")
+                
+            # 4.3 NUEVO: Gráfico de Sexo
+            if 'ID_SEXO' in df_filtered.columns:
+                
+                
+                
+                # Definir mapeo para todos los posibles formatos
+                sexo_map = {
+                    1: 'Varón', '1': 'Varón',
+                    2: 'Mujer', '2': 'Mujer',
+                    3: 'Ambos', '3': 'Ambos',
+                    4: 'No Binario', '4': 'No Binario'
+                }
+                
+                # Aplicar el mapeo de manera más robusta
+                # Primero convertir a string para asegurar compatibilidad
+                df_filtered['SEXO'] = df_filtered['ID_SEXO'].astype(str)
+                
+                # Luego aplicar el reemplazo
+                for key, value in sexo_map.items():
+                    df_filtered.loc[df_filtered['SEXO'] == str(key), 'SEXO'] = value
+                
+                # Marcar los valores no mapeados como "No especificado"
+                unmapped = ~df_filtered['SEXO'].isin(sexo_map.values())
+                df_filtered.loc[unmapped, 'SEXO'] = 'No especificado'
+                
+                sexo_group = df_filtered['SEXO'].value_counts().reset_index()
+                sexo_group.columns = ['Sexo','Cantidad']
+                
+                # Colores para el gráfico de sexo
+                sexo_colors = {
+                    'Varón': '#2196F3',  # Azul
+                    'Mujer': '#E91E63',   # Rosa
+                    'No especificado': '#9E9E9E'  # Gris
+                }
+                
+                fig_sexo = px.pie(sexo_group, names='Sexo', values='Cantidad', title='Distribución por Género',
+                                 color='Sexo', color_discrete_map=sexo_colors)
+                cols[2].plotly_chart(fig_sexo, use_container_width=True)
+                
+                # Tabla TOP 10 cursos por cada Sexo
+                if 'CAPACITACION' in df_filtered.columns:
+                    cols[2].markdown('**Top 10 cursos más seleccionados por Género:**')
+                    for sexo in df_filtered['SEXO'].dropna().unique():
+                        top_cursos = (
+                            df_filtered[df_filtered['SEXO'] == sexo]
+                            .groupby('CAPACITACION')
+                            .size()
+                            .reset_index(name='Cantidad')
+                            .sort_values('Cantidad', ascending=False)
+                            .head(10)
+                        )
+                        # Usar el color correspondiente al sexo
+                        color = sexo_colors.get(sexo, '#9E9E9E')
+                        # Barra visual sin texto antes del expander, usando el CSS ajustado por el usuario
+                        cols[2].markdown(
+                            f'<hr style="border-top: none; border-right: none; border-bottom: none; border-left: 12px solid {color}; height: 14px; width: 32px; margin: 0px 0px -71px; display: inline-block; vertical-align: middle;">',
+                            unsafe_allow_html=True
+                        )
+                        # Crear el expander con texto normal
+                        with cols[2].expander(f"Género: {sexo}", expanded=False):
+                            # Crear gráfico de barras horizontal con Plotly
+                            if not top_cursos.empty:
+                                # Limitar el texto de los cursos para mejor visualización
+                                top_cursos['CAPACITACION_CORTO'] = top_cursos['CAPACITACION'].apply(lambda x: x[:40] + '...' if len(x) > 40 else x)
+                                
+                                # Crear el gráfico de barras horizontales
+                                fig = px.bar(
+                                    top_cursos,
+                                    x='Cantidad',
+                                    y='CAPACITACION_CORTO',
+                                    orientation='h',
+                                    color_discrete_sequence=[color],
+                                    text='Cantidad',  # Mostrar la cantidad dentro de la barra
+                                    height=400
+                                )
+                                
+                                # Personalizar el gráfico
+                                fig.update_traces(
+                                    textposition='inside',
+                                    textfont=dict(color='white'),
+                                    hovertemplate='<b>%{y}</b><br>Cantidad: %{x}'
+                                )
+                                
+                                fig.update_layout(
+                                    margin=dict(l=10, r=10, t=10, b=10),
+                                    xaxis_title=None,
+                                    yaxis_title=None,
+                                    yaxis=dict(autorange="reversed")  # Invertir el eje Y para que el mayor valor esté arriba
+                                )
+                                
+                                st.plotly_chart(fig, use_container_width=True)
+                            else:
+                                st.info("No hay datos disponibles para este sexo.")
+                else:
+                    cols[2].info("No se encontró la columna CAPACITACION para mostrar los cursos.")
+            else:
+                cols[2].info("No se encontró la columna ID_SEXO.")
         else:
             st.warning("No hay datos de postulantes disponibles para mostrar reportes de alumnos.")
     

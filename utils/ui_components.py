@@ -111,7 +111,7 @@ def render_footer():
     with col1:
         st.markdown("""
             <div style="text-align: left; color: #666; font-size: 0.9em;">
-                Realizado con ❤️ por la Dirección de Tecnología y Análisis de Datos del Ministerio de Desarrollo Social y Promoción del Empleo.
+                Realizado con 🧡 por la Dirección de Tecnología y Análisis de Datos del Ministerio de Desarrollo Social y Promoción del Empleo.
             </div>
         """, unsafe_allow_html=True)
     
