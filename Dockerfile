@@ -7,23 +7,16 @@ ENV STREAMLIT_SERVER_PORT=8501
 ENV STREAMLIT_SERVER_HEADLESS=true
 
 # 1. Instalar dependencias del sistema
+# Instalamos primero los paquetes más básicos y de desarrollo
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    git \
-    gcc \
-    g++ \
-    build-essential \
-    libffi-dev \
-    libgl1-mesa-glx \
-    libglib2.0-0 \
-    libsm6 \
-    libxext6 \
-    libxrender-dev \
-    libgeos-dev \
-    libgdal-dev \
-    gdal-bin \
-    python3-dev \
-    ca-certificates \
+    git gcc g++ build-essential libffi-dev python3-dev ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Instalamos los paquetes de visualización y geoespaciales por separado para aislar errores
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    libgl1-mesa-glx libglib2.0-0 libsm6 libxext6 libxrender1 libgeos-dev libgdal-dev gdal-bin \
     && rm -rf /var/lib/apt/lists/*
 
 # 2. Crear directorio de la aplicación
