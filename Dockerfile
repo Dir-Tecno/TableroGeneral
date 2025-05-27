@@ -9,11 +9,16 @@ ENV STREAMLIT_SERVER_HEADLESS=true
 # 1. Instalar dependencias del sistema
 # Instalamos primero los paquetes de desarrollo y dependencias del sistema
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    git gcc g++ build-essential python3-dev libffi-dev \
-    libgl1-mesa-glx libglib2.0-0 libsm6 libxext6 libxrender1 \
-    libgeos-dev libgdal-dev gdal-bin ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+    apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends gcc g++ build-essential python3-dev libffi-dev && rm -rf /var/lib/apt/lists/*
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends libgl1-mesa-glx libglib2.0-0 libsm6 libxext6 libxrender1 && rm -rf /var/lib/apt/lists/*
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends libgeos-dev libgdal-dev gdal-bin && rm -rf /var/lib/apt/lists/*
 
 # 2. Crear directorio de la aplicación
 WORKDIR /app
