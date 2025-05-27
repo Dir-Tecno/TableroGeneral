@@ -33,7 +33,7 @@ RUN printf '#!/bin/sh\n\
 mkdir -p /app/.streamlit\n\
 cat > /app/.streamlit/secrets.toml <<-"EOF"\n\
 [gitlab]\n\
-token = ${GITLAB_TOKEN}\n\
+token = "${GITLAB_TOKEN}"\n\
 [slack]\n\
 webhook_url = "${SLACK_WEBHOOK_URL}"\n\
 EOF\n\
