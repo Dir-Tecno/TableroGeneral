@@ -10,6 +10,19 @@ ENV STREAMLIT_SERVER_HEADLESS=true
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     git \
+    gcc \
+    g++ \
+    build-essential \
+    libffi-dev \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgeos-dev \
+    libgdal-dev \
+    gdal-bin \
+    python3-dev \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
