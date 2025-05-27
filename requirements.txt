@@ -10,7 +10,6 @@ geopandas==1.0.1
 folium==0.17.0
 streamlit_folium==0.23.1
 matplotlib==3.8.0
-streamlit-plotly-events==0.0.6
 
 # Análisis de datos
 wordcloud==1.9.3
