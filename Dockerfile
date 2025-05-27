@@ -29,11 +29,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . /app/
 
 # Configurar secrets
-RUN printf '#!/bin/sh\n\
+RUN echo '#!/bin/sh\n\
 mkdir -p /app/.streamlit\n\
-cat > /app/.streamlit/secrets.toml <<-"EOF"\n\
+cat > /app/.streamlit/secrets.toml <<EOF\n\
 [gitlab]\n\
 token = "${GITLAB_TOKEN}"\n\
+\n\
 [slack]\n\
 webhook_url = "${SLACK_WEBHOOK_URL}"\n\
 EOF\n\
