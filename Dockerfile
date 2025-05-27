@@ -30,8 +30,8 @@ COPY . /app/
 
 # Configurar secrets
 RUN echo '#!/bin/sh\n\
-mkdir -p /app/.streamlit\n\
-cat > /app/.streamlit/secrets.toml <<-"EOF"\n\
+mkdir -p /app/.streamlit && \
+cat > /app/.streamlit/secrets.toml <<-"EOF"
 [gitlab]\token="${GITLAB_TOKEN}"\[slack]\webhook_url="${SLACK_WEBHOOK_URL}"\EOF\
 exec "$@"' > /app/entrypoint.sh && \
 chmod +x /app/entrypoint.sh
