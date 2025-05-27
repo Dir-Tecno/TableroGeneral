@@ -19,23 +19,33 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
+# 2. Crear directorio de la aplicación
 WORKDIR /app
 
-# Instalar dependencias Python primero
-COPY requirements.txt /app/
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copiar el resto de la aplicación
+# 3. Copiar archivos de la aplicación
 COPY . /app/
 
-# Configurar secrets
-RUN printf '#!/bin/sh\n\ncat << EOF > /app/.streamlit/secrets.toml\n[gitlab]\ntoken = "%s"\n\n[slack]\nwebhook_url = "%s"\nEOF\n\nstreamlit run app.py\n' "$GITLAB_TOKEN" "$SLACK_WEBHOOK_URL" > /app/entrypoint.sh \
-    && chmod +x /app/entrypoint.sh
+# 4. Crear entrypoint para configuración en tiempo de ejecución
+RUN echo '#!/bin/sh\n\
+mkdir -p /app/.streamlit\n\
+cat > /app/.streamlit/secrets.toml <<EOF\n\
+[gitlab]\n\
+token = "${GITLAB_TOKEN}"\n\
+\n\
+[slack]\n\
+webhook_url = "${SLACK_WEBHOOK_URL}"\n\
+EOF\n\
+exec "$@"' > /app/entrypoint.sh && \
+    chmod +x /app/entrypoint.sh
 
-# Variables de entorno runtime
-ENV GITLAB_TOKEN="" \
-    SLACK_WEBHOOK_URL=""
+# 5. Variables de entorno para tiempo de ejecución
+ENV GITLAB_TOKEN=""
+ENV SLACK_WEBHOOK_URL=""
 
+# 6. Instalar dependencias Python
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 7. Configuración final
 EXPOSE 8501
 ENTRYPOINT ["/app/entrypoint.sh"]
 CMD ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]
