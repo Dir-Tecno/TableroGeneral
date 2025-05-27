@@ -13,9 +13,5 @@ matplotlib==3.8.0
 
 # Análisis de datos
 wordcloud==1.9.3
-textblob==0.17.1
 openpyxl==3.1.2
 
-# Integraciones de API
-supabase==2.10.0
-huggingface-hub==0.20.3
