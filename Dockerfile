@@ -28,10 +28,6 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends gdal-bin && \
     rm -rf /var/lib/apt/lists/*
 
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends python3-gdal && \  
-    rm -rf /var/lib/apt/lists/*
-
 # 2. Crear directorio de la aplicación
 WORKDIR /app
 
