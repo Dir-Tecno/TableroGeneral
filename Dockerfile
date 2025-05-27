@@ -1,4 +1,4 @@
-FROM python:3.9-slim
+FROM python:3.9 
 
 # Configurar variables de entorno para Python
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -7,16 +7,30 @@ ENV STREAMLIT_SERVER_PORT=8501
 ENV STREAMLIT_SERVER_HEADLESS=true
 
 # 1. Instalar dependencias del sistema
+# 1. Instalar dependencias del sistema (separadas en múltiples pasos)
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    git \
-    ca-certificates \
-    build-essential \
-    libgeos-dev \
-    libproj-dev \
-    gdal-bin \
-    python3-gdal \
-    && rm -rf /var/lib/apt/lists/*
+    apt-get install -y --no-install-recommends git ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends build-essential && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends libgeos-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends libproj-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends gdal-bin && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends python3-gdal && \  
+    rm -rf /var/lib/apt/lists/*
 
 # 2. Crear directorio de la aplicación
 WORKDIR /app
