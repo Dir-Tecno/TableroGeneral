@@ -34,7 +34,7 @@ mkdir -p /app/.streamlit\n\
 cat > /app/.streamlit/secrets.toml <<-"EOF"\n\
 [gitlab]\token="${GITLAB_TOKEN}"\[slack]\webhook_url="${SLACK_WEBHOOK_URL}"\EOF\
 exec "$@"' > /app/entrypoint.sh && \
-    chmod +x /app/entrypoint.sh
+chmod +x /app/entrypoint.sh
 
 # Variables de entorno runtime
 ENV GITLAB_TOKEN="" \
