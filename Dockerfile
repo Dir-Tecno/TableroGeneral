@@ -11,6 +11,11 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     git \
     ca-certificates \
+    build-essential \
+    libgeos-dev \
+    libproj-dev \
+    gdal-bin \
+    python3-gdal \
     && rm -rf /var/lib/apt/lists/*
 
 # 2. Crear directorio de la aplicación
