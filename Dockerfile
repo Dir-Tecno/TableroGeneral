@@ -7,10 +7,12 @@ ENV STREAMLIT_SERVER_PORT=8501
 ENV STREAMLIT_SERVER_HEADLESS=true
 
 # 1. Instalar dependencias del sistema
+# Instalamos primero los paquetes de desarrollo y dependencias del sistema
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    git \
-    ca-certificates \
+    git gcc g++ build-essential python3-dev libffi-dev \
+    libgl1-mesa-glx libglib2.0-0 libsm6 libxext6 libxrender1 \
+    libgeos-dev libgdal-dev gdal-bin ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # 2. Crear directorio de la aplicación
