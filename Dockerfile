@@ -32,11 +32,7 @@ COPY . /app/
 RUN echo '#!/bin/sh\n\
 mkdir -p /app/.streamlit\n\
 cat > /app/.streamlit/secrets.toml <<-"EOF"\n\
-[gitlab]\n\
-token = "${GITLAB_TOKEN}"\n\
-[slack]\n\
-webhook_url = "${SLACK_WEBHOOK_URL}"\n\
-EOF\n\
+[gitlab]\token="${GITLAB_TOKEN}"\[slack]\webhook_url="${SLACK_WEBHOOK_URL}"\EOF\
 exec "$@"' > /app/entrypoint.sh && \
     chmod +x /app/entrypoint.sh
 
