@@ -29,7 +29,15 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . /app/
 
 # Configurar secrets
-RUN echo '#!/bin/sh\nmkdir -p /app/.streamlit\ncat > /app/.streamlit/secrets.toml << "EOF"\n[gitlab]\ntoken = "${GITLAB_TOKEN}"\n[slack]\nwebhook_url = "${SLACK_WEBHOOK_URL}"\nEOF\nexec "$@"' > /app/entrypoint.sh && \
+RUN echo '#!/bin/sh\n\
+mkdir -p /app/.streamlit\n\
+cat > /app/.streamlit/secrets.toml <<-"EOF"\n\
+[gitlab]\n\
+token = "${GITLAB_TOKEN}"\n\
+[slack]\n\
+webhook_url = "${SLACK_WEBHOOK_URL}"\n\
+EOF\n\
+exec "$@"' > /app/entrypoint.sh && \
     chmod +x /app/entrypoint.sh
 
 # Variables de entorno runtime
