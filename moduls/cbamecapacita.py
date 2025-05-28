@@ -442,6 +442,7 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
         if df_cursos is not None:
             import io
             columnas_exportar = [
+                "ID_PLANIFICACION",
                 "N_INSTITUCION",
                 "N_CURSO",
                 "HORA_INICIO",

@@ -26,6 +26,7 @@ TOOLTIPS_DESCRIPTIVOS = {
     # Tooltips para los KPIs de Programas de Empleo
     "BENEFICIARIOS TOTALES": "Total de beneficiarios en programas de empleo, incluyendo Entrenamiento Laboral (EL) y Contrato de Trabajo Indeterminado (CTI)",
     "BENEFICIARIOS EL": "Beneficiarios con categoría de Entrenamiento Laboral",
+    "BENEFICIARIOS FIN": "Beneficiarios que completaron el programa de Entrenamiento Laboral",
     "ZONA FAVORECIDA": "Beneficiarios ubicados en departamentos con tratamiento preferencial (zonas con mayor índice de vulnerabilidad)",
     "BENEFICIARIOS CTI": "Beneficiarios con Contrato de Trabajo Indeterminado",
     "EMPRESAS ADHERIDAS": "Total de empresas que se han adherido a los programas de empleo",
@@ -38,6 +39,7 @@ ESTADO_TOOLTIPS = {
     "POSTULANTE APTO": "Las empresas pueden inscribir a los postulantes aptos",
     "INSCRIPTO": "Persona seleccionada por una empresa en el programa de Entrenamiento Laboral, pendiente de análisis",
     "BENEFICIARIO": "Persona beneficiaria del programa de Entrenamiento Laboral actualmente",
+    "BENEFICIARIO FIN": "Persona que completaron el programa de Entrenamiento Laboral",
     "INSCRIPTO - CTI": "Persona inscrita en el programa de Contrato de Trabajo Indeterminado",
     "RETENIDO - CTI": "Persona cuyo proceso en CTI está a la espera del alta temprana",
     "VALIDADO - CTI": "Persona que ha sido validada para participar en el programa CTI",

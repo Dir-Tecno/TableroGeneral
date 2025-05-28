@@ -444,6 +444,10 @@ def load_and_preprocess_data(data, dates=None, is_development=False):
             # Aplicar la corrección solo a los registros del departamento CAPITAL
             df_inscriptos.loc[capital_mask, 'N_LOCALIDAD'] = 'CORDOBA'
         
+        if 'BEN_N_ESTADO' in df_inscriptos.columns:
+            estado_ben_mask = df_inscriptos['BEN_N_ESTADO'] == 'BAJA POR FINALIZACION DE PROGR'
+            df_inscriptos.loc[estado_ben_mask, 'N_ESTADO_FICHA'] = 'BENEFICIARIO FIN PROGRAMA'
+
         # Añadir columna de ZONA FAVORECIDA
         zonas_favorecidas = [
             'PRESIDENTE ROQUE SAENZ PEÑA', 'GENERAL ROCA', 'RIO SECO', 'TULUMBA', 
@@ -534,7 +538,8 @@ def render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has
     """
     with st.spinner("Generando visualizaciones..."):
         # Calcular KPIs importantes antes de aplicar filtros
-        total_beneficiarios = df_inscriptos[df_inscriptos['BEN_N_ESTADO'].isin(["BENEFICIARIO RETENIDO", "ACTIVO", "BAJA PEDIDO POR EMPRESA"])].shape[0]
+        total_beneficiarios = df_inscriptos[df_inscriptos['N_ESTADO_FICHA'].isin(["BENEFICIARIO"])].shape[0]
+        total_beneficiarios_fin = df_inscriptos[df_inscriptos['N_ESTADO_FICHA'].isin(["BENEFICIARIO FIN PROGRAMA"])].shape[0]
         total_beneficiarios_cti = df_inscriptos[df_inscriptos['N_ESTADO_FICHA'] == "BENEFICIARIO- CTI"].shape[0]
         total_general = total_beneficiarios + total_beneficiarios_cti
         
@@ -549,32 +554,38 @@ def render_dashboard(df_inscriptos, df_empresas, df_poblacion, geojson_data, has
         # Usar la función auxiliar para mostrar KPIs
         kpi_data = [
             {
-                "title": "BENEFICIARIOS TOTALES",
+                "title": "BENEFICIARIOS TOTALES (activos)",
                 "value_form": f"{total_general:,}".replace(',', '.'),
                 "color_class": "kpi-primary",
                 "tooltip": TOOLTIPS_DESCRIPTIVOS.get("BENEFICIARIOS TOTALES", "")
             },
             {
-                "title": "BENEFICIARIOS EL",
+                "title": "BENEFICIARIOS EL (activos)",
                 "value_form": f"{total_beneficiarios:,}".replace(',', '.'),
                 "color_class": "kpi-secondary",
                 "tooltip": TOOLTIPS_DESCRIPTIVOS.get("BENEFICIARIOS EL", "")
             },
             {
-                "title": "ZONA FAVORECIDA",
+                "title": "BENEFICIARIOS COMPLETARON PROGRAMA",
+                "value_form": f"{total_beneficiarios_fin:,}".replace(',', '.'),
+                "color_class": "kpi-accent-1",
+                "tooltip": TOOLTIPS_DESCRIPTIVOS.get("BENEFICIARIOS FIN", "")
+            },
+            {
+                "title": "ZONA FAVORECIDA (activos)",
                 "value_form": f"{beneficiarios_zona_favorecida:,}".replace(',', '.'),
                 "color_class": "kpi-accent-3",
                 "tooltip": TOOLTIPS_DESCRIPTIVOS.get("ZONA FAVORECIDA", "")
             },
             {
-                "title": "BENEFICIARIOS CTI",
+                "title": "BENEFICIARIOS CTI (activos)",
                 "value_form": f"{total_beneficiarios_cti:,}".replace(',', '.'),
                 "color_class": "kpi-accent-4",
                 "tooltip": TOOLTIPS_DESCRIPTIVOS.get("BENEFICIARIOS CTI", "")
             }
         ]
         
-        display_kpi_row(kpi_data, num_columns=4)
+        display_kpi_row(kpi_data, num_columns=5)
         st.markdown('</div>', unsafe_allow_html=True)
         
         # Crear pestañas para organizar el contenido
