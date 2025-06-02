@@ -296,7 +296,7 @@ def load_and_preprocess_data(data):
             
             # Crear la columna ZONA
             df_global['ZONA'] = df_global['N_DEPARTAMENTO'].apply(
-                lambda x: 'ZONA FAVORECIDA' if x in zonas_favorecidas else 'ZONA REGULAR'
+                lambda x: 'ZONA NOC Y SUR' if x in zonas_favorecidas else 'ZONA REGULAR'
             )
         
         # Realizar el cruce entre df_global y df_recupero si ambos están disponibles

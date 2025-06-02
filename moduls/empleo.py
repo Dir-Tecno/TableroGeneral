@@ -457,13 +457,13 @@ def load_and_preprocess_data(data, dates=None, is_development=False):
         
         # Crear la columna ZONA
         df_inscriptos['ZONA'] = df_inscriptos['N_DEPARTAMENTO'].apply(
-            lambda x: 'ZONA FAVORECIDA' if x in zonas_favorecidas else 'ZONA REGULAR'
+            lambda x: 'ZONA NOC Y SUR' if x in zonas_favorecidas else 'ZONA REGULAR'
         )
         
         # Añadir la columna ZONA también al dataframe de empresas
         if has_empresas and 'N_DEPARTAMENTO' in df_empresas.columns:
             df_empresas['ZONA'] = df_empresas['N_DEPARTAMENTO'].apply(
-                lambda x: 'ZONA FAVORECIDA' if x in zonas_favorecidas else 'ZONA REGULAR'
+                lambda x: 'ZONA NOC Y SUR' if x in zonas_favorecidas else 'ZONA REGULAR'
             )
                 # Mostrar la fecha de última actualización
         from utils.ui_components import show_last_update

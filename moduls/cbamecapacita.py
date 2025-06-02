@@ -62,6 +62,34 @@ def load_and_preprocess_data(data):
     df_postulantes = clean_thousand_separator(df_postulantes)
     df_cursos = clean_thousand_separator(df_cursos)
 
+    # --- Tratamiento de N_DEPARTAMENTO y ZONA ---
+    if df_postulantes is not None and 'N_DEPARTAMENTO' in df_postulantes.columns:
+        departamentos_validos = [
+            "CAPITAL", "CALAMUCHITA", "COLON", "CRUZ DEL EJE", "GENERAL ROCA", "GENERAL SAN MARTIN",
+            "ISCHILIN", "JUAREZ CELMAN", "MARCOS JUAREZ", "MINAS", "POCHO", "PRESIDENTE ROQUE SAENZ PEÑA",
+            "PUNILLA", "RIO CUARTO", "RIO PRIMERO", "RIO SECO", "RIO SEGUNDO", "SAN ALBERTO", "SAN JAVIER",
+            "SAN JUSTO", "SANTA MARIA", "SOBREMONTE", "TERCERO ARRIBA", "TOTORAL", "TULUMBA", "UNION"
+        ]
+        # Normalizar N_DEPARTAMENTO: los que no estén en la lista pasan a 'OTROS'
+        df_postulantes['N_DEPARTAMENTO'] = df_postulantes['N_DEPARTAMENTO'].where(
+            df_postulantes['N_DEPARTAMENTO'].isin(departamentos_validos), 'OTROS'
+        )
+
+        # Añadir columna de ZONA FAVORECIDA
+        zonas_favorecidas = [
+            'PRESIDENTE ROQUE SAENZ PEÑA', 'GENERAL ROCA', 'RIO SECO', 'TULUMBA', 
+            'POCHO', 'SAN JAVIER', 'SAN ALBERTO', 'MINAS', 'CRUZ DEL EJE', 
+            'TOTORAL', 'SOBREMONTE', 'ISCHILIN'
+        ]
+        df_postulantes['ZONA'] = df_postulantes['N_DEPARTAMENTO'].apply(
+            lambda x: 'ZONA NOC Y SUR' if x in zonas_favorecidas else 'ZONA REGULAR'
+        )
+
+        # Corregir N_LOCALIDAD a 'CORDOBA' si el departamento es CAPITAL
+        if 'N_LOCALIDAD' in df_postulantes.columns:
+            capital_mask = df_postulantes['N_DEPARTAMENTO'] == 'CAPITAL'
+            df_postulantes.loc[capital_mask, 'N_LOCALIDAD'] = 'CORDOBA'
+
     # Cruce solicitado: agregar CUIL de postulantes a cursos directamente en df_cursos
     if df_cursos is not None and df_postulantes is not None:
         # Asegurar que ID_CERTIFICACION e ID_CAPACITACION sean enteros si existen
@@ -452,6 +480,8 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                 "CONVENIO_MUNICIPIO_COMUNA",
                 "N_DEPARTAMENTO",
                 "N_LOCALIDAD",
+                "N_CALLE",
+                "ALTURA",
                 "POSTULACIONES"
             ]
             # Filtrar solo columnas existentes
