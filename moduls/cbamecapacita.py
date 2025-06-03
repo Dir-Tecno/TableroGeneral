@@ -92,13 +92,13 @@ def load_and_preprocess_data(data):
 
     # Cruce solicitado: agregar CUIL de postulantes a cursos directamente en df_cursos
     if df_cursos is not None and df_postulantes is not None:
-        # Asegurar que ID_CERTIFICACION e ID_CAPACITACION sean enteros si existen
-        if 'ID_CAPACITACION' in df_postulantes.columns:
-            df_postulantes['ID_CAPACITACION'] = pd.to_numeric(df_postulantes['ID_CAPACITACION'], errors='coerce').fillna(0).astype(int)
-        if 'ID_CURSO' in df_cursos.columns and 'ID_CAPACITACION' in df_postulantes.columns and 'CUIL' in df_postulantes.columns:
-            # Agrupar por ID_CAPACITACION y contar CUILs no nulos
+        # Asegurar que ID_CERTIFICACION e ID_CERTIFICACION sean enteros si existen
+        if 'ID_CERTIFICACION' in df_postulantes.columns:
+            df_postulantes['ID_CERTIFICACION'] = pd.to_numeric(df_postulantes['ID_CERTIFICACION'], errors='coerce').fillna(0).astype(int)
+        if 'ID_CURSO' in df_cursos.columns and 'ID_CERTIFICACION' in df_postulantes.columns and 'CUIL' in df_postulantes.columns:
+            # Agrupar por ID_CERTIFICACION y contar CUILs no nulos
             cuil_count = (
-                df_postulantes.groupby('ID_CAPACITACION')['CUIL']
+                df_postulantes.groupby('ID_CERTIFICACION')['CUIL']
                 .apply(lambda x: x.notnull().sum())
                 .reset_index()
                 .rename(columns={'CUIL': 'POSTULACIONES'})
@@ -107,7 +107,7 @@ def load_and_preprocess_data(data):
                 cuil_count,
                 how='left',
                 left_on='ID_CURSO',
-                right_on='ID_CAPACITACION'
+                right_on='ID_CERTIFICACION'
             )
         if 'POSTULACIONES' in df_cursos.columns:
             df_cursos['POSTULACIONES'] = pd.to_numeric(df_cursos['POSTULACIONES'], errors='coerce').fillna(0).astype(int)
@@ -142,7 +142,7 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
     # KPIs reales usando VT_INSCRIPCIONES_PRG129.parquet (postulantes) y VT_CURSOS_SEDES_GEO.parquet (cursos)
     total_postulantes = df_postulantes["CUIL"].nunique() if df_postulantes is not None else 0
     cursos_activos = df_cursos["ID_PLANIFICACION"].nunique() if df_cursos is not None else 0
-    total_capacitaciones = df_postulantes["ID_CAPACITACION"].nunique() if df_postulantes is not None and "ID_CAPACITACION" in df_postulantes.columns else 0
+    total_capacitaciones = df_postulantes["ID_CERTIFICACION"].nunique() if df_postulantes is not None and "ID_CERTIFICACION" in df_postulantes.columns else 0
     # Mostrar información de actualización de datos
     from utils.ui_components import show_last_update
     show_last_update(dates, 'VT_INSCRIPCIONES_PRG129.parquet')
@@ -199,8 +199,8 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                 st.info("No se encontró la columna FEC_NACIMIENTO para calcular edades.")
             # 3. TOP 10 de CAPACITACION elegida
             st.subheader("Top 10 de Capacitaciones Elegidas")
-            if 'CAPACITACION' in df_filtered.columns:
-                top_cap = df_filtered['CAPACITACION'].value_counts().head(10).reset_index()
+            if 'N_CERTIFICACION' in df_filtered.columns:
+                top_cap = df_filtered['N_CERTIFICACION'].value_counts().head(10).reset_index()
                 top_cap.columns = ['Capacitación','Cantidad']
                 fig_topcap = px.bar(top_cap, x='Capacitación', y='Cantidad', title='Top 10 de Capacitaciones', text_auto=True)
                 st.plotly_chart(fig_topcap, use_container_width=True)
@@ -231,12 +231,12 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                 cols[0].plotly_chart(fig_edu, use_container_width=True)
                 
                 # Tabla TOP 10 cursos por cada Nivel Educativo
-                if 'CAPACITACION' in df_filtered.columns:
+                if 'N_CERTIFICACION' in df_filtered.columns:
                     cols[0].markdown('**Top 10 cursos más seleccionados por Nivel Educativo:**')
                     for nivel in df_filtered['EDUCACION'].dropna().unique():
                         top_cursos = (
                             df_filtered[df_filtered['EDUCACION'] == nivel]
-                            .groupby('CAPACITACION')
+                            .groupby('N_CERTIFICACION')
                             .size()
                             .reset_index(name='Cantidad')
                             .sort_values('Cantidad', ascending=False)
@@ -254,7 +254,7 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                             # Crear gráfico de barras horizontal con Plotly
                             if not top_cursos.empty:
                                 # Limitar el texto de los cursos para mejor visualización
-                                top_cursos['CAPACITACION_CORTO'] = top_cursos['CAPACITACION'].apply(lambda x: x[:40] + '...' if len(x) > 40 else x)
+                                top_cursos['CAPACITACION_CORTO'] = top_cursos['N_CERTIFICACION'].apply(lambda x: x[:40] + '...' if len(x) > 40 else x)
                                 
                                 # Crear el gráfico de barras horizontales
                                 fig = px.bar(
@@ -305,12 +305,12 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                 cols[1].plotly_chart(fig_tipo, use_container_width=True)
                 
                 # Tabla TOP 10 cursos por cada Tipo de Trabajo
-                if 'CAPACITACION' in df_filtered.columns:
+                if 'CERTIFICACION' in df_filtered.columns:
                     cols[1].markdown('**Top 10 cursos más seleccionados por Tipo de Trabajo:**')
                     for tipo in df_filtered['TIPO_TRABAJO'].dropna().unique():
                         top_cursos = (
                             df_filtered[df_filtered['TIPO_TRABAJO'] == tipo]
-                            .groupby('CAPACITACION')
+                            .groupby('CERTIFICACION')
                             .size()
                             .reset_index(name='Cantidad')
                             .sort_values('Cantidad', ascending=False)
@@ -328,7 +328,7 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                             # Crear gráfico de barras horizontal con Plotly
                             if not top_cursos.empty:
                                 # Limitar el texto de los cursos para mejor visualización
-                                top_cursos['CAPACITACION_CORTO'] = top_cursos['CAPACITACION'].apply(lambda x: x[:40] + '...' if len(x) > 40 else x)
+                                top_cursos['CAPACITACION_CORTO'] = top_cursos['N_CERTIFICACION'].apply(lambda x: x[:40] + '...' if len(x) > 40 else x)
                                 
                                 # Crear el gráfico de barras horizontales
                                 fig = px.bar(
@@ -403,12 +403,12 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                 cols[2].plotly_chart(fig_sexo, use_container_width=True)
                 
                 # Tabla TOP 10 cursos por cada Sexo
-                if 'CAPACITACION' in df_filtered.columns:
+                if 'N_CERTIFICACION' in df_filtered.columns:
                     cols[2].markdown('**Top 10 cursos más seleccionados por Género:**')
                     for sexo in df_filtered['SEXO'].dropna().unique():
                         top_cursos = (
                             df_filtered[df_filtered['SEXO'] == sexo]
-                            .groupby('CAPACITACION')
+                            .groupby('N_CERTIFICACION')
                             .size()
                             .reset_index(name='Cantidad')
                             .sort_values('Cantidad', ascending=False)
@@ -426,7 +426,7 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                             # Crear gráfico de barras horizontal con Plotly
                             if not top_cursos.empty:
                                 # Limitar el texto de los cursos para mejor visualización
-                                top_cursos['CAPACITACION_CORTO'] = top_cursos['CAPACITACION'].apply(lambda x: x[:40] + '...' if len(x) > 40 else x)
+                                top_cursos['CAPACITACION_CORTO'] = top_cursos['N_CERTIFICACION'].apply(lambda x: x[:40] + '...' if len(x) > 40 else x)
                                 
                                 # Crear el gráfico de barras horizontales
                                 fig = px.bar(
