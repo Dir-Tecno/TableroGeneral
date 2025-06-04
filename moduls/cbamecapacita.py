@@ -106,7 +106,7 @@ def load_and_preprocess_data(data):
             df_cursos = df_cursos.merge(
                 cuil_count,
                 how='left',
-                left_on='ID_CURSO',
+                left_on='ID_PLANIFICACION',
                 right_on='ID_CERTIFICACION'
             )
         if 'POSTULACIONES' in df_cursos.columns:
