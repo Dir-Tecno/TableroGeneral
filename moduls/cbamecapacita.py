@@ -305,12 +305,12 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                 cols[1].plotly_chart(fig_tipo, use_container_width=True)
                 
                 # Tabla TOP 10 cursos por cada Tipo de Trabajo
-                if 'CERTIFICACION' in df_filtered.columns:
+                if 'N_CERTIFICACION' in df_filtered.columns:
                     cols[1].markdown('**Top 10 cursos más seleccionados por Tipo de Trabajo:**')
                     for tipo in df_filtered['TIPO_TRABAJO'].dropna().unique():
                         top_cursos = (
                             df_filtered[df_filtered['TIPO_TRABAJO'] == tipo]
-                            .groupby('CERTIFICACION')
+                            .groupby('N_CERTIFICACION')
                             .size()
                             .reset_index(name='Cantidad')
                             .sort_values('Cantidad', ascending=False)
