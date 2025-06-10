@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import altair as alt
 from utils.ui_components import display_kpi_row
 from utils.data_cleaning import clean_thousand_separator, convert_decimal_separator
 import geopandas as gpd
@@ -31,6 +32,13 @@ def create_cbamecapacita_kpi(resultados):
             "delta_color": "#d4f7d4"
         },
         {
+            "title": "PARTICIPANTES INSCRIPTOS",
+            "value_form": f"{resultados.get('Participantes inscriptos', 0):,}".replace(',', '.'),
+            "color_class": "kpi-accent-1",
+            "delta": "",
+            "delta_color": "#d4f7d4"
+        },
+        {
             "title": "CAPACITACIONES ELEGIDAS",
             "value_form": f"{resultados.get('Capacitaciones Elegidas', 0):,}".replace(',', '.'),
             "color_class": "kpi-accent-2",
@@ -49,9 +57,11 @@ def load_and_preprocess_data(data):
     # Cargar DataFrames principales
     df_postulantes = None
     df_cursos = None
+    df_alumnos = None
     if isinstance(data, dict):
         df_postulantes = data.get("VT_INSCRIPCIONES_PRG129.parquet")
         df_cursos = data.get("VT_CURSOS_SEDES_GEO.parquet")
+        df_alumnos = data.get("VT_ALUMNOS_EN_CURSOS.parquet")
     elif isinstance(data, list):
         for df in data:
             if "CUIL" in df.columns:
@@ -95,7 +105,7 @@ def load_and_preprocess_data(data):
         # Asegurar que ID_CERTIFICACION e ID_CERTIFICACION sean enteros si existen
         if 'ID_CERTIFICACION' in df_postulantes.columns:
             df_postulantes['ID_CERTIFICACION'] = pd.to_numeric(df_postulantes['ID_CERTIFICACION'], errors='coerce').fillna(0).astype(int)
-        if 'ID_CURSO' in df_cursos.columns and 'ID_CERTIFICACION' in df_postulantes.columns and 'CUIL' in df_postulantes.columns:
+        if 'ID_PLANIFICACION' in df_cursos.columns and 'ID_CERTIFICACION' in df_postulantes.columns and 'CUIL' in df_postulantes.columns:
             # Agrupar por ID_CERTIFICACION y contar CUILs no nulos
             cuil_count = (
                 df_postulantes.groupby('ID_CERTIFICACION')['CUIL']
@@ -111,8 +121,40 @@ def load_and_preprocess_data(data):
             )
         if 'POSTULACIONES' in df_cursos.columns:
             df_cursos['POSTULACIONES'] = pd.to_numeric(df_cursos['POSTULACIONES'], errors='coerce').fillna(0).astype(int)
-    
-    return df_postulantes, df_cursos
+    if df_alumnos is not None and df_cursos is not None:
+        if 'ID_ALUMNO' in df_alumnos.columns and 'ID_PLANIFICACION' in df_alumnos.columns:
+            # Debug: Ver valores únicos en ID_PLANIFICACION
+            print(f"Valores únicos en ID_PLANIFICACION de df_alumnos: {df_alumnos['ID_PLANIFICACION'].nunique()}")
+
+            alumnos_count = (
+                df_alumnos.groupby('ID_PLANIFICACION')['ID_ALUMNO']
+                .apply(lambda x: x.notnull().sum())
+                .reset_index()
+                .rename(columns={'ID_ALUMNO': 'ALUMNOS'})
+            )
+            # Debug: Ver el resultado del conteo
+            print(f"Total de grupos en alumnos_count: {len(alumnos_count)}")
+
+            df_cursos = df_cursos.merge(
+                alumnos_count,
+                how='left',
+                left_on='ID_PLANIFICACION',
+                right_on='ID_PLANIFICACION'
+            )
+
+        if 'ALUMNOS' in df_cursos.columns:
+            df_cursos['ALUMNOS'] = pd.to_numeric(df_cursos['ALUMNOS'], errors='coerce').fillna(0).astype(int)
+            # Debug: Confirmar que ALUMNOS está en df_cursos
+            print(f"Columna ALUMNOS en df_cursos: {df_cursos['ALUMNOS'].sum()} alumnos en total")
+        else:
+            print("ADVERTENCIA: La columna ALUMNOS no se agregó a df_cursos")
+
+    # Debug: Verificar columnas finales
+    if df_cursos is not None:
+        print(f"Columnas en df_cursos: {df_cursos.columns.tolist()}")
+        if 'ALUMNOS' in df_cursos.columns:
+            print(f"Estadísticas de ALUMNOS: Min={df_cursos['ALUMNOS'].min()}, Max={df_cursos['ALUMNOS'].max()}, Media={df_cursos['ALUMNOS'].mean():.2f}")
+    return df_postulantes, df_alumnos, df_cursos
 
 def show_cba_capacita_dashboard(data, dates, is_development=False):
     """
@@ -135,12 +177,13 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
     
 
     # --- Usar función de carga y preprocesamiento ---
-    df_postulantes, df_cursos = load_and_preprocess_data(data)
+    df_postulantes, df_alumnos, df_cursos = load_and_preprocess_data(data)
 
 
 
     # KPIs reales usando VT_INSCRIPCIONES_PRG129.parquet (postulantes) y VT_CURSOS_SEDES_GEO.parquet (cursos)
     total_postulantes = df_postulantes["CUIL"].nunique() if df_postulantes is not None else 0
+    total_alumnos = df_alumnos["ID_ALUMNO"].nunique() if df_alumnos is not None else 0
     cursos_activos = df_cursos["ID_PLANIFICACION"].nunique() if df_cursos is not None else 0
     total_capacitaciones = df_postulantes["ID_CERTIFICACION"].nunique() if df_postulantes is not None and "ID_CERTIFICACION" in df_postulantes.columns else 0
     # Mostrar información de actualización de datos
@@ -151,7 +194,8 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
     resultados = {
         "Postulantes": total_postulantes,
         "Cursos Activos": cursos_activos,
-        "Capacitaciones Elegidas": total_capacitaciones
+        "Capacitaciones Elegidas": total_capacitaciones,
+        "Participantes inscriptos": total_alumnos
     }
     
     # Usar la función para crear los KPIs
@@ -464,29 +508,114 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
             st.warning("No hay datos de postulantes disponibles para mostrar reportes de alumnos.")
     
     with tab2:
+        st.markdown("## Análisis de Cursos")
+        
+        # Gráfico de mosaico para distribución de postulantes por curso
+        if df_cursos is not None and 'POSTULACIONES' in df_cursos.columns:
+            st.markdown("### Distribución de Cursos por Cantidad de Postulantes")
+            
+            # Crear rangos de postulantes (de 20 en 20)
+            df_cursos['Rango_Postulantes'] = pd.cut(
+                df_cursos['POSTULACIONES'], 
+                bins=range(0, max(df_cursos['POSTULACIONES']) + 21, 20),
+                labels=[f'{i}-{i+19}' for i in range(0, max(df_cursos['POSTULACIONES']), 20)],
+                right=False
+            )
+            
+            # Contar cursos por rango de postulantes
+            df_rangos = df_cursos.groupby('Rango_Postulantes').size().reset_index(name='Cantidad_Cursos')
+            
+            # Filtrar rangos con 0 cursos
+            df_rangos = df_rangos[df_rangos['Cantidad_Cursos'] > 0]
+            
+            # Crear gráfico de mosaico con Altair
+            chart = alt.Chart(df_rangos).mark_bar().encode(
+                x=alt.X('Rango_Postulantes:N', title='Rango de Postulantes por Curso', sort=None),
+                y=alt.Y('Cantidad_Cursos:Q', title='Cantidad de Cursos'),
+                color=alt.Color('Rango_Postulantes:N', 
+                               legend=None,
+                               scale=alt.Scale(scheme='viridis')),
+                tooltip=['Rango_Postulantes', 'Cantidad_Cursos']
+            ).properties(
+                title='Distribución de Cursos por Cantidad de Postulantes',
+                width=600,
+                height=400
+            )
+            
+            # Añadir etiquetas de texto
+            text = chart.mark_text(
+                align='center',
+                baseline='middle',
+                dy=-10,
+                color='white',
+                fontWeight='bold'
+            ).encode(
+                text='Cantidad_Cursos:Q'
+            )
+            
+            # Combinar gráfico y etiquetas
+            final_chart = (chart + text)
+            
+            # Mostrar el gráfico
+            st.altair_chart(final_chart, use_container_width=True)
+        
         st.markdown("## Sector Productivos por Departamento")
-        # Botón para descargar el Excel con columnas seleccionadas
-        # Mostrar botón solo si existe el DataFrame
+        # Mostrar DataFrame solo si existe
         if df_cursos is not None:
             import io
             columnas_exportar = [
                 "ID_PLANIFICACION",
                 "N_INSTITUCION",
                 "N_CURSO",
-                "HORA_INICIO",
-                "HORA_FIN",
+
+                "N_SECTOR_PRODUCTIVO",
+                "N_SEDE",
+                "N_DEPARTAMENTO",
+                "N_LOCALIDAD",
+                "N_CALLE",
+                "ALTURA",
+                "POSTULACIONES",
+                "ALUMNOS"
+            ]
+            # Filtrar solo columnas existentes
+            columnas_existentes = [col for col in columnas_exportar if col in df_cursos.columns]
+            df_export = df_cursos[columnas_existentes].copy()
+            
+            # Mostrar tabla con estilos
+            st.markdown("### Tabla de Cursos")
+            
+            # Seleccionar solo las columnas solicitadas para mostrar
+            columnas_mostrar = [
+                "ID_PLANIFICACION",
+                "N_INSTITUCION",
+                "N_CURSO",
                 "N_SECTOR_PRODUCTIVO",
                 "N_SEDE",
                 "CONVENIO_MUNICIPIO_COMUNA",
                 "N_DEPARTAMENTO",
                 "N_LOCALIDAD",
-                "N_CALLE",
-                "ALTURA",
-                "POSTULACIONES"
+                "POSTULACIONES",
+                "ALUMNOS"
             ]
-            # Filtrar solo columnas existentes
-            columnas_existentes = [col for col in columnas_exportar if col in df_cursos.columns]
-            df_export = df_cursos[columnas_existentes].copy()
+            
+            # Filtrar solo columnas existentes para mostrar
+            columnas_mostrar_existentes = [col for col in columnas_mostrar if col in df_export.columns]
+            df_display = df_export[columnas_mostrar_existentes].copy()
+            
+            # Aplicar estilos al DataFrame
+            styled_display = df_display.style\
+                .background_gradient(subset=["POSTULACIONES"], cmap="Blues")\
+                .background_gradient(subset=["ALUMNOS"], cmap="Greens")\
+                .format({"POSTULACIONES": "{:,.0f}", "ALUMNOS": "{:,.0f}"})
+            
+            # Mostrar la tabla con estilos
+            st.dataframe(
+                styled_display,
+                use_container_width=True,
+                hide_index=True
+            )
+            
+            # Botón para descargar Excel debajo de la tabla
             buffer = io.BytesIO()
             df_export.to_excel(buffer, index=False)
             st.download_button(
@@ -520,7 +649,8 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                 "ID_DEPARTAMENTO", "N_DEPARTAMENTO", "N_SECTOR_PRODUCTIVO"
             ]).agg(
                 Cantidad=("N_SECTOR_PRODUCTIVO", "size"),
-                POSTULACIONES =("POSTULACIONES","sum")
+                POSTULACIONES =("POSTULACIONES","sum"),
+                ALUMNOS =("ALUMNOS","sum")
             ).reset_index()
 
             # --- NUEVO MAPA: Choropleth por Departamento ---
@@ -555,7 +685,7 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                 with col_tabla_depto:
                     st.markdown("### Tabla Sector Productivo por Departamento")
                     st.dataframe(
-                        df_agrupado_tabla[["N_DEPARTAMENTO", "N_SECTOR_PRODUCTIVO", "Cantidad", "POSTULACIONES"]],
+                        df_agrupado_tabla[["N_DEPARTAMENTO", "N_SECTOR_PRODUCTIVO", "Cantidad", "POSTULACIONES", "ALUMNOS"]],
                         use_container_width=True,
                         hide_index=True
                     )
