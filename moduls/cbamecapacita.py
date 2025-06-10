@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import altair as alt
 from utils.ui_components import display_kpi_row
 from utils.data_cleaning import clean_thousand_separator, convert_decimal_separator
@@ -509,6 +510,86 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
     
     with tab2:
         st.markdown("## Análisis de Cursos")
+        
+        # Gráficos de Gauge para visualizar ocupación de cursos
+        if df_cursos is not None and 'ALUMNOS' in df_cursos.columns:
+            st.markdown("### Porcentaje de Ocupación de Cursos")
+            st.markdown("*Considerando 20 alumnos como 100% de ocupación*")
+            
+            # Calcular el porcentaje de ocupación (20 alumnos = 100%)
+            df_cursos['Porcentaje_Ocupacion'] = (df_cursos['ALUMNOS'] / 20 * 100).clip(upper=100)
+            
+            # Crear categorías de ocupación
+            df_cursos['Categoria_Ocupacion'] = pd.cut(
+                df_cursos['Porcentaje_Ocupacion'],
+                bins=[0, 25, 50, 75, 100],
+                labels=['Baja (0-25%)', 'Media-Baja (25-50%)', 'Media-Alta (50-75%)', 'Alta (75-100%)']
+            )
+            
+            # Contar cursos por categoría de ocupación
+            df_ocupacion = df_cursos['Categoria_Ocupacion'].value_counts().reset_index()
+            df_ocupacion.columns = ['Categoría', 'Cantidad']
+            
+            # Crear layout con 2 columnas
+            col1, col2 = st.columns([1, 1])
+            
+            with col1:
+                # Crear gráfico de barras para mostrar cantidad de cursos por categoría de ocupación
+                fig_barras = px.bar(
+                    df_ocupacion,
+                    x='Categoría',
+                    y='Cantidad',
+                    color='Categoría',
+                    text_auto=True,
+                    title='Distribución de Cursos por Nivel de Ocupación',
+                    color_discrete_sequence=['#FF5252', '#FFA726', '#FFEB3B', '#66BB6A']
+                )
+                fig_barras.update_layout(xaxis_title=None)
+                st.plotly_chart(fig_barras, use_container_width=True)
+            
+            with col2:
+                # Calcular promedio de ocupación para el gauge
+                ocupacion_promedio = df_cursos['Porcentaje_Ocupacion'].mean()
+                
+                # Calcular estadísticas adicionales
+                total_cursos = len(df_cursos)
+                cursos_llenos = len(df_cursos[df_cursos['Porcentaje_Ocupacion'] >= 75])
+                porcentaje_cursos_llenos = (cursos_llenos / total_cursos * 100) if total_cursos > 0 else 0
+                
+                # Crear gauge chart para mostrar ocupación promedio
+                fig_gauge = go.Figure(go.Indicator(
+                    mode="gauge+number",
+                    value=ocupacion_promedio,
+                    domain={'x': [0, 1], 'y': [0, 1]},
+                    title={'text': "Ocupación Promedio de Cursos"},
+                    gauge={
+                        'axis': {'range': [0, 100], 'tickwidth': 1, 'tickcolor': "darkblue"},
+                        'bar': {'color': "darkblue"},
+                        'bgcolor': "white",
+                        'borderwidth': 2,
+                        'bordercolor': "gray",
+                        'steps': [
+                            {'range': [0, 25], 'color': "#FF5252"},  # Rojo
+                            {'range': [25, 50], 'color': "#FFA726"},  # Naranja
+                            {'range': [50, 75], 'color': "#FFEB3B"},  # Amarillo
+                            {'range': [75, 100], 'color': "#66BB6A"}  # Verde
+                        ],
+                    }
+                ))
+                
+                fig_gauge.update_layout(
+                    height=300,
+                    margin=dict(l=20, r=20, t=50, b=20)
+                )
+                
+                st.plotly_chart(fig_gauge, use_container_width=True)
+                
+                # Mostrar estadísticas adicionales
+                st.metric(
+                    label="Cursos con alta ocupación (>75%)", 
+                    value=f"{cursos_llenos} de {total_cursos}",
+                    delta=f"{porcentaje_cursos_llenos:.1f}%"
+                )
         
         # Gráfico de mosaico para distribución de postulantes por curso
         if df_cursos is not None and 'POSTULACIONES' in df_cursos.columns:
