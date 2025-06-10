@@ -526,9 +526,36 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                 labels=['Baja (0-25%)', 'Media-Baja (25-50%)', 'Media-Alta (50-75%)', 'Alta (75-100%)']
             )
             
+            # Definir el umbral para alta ocupación (75%)
+            umbral_alta_ocupacion = 75
+            
+            # Asegurarse de que todas las categorías estén correctamente asignadas
+            # Verificar que los cursos con Porcentaje_Ocupacion >= 75 estén en la categoría 'Alta (75-100%)'
+            df_cursos['Categoria_Ocupacion'] = pd.cut(
+                df_cursos['Porcentaje_Ocupacion'],
+                bins=[0, 25, 50, 75, 100],
+                labels=['Baja (0-25%)', 'Media-Baja (25-50%)', 'Media-Alta (50-75%)', 'Alta (75-100%)'],
+                include_lowest=True,
+                right=True  # Asegura que 75 esté en la categoría 'Alta'
+            )
+            
             # Contar cursos por categoría de ocupación
             df_ocupacion = df_cursos['Categoria_Ocupacion'].value_counts().reset_index()
             df_ocupacion.columns = ['Categoría', 'Cantidad']
+            
+            # Asegurar que las categorías estén en el orden correcto para la visualización
+            orden_categorias = ['Baja (0-25%)', 'Media-Baja (25-50%)', 'Media-Alta (50-75%)', 'Alta (75-100%)']
+            df_ocupacion['Orden'] = df_ocupacion['Categoría'].map({cat: i for i, cat in enumerate(orden_categorias)})
+            df_ocupacion = df_ocupacion.sort_values('Orden').drop('Orden', axis=1)
+            
+            # Calcular estadísticas adicionales usando exactamente el mismo criterio
+            total_cursos = len(df_cursos)
+            cursos_alta_ocupacion = len(df_cursos[df_cursos['Categoria_Ocupacion'] == 'Alta (75-100%)'])
+            porcentaje_cursos_alta_ocupacion = (cursos_alta_ocupacion / total_cursos * 100) if total_cursos > 0 else 0
+            
+            # Asegurarse de que los valores sean consistentes entre el gráfico y la métrica
+            alta_en_grafico = df_ocupacion[df_ocupacion['Categoría'] == 'Alta (75-100%)']['Cantidad'].values[0] if 'Alta (75-100%)' in df_ocupacion['Categoría'].values else 0
+            cursos_alta_ocupacion = alta_en_grafico  # Usar el valor del gráfico para consistencia
             
             # Crear layout con 2 columnas
             col1, col2 = st.columns([1, 1])
@@ -546,15 +573,17 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                 )
                 fig_barras.update_layout(xaxis_title=None)
                 st.plotly_chart(fig_barras, use_container_width=True)
+                
+                # Mostrar estadísticas de alta ocupación debajo del gráfico
+                st.metric(
+                    label=f"Cursos con alta ocupación (>={umbral_alta_ocupacion}%)", 
+                    value=f"{cursos_alta_ocupacion} de {total_cursos}",
+                    delta=f"{porcentaje_cursos_alta_ocupacion:.1f}%"
+                )
             
             with col2:
                 # Calcular promedio de ocupación para el gauge
                 ocupacion_promedio = df_cursos['Porcentaje_Ocupacion'].mean()
-                
-                # Calcular estadísticas adicionales
-                total_cursos = len(df_cursos)
-                cursos_llenos = len(df_cursos[df_cursos['Porcentaje_Ocupacion'] >= 75])
-                porcentaje_cursos_llenos = (cursos_llenos / total_cursos * 100) if total_cursos > 0 else 0
                 
                 # Crear gauge chart para mostrar ocupación promedio
                 fig_gauge = go.Figure(go.Indicator(
@@ -584,12 +613,7 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                 
                 st.plotly_chart(fig_gauge, use_container_width=True)
                 
-                # Mostrar estadísticas adicionales
-                st.metric(
-                    label="Cursos con alta ocupación (>75%)", 
-                    value=f"{cursos_llenos} de {total_cursos}",
-                    delta=f"{porcentaje_cursos_llenos:.1f}%"
-                )
+                # Ya no necesitamos este indicador métrico aquí, lo hemos movido a la columna 1
         
         # Gráfico de mosaico para distribución de postulantes por curso
         if df_cursos is not None and 'POSTULACIONES' in df_cursos.columns:
