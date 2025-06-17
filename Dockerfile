@@ -8,16 +8,19 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     DEBIAN_FRONTEND=noninteractive
 
 # Instalar dependencias en una sola capa
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        git \
-        ca-certificates \
-        build-essential \
-        libgeos-dev \
-        libproj-dev \
-        gdal-bin && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+# DEPENDENCIAS DE GEOSPATIALES y CIENTIFICAS
+RUN apt-get update && apt-get install -y \
+    git \
+    ca-certificates \
+    build-essential \
+    libgeos-dev \
+    libproj-dev \
+    gdal-bin \
+    python3-gdal \
+    gfortran \
+    pkg-config \
+    python3-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 # 2. Crear directorio de la aplicación
 WORKDIR /app
@@ -43,6 +46,7 @@ ENV GITLAB_TOKEN=""
 ENV SLACK_WEBHOOK_URL=""
 
 # 6. Instalar dependencias Python
+# Se instala la dependencia con pip
 RUN pip install --no-cache-dir -r requirements.txt
 
 # 7. Configuración final
