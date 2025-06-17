@@ -86,7 +86,7 @@ def mostrar_kpis_fiscales(df_global):
         "IMP_IVA",
         "MONOTRIBUTO",
         "INTEGRANTE_SOC",
-        "EMPLEADOR",
+        "EMPLEADO",
         "ACTIVIDAD_MONOTRIBUTO"
     ]
 
@@ -218,23 +218,29 @@ def load_and_preprocess_data(data):
         # Extraer los dataframes necesarios
         df_global = data.get('vt_nomina_rep_dpto_localidad.parquet')
         df_recupero = data.get('VT_NOMINA_REP_RECUPERO_X_ANIO.parquet')
+        df_cumplimiento = data.get('VT_CUMPLIMIENTO_FORMULARIOS.parquet')
         geojson_data = data.get('capa_departamentos_2010.geojson')
         df_localidad_municipio = data.get('LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt')
         
         # Verificar silenciosamente si los archivos existen
         has_global_data = df_global is not None and not df_global.empty
         has_recupero_data = df_recupero is not None and not df_recupero.empty
+        has_cumplimiento_data = df_cumplimiento is not None and not df_cumplimiento.empty
         # Check if geojson_data was loaded (it might be bytes, dict, or None initially)
         has_geojson_data = geojson_data is not None 
 
-        # Agregar columna de CATEGORIA a df_recupero si está disponible
+        # Agregar columna de CATEGORIA a df_recupero si está disponible y filtrar solo por 'Pagados' y 'Pagados-Finalizados'
         
         if has_recupero_data and 'N_ESTADO_PRESTAMO' in df_recupero.columns:
             df_recupero['CATEGORIA'] = 'Otros'
             for categoria, estados in ESTADO_CATEGORIAS.items():
                 mask = df_recupero['N_ESTADO_PRESTAMO'].isin(estados)
                 df_recupero.loc[mask, 'CATEGORIA'] = categoria
-
+            
+            # Filtrar df_recupero para incluir solo las categorías 'Pagados' y 'Pagados-Finalizados'
+            categorias_validas = ['Pagados', 'Pagados-Finalizados']
+            df_recupero = df_recupero[df_recupero['CATEGORIA'].isin(categorias_validas)]
+        
         # Check if df_localidad_municipio (likely a string) is not None and not an empty string
         has_localidad_municipio_data = df_localidad_municipio is not None and df_localidad_municipio != "" 
         
@@ -304,7 +310,7 @@ def load_and_preprocess_data(data):
             try:
                 # Verificar si existen las columnas necesarias en df_recupero
                 # Añadir FEC_INICIO_PAGO si existe en df_recupero
-                required_columns = ['FEC_NACIMIENTO','CUIL','NRO_SOLICITUD', 'DEUDA', 'DEUDA_NO_VENCIDA', 'MONTO_OTORGADO','IMP_GANANCIAS','IMP_IVA','MONOTRIBUTO','INTEGRANTE_SOC','EMPLEADOR','ACTIVIDAD_MONOTRIBUTO','FEC_INICIO_PAGO']
+                required_columns = ['FEC_NACIMIENTO','CUIL','NRO_SOLICITUD', 'DEUDA', 'DEUDA_NO_VENCIDA', 'MONTO_OTORGADO','IMP_GANANCIAS','IMP_IVA','MONOTRIBUTO','INTEGRANTE_SOC','EMPLEADO','ACTIVIDAD_MONOTRIBUTO','FEC_INICIO_PAGO']
                 missing_columns = [col for col in required_columns if col not in df_recupero.columns]
                 
                 if not missing_columns:
@@ -317,19 +323,8 @@ def load_and_preprocess_data(data):
                     # Convertir columnas numéricas a tipo float
                     for col in ['DEUDA_VENCIDA', 'DEUDA_NO_VENCIDA', 'MONTO_OTORGADO']:
                         df_recupero_subset[col] = pd.to_numeric(df_recupero_subset[col], errors='coerce')
+                    
 
-                missing_columns = [col for col in required_columns if col not in df_recupero.columns]
-                
-                if not missing_columns:
-                    # Seleccionar solo las columnas necesarias de df_recupero para el merge
-                    df_recupero_subset = df_recupero[required_columns].copy()
-                    
-                    # Renombrar DEUDA como DEUDA_VENCIDA
-                    df_recupero_subset = df_recupero_subset.rename(columns={'DEUDA': 'DEUDA_VENCIDA'})
-                    
-                    # Convertir columnas numéricas a tipo float
-                    for col in ['DEUDA_VENCIDA', 'DEUDA_NO_VENCIDA', 'MONTO_OTORGADO']:
-                        df_recupero_subset[col] = pd.to_numeric(df_recupero_subset[col], errors='coerce')
                     
                     # Realizar el merge (left join)
                     df_global = pd.merge(
@@ -338,6 +333,49 @@ def load_and_preprocess_data(data):
                         on='NRO_SOLICITUD',
                         how='left'
                     )
+                    
+                    # Realizar el merge con df_cumplimiento directamente en df_recupero si está disponible
+                    if has_cumplimiento_data and 'NRO_FORMULARIO' in df_cumplimiento.columns:
+                        try:
+                            # Columnas a obtener del DataFrame de cumplimiento
+                            columnas_cumplimiento = [
+                                'NRO_FORMULARIO',
+                                'PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO'
+                            ]
+                            
+                            # Verificar que todas las columnas existan
+                            missing_cols_cumplimiento = [col for col in columnas_cumplimiento if col not in df_cumplimiento.columns]
+                            
+                            if not missing_cols_cumplimiento:
+                                # Seleccionar solo las columnas necesarias
+                                df_cumplimiento_subset = df_cumplimiento[columnas_cumplimiento].copy()
+                                
+                                # Convertir columna numérica a tipo float
+                                df_cumplimiento_subset['PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO'] = pd.to_numeric(
+                                    df_cumplimiento_subset['PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO'], 
+                                    errors='coerce'
+                                )
+                                
+                                # Realizar el merge (left join) directamente con df_recupero
+                                df_recupero = pd.merge(
+                                    df_recupero,
+                                    df_cumplimiento_subset,
+                                    left_on='NRO_SOLICITUD',  # Clave en df_recupero
+                                    right_on='NRO_FORMULARIO',  # Clave en df_cumplimiento
+                                    how='left'
+                                )
+                                
+                                # Eliminar la columna duplicada NRO_FORMULARIO si existe
+                                if 'NRO_FORMULARIO' in df_recupero.columns:
+                                    df_recupero = df_recupero.drop('NRO_FORMULARIO', axis=1)
+                                
+                                st.success("Se ha realizado correctamente el merge con los datos de cumplimiento de formularios.")
+                            else:
+                                st.warning(f"No se pudo realizar el merge con datos de cumplimiento. Faltan columnas: {', '.join(missing_cols_cumplimiento)}")
+                        except Exception as e_cumplimiento:
+                            st.warning(f"Error al realizar el merge con datos de cumplimiento: {str(e_cumplimiento)}")
+                    else:
+                        st.info("Los datos de cumplimiento no están disponibles o no contienen la columna NRO_FORMULARIO.")
                     
                     # Rellenar valores NaN con 0
                     for col in ['DEUDA_VENCIDA', 'DEUDA_NO_VENCIDA', 'MONTO_OTORGADO']:
@@ -777,7 +815,7 @@ def show_bco_gente_dashboard(data, dates, is_development=False):
             
             # Mostrar los datos de recupero en la pestaña RECUPERO
             with st.spinner("Cargando visualizaciones de recupero..."):
-                mostrar_recupero(df_filtrado_recupero_tab, df_localidad_municipio, geojson_data)
+                mostrar_recupero(df_filtrado_recupero_tab, df_localidad_municipio, geojson_data, df_recupero, is_development)
         else:
             st.info("No hay datos de recupero disponibles para mostrar.")
 
@@ -1009,8 +1047,8 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
     # NUEVA SECCIÓN: Gráficos de Torta Demográficos
     st.subheader("Distribución de Créditos", help="Distribución demográfica de los beneficiarios")
     
-    # Crear tres columnas para los gráficos: Línea, Sexo, Edades
-    col_torta_cat, col_torta_sexo, col_edades = st.columns(3)
+    # Crear cuatro columnas para los gráficos: Línea, Sexo, Empleado, Edades
+    col_torta_cat, col_torta_sexo=st.columns(2)
 
     # Gráfico de torta por categoría
     with col_torta_cat:
@@ -1082,6 +1120,54 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
                 st.warning("La columna 'N_SEXO' no está presente en el DataFrame.")
         except Exception as e:
             st.error(f"Error al generar el gráfico de sexo: {e}")
+    
+    col_torta_empleado, col_edades = st.columns(2)
+    
+    # Gráfico de torta por estado de empleo
+    with col_torta_empleado:
+        try:
+            if 'EMPLEADO' in df_filtrado_global.columns:
+                df_empleado = df_filtrado_global[
+                    (df_filtrado_global['CATEGORIA'] == 'Pagados') & 
+                    (df_filtrado_global['EMPLEADO'].notna())
+                ].copy()
+                if df_empleado.empty:
+                    st.warning("No hay datos disponibles para el gráfico de empleo después de filtrar NaNs.")
+                else:
+                    # Contar valores únicos de EMPLEADO
+                    empleado_counts = df_empleado['EMPLEADO'].value_counts().reset_index()
+                    empleado_counts.columns = ['Estado de Empleo', 'Cantidad']
+                    
+                    # Reemplazar valores numéricos por etiquetas descriptivas
+                    empleado_counts['Estado de Empleo'] = empleado_counts['Estado de Empleo'].replace({
+                        'S': 'Empleado',
+                        'N': 'No Empleado'
+                    })
+                    
+                    if empleado_counts.empty:
+                        st.warning("No hay datos para mostrar en el gráfico de empleo.")
+                    else:
+                        fig_empleado = px.pie(
+                            empleado_counts,
+                            values='Cantidad',
+                            names='Estado de Empleo',
+                            color_discrete_sequence=px.colors.qualitative.Pastel
+                        )
+                        fig_empleado.update_traces(
+                            textposition='inside',
+                            textinfo='percent+label',
+                            hoverinfo='label+percent+value',
+                            marker=dict(line=dict(color='#FFFFFF', width=1))
+                        )
+                        fig_empleado.update_layout(
+                            title="Distribución por Estado de Empleo EN CREDITOS PAGADOS",
+                            margin=dict(l=20, r=20, t=30, b=20)
+                        )
+                        st.plotly_chart(fig_empleado, use_container_width=True)
+            else:
+                st.warning("La columna 'EMPLEADO' no está presente en el DataFrame.")
+        except Exception as e:
+            st.error(f"Error al generar el gráfico de empleo: {e}")
 
     # Gráfico de distribución de edades con filtro propio de categoría
     with col_edades:
@@ -1096,8 +1182,8 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
                 default=categorias_estado,
                 key="filtro_categoria_edades"
             )
-            if df_recupero is not None and 'FEC_NACIMIENTO' in df_recupero.columns and 'N_ESTADO_PRESTAMO' in df_recupero.columns:
-                df_edades = df_recupero[['FEC_NACIMIENTO', 'N_ESTADO_PRESTAMO']].copy()
+            if df_recupero is not None and 'FEC_NACIMIENTO' in df_recupero.columns and 'N_ESTADO_PRESTAMO' in df_recupero.columns and 'FEC_FORM' in df_recupero.columns:
+                df_edades = df_recupero[['FEC_NACIMIENTO', 'N_ESTADO_PRESTAMO', 'FEC_FORM']].copy()
                 # Mapear N_ESTADO_PRESTAMO a CATEGORIA
                 df_edades['CATEGORIA'] = 'Otros'
                 for categoria, estados in ESTADO_CATEGORIAS.items():
@@ -1108,9 +1194,15 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
                     df_edades = df_edades[df_edades['CATEGORIA'].isin(selected_categorias_edades)]
                 # Convertir a datetime y quitar hora
                 df_edades['FEC_NACIMIENTO'] = pd.to_datetime(df_edades['FEC_NACIMIENTO'], errors='coerce').dt.date
-                # Calcular edad
-                hoy = datetime.now().date()
-                df_edades['EDAD'] = df_edades['FEC_NACIMIENTO'].apply(lambda x: hoy.year - x.year - ((hoy.month, hoy.day) < (x.month, x.day)) if pd.notnull(x) else None)
+                df_edades['FEC_FORM'] = pd.to_datetime(df_edades['FEC_FORM'], errors='coerce').dt.date
+                # Calcular edad usando FEC_FORM en lugar de la fecha actual
+                df_edades['EDAD'] = df_edades.apply(
+                    lambda row: row['FEC_FORM'].year - row['FEC_NACIMIENTO'].year - 
+                    ((row['FEC_FORM'].month, row['FEC_FORM'].day) < 
+                     (row['FEC_NACIMIENTO'].month, row['FEC_NACIMIENTO'].day)) 
+                    if pd.notnull(row['FEC_NACIMIENTO']) and pd.notnull(row['FEC_FORM']) else None, 
+                    axis=1
+                )
                 # Definir rangos de edad
                 bins = [0, 17, 29, 39, 49, 59, 69, 200]
                 labels = ['<18', '18-29', '30-39', '40-49', '50-59', '60-69','70+']
@@ -1121,7 +1213,7 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
                     conteo_edades,
                     x='Rango de Edad',
                     y='Cantidad',
-                    title='Distribución por Rango de Edad',
+                    title='Distribución por Rango de Edad (a Fecha de Solicitud)',
                     color='Rango de Edad',
                     color_discrete_sequence=px.colors.qualitative.Pastel
                 )
@@ -1543,7 +1635,7 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
 
     
 
-def mostrar_recupero(df_filtrado, df_localidad_municipio, geojson_data):
+def mostrar_recupero(df_filtrado, df_localidad_municipio, geojson_data, df_recupero=None, is_development=False):
     """
     Muestra la sección de recupero de deudas, utilizando datos ya filtrados.
     
@@ -1551,8 +1643,331 @@ def mostrar_recupero(df_filtrado, df_localidad_municipio, geojson_data):
         df_filtrado: DataFrame con datos globales ya filtrados por render_filters.
         df_localidad_municipio: DataFrame con mapeo localidad-municipio.
         geojson_data: Datos GeoJSON para mapas.
+        df_recupero: DataFrame con datos de recupero completos.
+        is_development: Indica si se está en modo desarrollo.
     """
+    # Importar bibliotecas necesarias
+    import numpy as np
     st.header("Análisis de Recupero")
+    
+    # Mostrar df_recupero en modo desarrollo siempre al inicio
+    if is_development and df_recupero is not None and not df_recupero.empty:
+        st.subheader("DataFrame de Recupero Completo (Modo Desarrollo)")
+        
+        # Usar la función show_dev_dataframe_info para mostrar información del DataFrame
+        from utils.ui_components import show_dev_dataframe_info
+        
+        # Crear un diccionario temporal con el DataFrame de recupero
+        temp_data = {"df_recupero": df_recupero}
+        
+        # Mostrar información detallada del DataFrame
+        show_dev_dataframe_info(temp_data, modulo_nombre="Recupero")
+        
+        # Verificar si existe la columna PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO
+        if 'PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO' in df_recupero.columns:
+            st.success("✅ La columna PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO está presente en df_recupero")
+        else:
+            st.error("❌ La columna PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO NO está presente en df_recupero")
+        
+        # Añadir botón para descargar el DataFrame df_recupero
+        col1, col2 = st.columns([1, 3])
+        with col1:
+            # Función para convertir el DataFrame a CSV
+            def convert_df_to_csv(df):
+                return df.to_csv(index=False).encode('utf-8')
+            
+            # Botón de descarga
+            csv = convert_df_to_csv(df_recupero)
+            st.download_button(
+                label="⬇️ Descargar df_recupero",
+                data=csv,
+                file_name='df_recupero.csv',
+                mime='text/csv',
+                help="Descargar el DataFrame completo de recupero en formato CSV"
+            )
+        
+        with col2:
+            st.info("El archivo descargado contendrá todos los datos del DataFrame df_recupero, incluyendo la columna PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO si está presente.")
+            
+            # Mostrar dimensiones del DataFrame
+            if not df_recupero.empty:
+                st.caption(f"Dimensiones del DataFrame: {df_recupero.shape[0]:,} filas x {df_recupero.shape[1]:,} columnas")
+        
+        # Agregar una línea divisoria
+        st.markdown("---")
+        
+    # Agregar histograma con curva normal superpuesta para PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO
+    if 'PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO' in df_recupero.columns:
+        st.subheader("Análisis de Distribución de Cumplimiento de Formularios")
+        st.markdown("<div class='info-box'>Para cuotas pagadas, se calcula la diferencia entre la fecha de vencimiento (FEC_CUOTA) y la fecha de pago (FEC_PAGO), donde un valor positivo indica atraso en el pago y un valor negativo refleja un pago anticipado. En el caso de cuotas vencidas no pagadas, se mide la diferencia entre la fecha de vencimiento y la fecha actual (SYSDATE), representando el atraso acumulado. Las cuotas futuras o sin vencimiento se registran como 0 para no afectar el promedio. A mayor número de días, menor es el cumplimiento del cliente, ya que valores altos señalan demoras prolongadas en los pagos.</div>", unsafe_allow_html=True)
+        
+        # Crear una copia del DataFrame para trabajar con él
+        df_cumplimiento = df_recupero.copy()
+        
+        # Primero asegurarse de que la columna sea numérica y eliminar nulos de PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO
+        df_cumplimiento['PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO'] = pd.to_numeric(
+            df_cumplimiento['PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO'], errors='coerce'
+        )
+        
+        # Eliminar valores nulos de la columna de interés antes de filtrar por categoría
+        df_cumplimiento = df_cumplimiento.dropna(subset=['PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO'])
+        
+        # Filtrar directamente por la categoría "Pagados" si existe la columna CATEGORIA
+        if 'CATEGORIA' in df_cumplimiento.columns:
+            # Verificar si existe la categoría "Pagados"
+            if 'Pagados' in df_cumplimiento['CATEGORIA'].values:
+                # Filtrar solo por la categoría "Pagados"
+                registros_antes = len(df_cumplimiento)
+                df_cumplimiento = df_cumplimiento[df_cumplimiento['CATEGORIA'] == 'Pagados']
+                registros_filtrados = registros_antes - len(df_cumplimiento)
+                
+                # Mostrar información sobre el filtrado
+                st.success(f"Análisis limitado a categoría 'Pagados': {len(df_cumplimiento):,} registros")
+            else:
+                st.warning("La categoría 'Pagados' no existe en los datos. Se usarán todos los registros disponibles.")
+        else:
+            st.warning("La columna CATEGORIA no está disponible. Se usarán todos los registros disponibles.")
+        
+        # Mantener la variable total_registros_originales para cálculos posteriores
+        total_registros_originales = len(df_recupero)
+        
+        # Agregar opción para filtrar outliers
+        col1, col2 = st.columns(2)
+        with col1:
+            # Agregar opción para filtrar outliers
+            filtrar_outliers = st.checkbox(
+                "Filtrar valores extremos (outliers)",
+                value=True,
+                help="Elimina valores extremadamente altos usando el método IQR con umbral conservador (3*IQR)"
+            )
+        
+        # Nota: Los valores negativos representan días adelantados a la fecha de vencimiento de cuotas
+        # Son importantes para analizar el cumplimiento, así que los mantenemos
+        negativos_filtrados = 0
+        
+        # Filtrar outliers solo si la opción está activada
+        outliers_filtrados = 0
+        limite_superior = None
+        if filtrar_outliers and len(df_cumplimiento) > 10:  # Necesitamos suficientes datos
+            # Filtrar valores extremos (outliers) usando el método IQR
+            Q1 = df_cumplimiento['PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO'].quantile(0.25)
+            Q3 = df_cumplimiento['PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO'].quantile(0.75)
+            IQR = Q3 - Q1
+            
+            # Definir límites para outliers (usando 3*IQR para ser conservadores)
+            limite_superior = Q3 + 3 * IQR
+            
+            # Guardar cantidad antes del filtrado de outliers
+            registros_antes = len(df_cumplimiento)
+            
+            # Filtrar outliers extremos
+            df_cumplimiento = df_cumplimiento[df_cumplimiento['PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO'] <= limite_superior]
+            outliers_filtrados = registros_antes - len(df_cumplimiento)
+        
+        # Ahora configuramos el slider DESPUÉS de filtrar outliers
+        with col2:
+            # Obtener valores mínimo y máximo para el slider (incluyendo valores negativos)
+            min_dias_raw = df_cumplimiento['PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO'].min()
+            max_dias_raw = df_cumplimiento['PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO'].max()
+            
+            # Redondear a enteros para el slider, asegurándonos de incluir todo el rango de datos
+            min_dias = int(np.floor(min_dias_raw)) if pd.notna(min_dias_raw) else -30
+            max_dias = int(np.ceil(max_dias_raw)) if pd.notna(max_dias_raw) else 365
+            
+            # Crear slider para filtrar por rango de días
+            rango_dias = st.slider(
+                "Rango de días de cumplimiento:",
+                min_value=min_dias,
+                max_value=max_dias,
+                value=(min_dias, max_dias),
+                step=1,
+                help="Valores negativos indican días adelantados al vencimiento (mejor cumplimiento)"
+            )
+        
+        # Aplicar filtro de rango de días (si se ha definido el slider)
+        if 'rango_dias' in locals():
+            min_rango, max_rango = rango_dias
+            df_cumplimiento = df_cumplimiento[
+                (df_cumplimiento['PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO'] >= min_rango) & 
+                (df_cumplimiento['PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO'] <= max_rango)
+            ]
+            
+        # Resumen de datos filtrados con información consolidada
+        if not df_cumplimiento.empty:
+            min_despues = df_cumplimiento['PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO'].min()
+            max_despues = df_cumplimiento['PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO'].max()
+            
+            # Crear un mensaje informativo consolidado
+            info_mensaje = f"Datos listos para análisis: {len(df_cumplimiento):,} registros válidos. "
+            
+            if outliers_filtrados > 0:
+                info_mensaje += f"Se filtraron {outliers_filtrados:,} outliers extremos (valores > {limite_superior:.1f} días). "
+                
+            info_mensaje += f"Rango de días en datos filtrados: {min_despues:.1f} a {max_despues:.1f} días."
+            
+            st.success(info_mensaje)
+            
+            # Mostrar advertencia si se filtraron muchos registros
+            if (negativos_filtrados + outliers_filtrados) > total_registros_originales * 0.2:  # Si se filtró más del 20%
+                st.warning("Se filtraron muchos registros. Los resultados podrían no ser representativos de toda la población.")
+        
+        if not df_cumplimiento.empty:
+            # Importar bibliotecas necesarias
+            import plotly.graph_objects as go
+            import numpy as np
+            from scipy import stats
+            
+            # Obtener datos para el histograma
+            datos = df_cumplimiento['PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO']
+            
+            # Calcular estadísticas descriptivas
+            media = datos.mean()
+            desv_std = datos.std()
+            mediana = datos.median()
+            n_registros = len(datos)
+            
+            # Mostrar estadísticas descriptivas
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("Media", f"{media:.1f} días")
+            col2.metric("Desviación Estándar", f"{desv_std:.1f} días")
+            col3.metric("Mediana", f"{mediana:.1f} días")
+            col4.metric("Número de Registros", f"{n_registros:,}")
+            
+            # Determinar el número de bins para el histograma
+            # Regla de Sturges: k = 1 + 3.322 * log10(n)
+            n_bins = int(1 + 3.322 * np.log10(n_registros))
+            
+            # Crear el histograma
+            fig = go.Figure()
+            
+            # Agregar el histograma
+            fig.add_trace(go.Histogram(
+                x=datos,
+                nbinsx=n_bins,
+                name='Frecuencia',
+                marker_color='rgba(73, 160, 181, 0.7)',
+                opacity=0.75
+            ))
+            
+            # Generar puntos para la curva normal teórica
+            x_range = np.linspace(max(0, datos.min() - desv_std), datos.max() + desv_std, 1000)
+            y_norm = stats.norm.pdf(x_range, media, desv_std)
+            
+            # Escalar la curva normal para que coincida con la altura del histograma
+            # Necesitamos estimar la altura máxima del histograma
+            hist_values, bin_edges = np.histogram(datos, bins=n_bins)
+            max_height = max(hist_values)
+            scaling_factor = max_height / max(y_norm)
+            
+            # Agregar la curva normal superpuesta
+            fig.add_trace(go.Scatter(
+                x=x_range,
+                y=y_norm * scaling_factor,
+                mode='lines',
+                name='Curva Normal Teórica',
+                line=dict(color='rgba(255, 0, 0, 0.8)', width=2)
+            ))
+            
+            # Personalizar diseño
+            fig.update_layout(
+                title='Histograma de Días de Cumplimiento con Curva Normal Superpuesta',
+                xaxis_title='Días de Cumplimiento (Mayor número = Menor cumplimiento)',
+                yaxis_title='Frecuencia',
+                legend_title='Distribución',
+                height=500,
+                hovermode='closest',
+                bargap=0.1
+            )
+            
+            # Agregar líneas verticales para la media y mediana
+            fig.add_shape(type="line",
+                x0=media, y0=0, x1=media, y1=max_height,
+                line=dict(color="red", width=2, dash="dash"),
+                name="Media"
+            )
+            
+            fig.add_shape(type="line",
+                x0=mediana, y0=0, x1=mediana, y1=max_height,
+                line=dict(color="green", width=2, dash="dash"),
+                name="Mediana"
+            )
+            
+            # Agregar anotaciones para la media y mediana
+            fig.add_annotation(
+                x=media, y=max_height*0.95,
+                text=f"Media: {media:.1f}",
+                showarrow=True,
+                arrowhead=1,
+                ax=40,
+                ay=-40
+            )
+            
+            fig.add_annotation(
+                x=mediana, y=max_height*0.85,
+                text=f"Mediana: {mediana:.1f}",
+                showarrow=True,
+                arrowhead=1,
+                ax=-40,
+                ay=-40
+            )
+            
+            # Mostrar gráfico
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Calcular asimetría (skewness) y curtosis
+            asimetria = stats.skew(datos)
+            curtosis = stats.kurtosis(datos)
+            
+            # Mostrar estadísticas de forma
+            st.markdown("### Estadísticas de forma de la distribución")
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Asimetría (Skewness)", f"{asimetria:.3f}")
+            with col2:
+                st.metric("Curtosis", f"{curtosis:.3f}")
+                
+            # Interpretar la asimetría
+            if abs(asimetria) < 0.5:
+                st.success("\u2022 La distribución es aproximadamente **simétrica**.")
+            elif asimetria > 0.5:
+                st.info("\u2022 La distribución tiene **asimetría positiva** (cola hacia la derecha). Esto significa que hay más valores por debajo de la media, pero algunos valores altos están 'estirando' la distribución hacia la derecha.")
+            else:  # asimetria < -0.5
+                st.info("\u2022 La distribución tiene **asimetría negativa** (cola hacia la izquierda). Esto significa que hay más valores por encima de la media, pero algunos valores bajos están 'estirando' la distribución hacia la izquierda.")
+            
+            # Interpretar la curtosis
+            if abs(curtosis) < 0.5:
+                st.success("\u2022 La distribución tiene una **curtosis similar a la normal** (mesocurtica).")
+            elif curtosis > 0.5:
+                st.info("\u2022 La distribución es **leptocúrtica** (más puntiaguda que la normal). Esto indica una mayor concentración de datos cerca de la media y colas más pesadas.")
+            else:  # curtosis < -0.5
+                st.info("\u2022 La distribución es **platicúrtica** (más plana que la normal). Esto indica una menor concentración de datos cerca de la media y colas más ligeras.")
+            
+            # Realizar prueba de normalidad
+            stat, p_valor = stats.normaltest(datos)
+            
+            st.markdown("### Prueba de normalidad")
+            st.metric("p-valor (D'Agostino-Pearson)", f"{p_valor:.6f}")
+            
+            if p_valor < 0.05:
+                st.warning("\u2022 La distribución **no es normal** (se rechaza la hipótesis nula de normalidad con 95% de confianza).")
+            else:
+                st.success("\u2022 No hay evidencia suficiente para rechazar que la distribución sea normal (95% de confianza).")
+            
+            # Agregar explicación sobre la importancia del análisis
+            st.markdown("---")
+            st.markdown("**¿Por qué es importante este análisis?**")
+            st.markdown("• Permite entender el patrón de cumplimiento de pagos de los beneficiarios")
+            st.markdown("• Ayuda a identificar si hay comportamientos atípicos o esperados en los tiempos de pago")
+            st.markdown("• Facilita la toma de decisiones basadas en datos sobre políticas de cobro y seguimiento")
+            st.write(f"**Conclusión:** La media de días de cumplimiento es de {media:.1f} días, con una desviación estándar de {desv_std:.1f} días. "
+                     f"La mediana es de {mediana:.1f} días, lo que significa que el 50% de los casos tienen un tiempo de cumplimiento menor o igual a este valor.")
+            
+            
+        else:
+            st.warning("No hay datos válidos de cumplimiento para mostrar en el histograma.")
+    
+    st.markdown("---")
+    
     if df_filtrado is None or df_filtrado.empty:
         # Ajustar mensaje, ya que el df está filtrado
         st.warning("No hay datos disponibles para el análisis de recupero con los filtros seleccionados.")
