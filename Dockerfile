@@ -8,7 +8,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     DEBIAN_FRONTEND=noninteractive
 
 # Instalar dependencias del sistema
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     ca-certificates \
     build-essential \
@@ -29,7 +29,7 @@ WORKDIR /app
 # Copiar solo requirements.txt primero para aprovechar el caché
 COPY requirements.txt /app/
 
-# Actualizar pip y luego instalar las dependencias con más verbosidad
+# ACTUALIZAR PIP Y LUEGO INSTALAR LAS DEPENDENCIAS CON MÁS VERBOSIDAD
 RUN pip install --upgrade pip && \
     pip install --no-cache-dir -v -r requirements.txt
 
