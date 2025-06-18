@@ -1687,7 +1687,7 @@ def mostrar_recupero(df_filtrado, df_localidad_municipio, geojson_data, df_recup
         )
     
     with col2:
-        st.info("El archivo descargado contendrá todos los datos del DataFrame df_recupero, incluyendo la columna PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO si está presente.")
+        st.info("El archivo descargado contendrá todos los registros relacionados a 'recupero', incluyendo la columna PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO.")
         
         # Mostrar dimensiones del DataFrame
         if not df_recupero.empty:
