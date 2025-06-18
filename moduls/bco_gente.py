@@ -1669,32 +1669,32 @@ def mostrar_recupero(df_filtrado, df_localidad_municipio, geojson_data, df_recup
         else:
             st.error("❌ La columna PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO NO está presente en df_recupero")
         
-        # Añadir botón para descargar el DataFrame df_recupero
-        col1, col2 = st.columns([1, 3])
-        with col1:
-            # Función para convertir el DataFrame a CSV
-            def convert_df_to_csv(df):
-                return df.to_csv(index=False).encode('utf-8')
-            
-            # Botón de descarga
-            csv = convert_df_to_csv(df_recupero)
-            st.download_button(
-                label="⬇️ Descargar df_recupero",
-                data=csv,
-                file_name='df_recupero.csv',
-                mime='text/csv',
-                help="Descargar el DataFrame completo de recupero en formato CSV"
-            )
+    # Añadir botón para descargar el DataFrame df_recupero
+    col1, col2 = st.columns([1, 3])
+    with col1:
+        # Función para convertir el DataFrame a CSV
+        def convert_df_to_csv(df):
+            return df.to_csv(index=False).encode('utf-8')
         
-        with col2:
-            st.info("El archivo descargado contendrá todos los datos del DataFrame df_recupero, incluyendo la columna PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO si está presente.")
-            
-            # Mostrar dimensiones del DataFrame
-            if not df_recupero.empty:
-                st.caption(f"Dimensiones del DataFrame: {df_recupero.shape[0]:,} filas x {df_recupero.shape[1]:,} columnas")
+        # Botón de descarga
+        csv = convert_df_to_csv(df_recupero)
+        st.download_button(
+            label="⬇️ Descargar df_recupero",
+            data=csv,
+            file_name='df_recupero.csv',
+            mime='text/csv',
+            help="Descargar el DataFrame completo de recupero en formato CSV"
+        )
+    
+    with col2:
+        st.info("El archivo descargado contendrá todos los datos del DataFrame df_recupero, incluyendo la columna PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO si está presente.")
         
-        # Agregar una línea divisoria
-        st.markdown("---")
+        # Mostrar dimensiones del DataFrame
+        if not df_recupero.empty:
+            st.caption(f"Dimensiones del DataFrame: {df_recupero.shape[0]:,} filas x {df_recupero.shape[1]:,} columnas")
+    
+    # Agregar una línea divisoria
+    st.markdown("---")
         
     # Agregar histograma con curva normal superpuesta para PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO
     if 'PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO' in df_recupero.columns:
