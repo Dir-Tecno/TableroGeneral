@@ -6,31 +6,15 @@ from utils.ui_components import display_kpi_row, show_dev_dataframe_info
 def show_emprendimientos_dashboard(data=None, dates=None, is_development=False):
     """
     Muestra el dashboard de Emprendimientos. Estructura compatible con app.py y los otros módulos.
-
-    Args:
-        data: Diccionario de dataframes cargados
-        dates: Diccionario con fechas de actualización
-        is_development: Booleano, True si está en modo desarrollo
     """
-    # Nombre del archivo esperado
     nombre_archivo = 'desarrollo_emprendedor.xlsx'
 
-    # Usar el DataFrame de 'data' si está disponible
-    if data and nombre_archivo in data:
-        df = data[nombre_archivo]
-    else:
-        # Ruta al archivo Excel local
-        excel_path = os.path.join(
-            os.path.dirname(__file__),
-            '..', '..', 'Repositorio-Reportes-main', nombre_archivo
-        )
-        excel_path = os.path.abspath(excel_path)
-        if not os.path.exists(excel_path):
-            st.error(f"No se encontró el archivo: {excel_path}")
-            return
-        df = pd.read_excel(excel_path)
+    # Solo buscar en data (que debe venir de GitLab)
+    if not data or nombre_archivo not in data:
+        st.error(f"No se encontró el archivo '{nombre_archivo}' en los datos cargados desde GitLab.")
+        return
 
-    # Limpiar espacios en los nombres de las columnas
+    df = data[nombre_archivo]
     df.columns = [col.strip() for col in df.columns]
 
     # normalizar nombres de columnas, usar los originales
