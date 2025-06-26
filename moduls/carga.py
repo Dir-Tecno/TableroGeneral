@@ -259,7 +259,7 @@ def safe_read_parquet(file_path_or_buffer, is_buffer=False):
     except Exception as e:
         return None, str(e)  # Devolver None como DataFrame y el mensaje de error
 
-def procesar_archivo(nombre, contenido, es_buffer):
+def procesar_archivo(nombre, contenido, es_buffer=False, header='infer'):
     """
     Procesa un archivo (local o buffer) y devuelve el DataFrame y la fecha de modificación.
     nombre: nombre de archivo (ej: data.csv)
@@ -285,10 +285,10 @@ def procesar_archivo(nombre, contenido, es_buffer):
         # Excel
         elif nombre.endswith('.xlsx'):
             if es_buffer:
-                df = pd.read_excel(io.BytesIO(contenido), engine='openpyxl')
+                df = pd.read_excel(io.BytesIO(contenido), engine='openpyxl', header=header)
                 fecha = datetime.datetime.now()
             else:
-                df = pd.read_excel(contenido, engine='openpyxl')
+                df = pd.read_excel(contenido, engine='openpyxl', header=header)
                 fecha = datetime.datetime.fromtimestamp(os.path.getmtime(contenido))
             return df, fecha
         # CSV o TXT
