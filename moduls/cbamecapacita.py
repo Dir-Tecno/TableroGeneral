@@ -155,6 +155,16 @@ def load_and_preprocess_data(data):
         print(f"Columnas en df_cursos: {df_cursos.columns.tolist()}")
         if 'ALUMNOS' in df_cursos.columns:
             print(f"Estadísticas de ALUMNOS: Min={df_cursos['ALUMNOS'].min()}, Max={df_cursos['ALUMNOS'].max()}, Media={df_cursos['ALUMNOS'].mean():.2f}")
+        
+        # Añadir columna "No asignados" como la diferencia entre POSTULACIONES y ALUMNOS
+        if 'POSTULACIONES' in df_cursos.columns and 'ALUMNOS' in df_cursos.columns:
+            df_cursos['No asignados'] = df_cursos['POSTULACIONES'] - df_cursos['ALUMNOS']
+            # Asegurar que no haya valores negativos (en caso de inconsistencias en los datos)
+            df_cursos['No asignados'] = df_cursos['No asignados'].apply(lambda x: max(0, x))
+            print(f"Columna 'No asignados' creada: Min={df_cursos['No asignados'].min()}, Max={df_cursos['No asignados'].max()}, Total={df_cursos['No asignados'].sum()}")
+        else:
+            print("ADVERTENCIA: No se pudo crear la columna 'No asignados' porque faltan las columnas POSTULACIONES o ALUMNOS")
+            
     return df_postulantes, df_alumnos, df_cursos
 
 def show_cba_capacita_dashboard(data, dates, is_development=False):
@@ -680,7 +690,8 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                 "N_CALLE",
                 "ALTURA",
                 "POSTULACIONES",
-                "ALUMNOS"
+                "ALUMNOS",
+                "No asignados"
             ]
             # Filtrar solo columnas existentes
             columnas_existentes = [col for col in columnas_exportar if col in df_cursos.columns]
@@ -700,7 +711,8 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                 "N_DEPARTAMENTO",
                 "N_LOCALIDAD",
                 "POSTULACIONES",
-                "ALUMNOS"
+                "ALUMNOS",
+                "No asignados"
             ]
             
             # Filtrar solo columnas existentes para mostrar
@@ -711,7 +723,8 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
             styled_display = df_display.style\
                 .background_gradient(subset=["POSTULACIONES"], cmap="Blues")\
                 .background_gradient(subset=["ALUMNOS"], cmap="Greens")\
-                .format({"POSTULACIONES": "{:,.0f}", "ALUMNOS": "{:,.0f}"})
+                .background_gradient(subset=["No asignados"], cmap="Oranges")\
+                .format({"POSTULACIONES": "{:,.0f}", "ALUMNOS": "{:,.0f}", "No asignados": "{:,.0f}"})
             
             # Mostrar la tabla con estilos
             st.dataframe(
@@ -719,6 +732,16 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                 use_container_width=True,
                 hide_index=True
             )
+            
+            # Verificar que la columna "No asignados" esté presente en df_export
+            if 'No asignados' not in df_export.columns and 'POSTULACIONES' in df_export.columns and 'ALUMNOS' in df_export.columns:
+                # Si no existe, crearla nuevamente
+                df_export['No asignados'] = df_export['POSTULACIONES'] - df_export['ALUMNOS']
+                df_export['No asignados'] = df_export['No asignados'].apply(lambda x: max(0, x))
+                print(f"Columna 'No asignados' añadida a df_export para exportación")
+            
+            # Mostrar mensaje de depuración con las columnas disponibles
+            print(f"Columnas en df_export antes de exportar: {df_export.columns.tolist()}")
             
             # Botón para descargar Excel debajo de la tabla
             buffer = io.BytesIO()
