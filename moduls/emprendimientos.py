@@ -8,13 +8,22 @@ def show_emprendimientos_dashboard(data=None, dates=None, is_development=False):
     Muestra el dashboard de Emprendimientos. Estructura compatible con app.py y los otros módulos.
     """
     nombre_archivo = 'desarrollo_emprendedor.xlsx'
+    local_path = os.path.join(
+        os.path.dirname(__file__),
+        '..', 'Repositorio-Reportes-main', nombre_archivo
+    )
+    local_path = os.path.abspath(local_path)
 
-    # Solo buscar en data (que debe venir de GitLab)
-    if not data or nombre_archivo not in data:
-        st.error(f"No se encontró el archivo '{nombre_archivo}' en los datos cargados desde GitLab.")
+    if os.path.exists(local_path):
+        df = pd.read_excel(local_path)
+        is_development = True
+    elif data and nombre_archivo in data:
+        df = data[nombre_archivo]
+    else:
+        st.error(f"No se encontró el archivo '{nombre_archivo}' ni localmente ni en GitLab.")
+        st.write('Archivos disponibles:', list(data.keys()) if data else 'Sin datos')
         return
 
-    df = data[nombre_archivo]
     df.columns = [col.strip() for col in df.columns]
 
     # normalizar nombres de columnas, usar los originales
@@ -84,7 +93,7 @@ def show_emprendimientos_dashboard(data=None, dates=None, is_development=False):
 
  
     # Tabla resumen
-    st.markdown('### Vista previa de los datos filtrados',)
+    st.markdown('### Vista previa de los datos',)
     st.dataframe(df_filtrado.head(30))
 
     # Modo desarrollo

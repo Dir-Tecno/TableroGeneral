@@ -21,7 +21,6 @@ branch = "main"
 
 # Ruta local para desarrollo
 local_path = r"D:\DESARROLLO\DIRTECNO\EMPLEO\REPORTES\TableroGeneral\Repositorio-Reportes-main"
-#local_path = "/mnt/d/DESARROLLO/DIRTECNO/EMPLEO/REPORTES/TableroGeneral/Repositorio-Reportes-main"
 
 # Determinar el modo de carga (local o GitLab)
 # En un entorno de producción, esta variable podría configurarse mediante una variable de entorno
@@ -48,15 +47,15 @@ modules = {
                    'Detalle_recupero.csv', 'capa_departamentos_2010.geojson', 'LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt'],
     'cba_capacita': ['VT_ALUMNOS_EN_CURSOS.parquet','VT_INSCRIPCIONES_PRG129.parquet', 'VT_CURSOS_SEDES_GEO.parquet', 'capa_departamentos_2010.geojson'],
     'empleo': ['ppp_jesi.xlsx','mas26_jesi.xlsx','LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt','LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - DATOS_CENSALES.txt','VT_REPORTES_PPP_MAS26.parquet', 'vt_empresas_adheridas.parquet','vt_empresas_ARCA.parquet', 'VT_PUESTOS_X_FICHAS.parquet','capa_departamentos_2010.geojson', 'VT_REPORTE_LIQUIDACION_LOCALIDAD.parquet'],
-    'empredimientos': ['BASE GENERAL DESARROLLO EMPRENDEDOR.xlsx']
+    'emprendimientos': ['desarrollo_emprendedor.xlsx']
 }
 
 
 
 # Crear pestañas
-tab_names = ["CBA Me Capacita", "Banco de la Gente",  "Programas de Empleo","Empredimientos"]
+tab_names = ["CBA Me Capacita", "Banco de la Gente",  "Programas de Empleo","Emprendimientos"]
 tabs = st.tabs(tab_names)
-tab_keys = ['cba_capacita', 'bco_gente', 'empleo','empredimientos']
+tab_keys = ['cba_capacita', 'bco_gente', 'empleo','emprendimientos']
 tab_functions = [
     cbamecapacita.show_cba_capacita_dashboard,
     bco_gente.show_bco_gente_dashboard,
