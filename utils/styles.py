@@ -189,7 +189,8 @@ def apply_styles():
     .kpi-card {
         background-color: var(--color-primary);
         color: white;
-        padding: 15px;
+        padding: 12px 10px;
+        margin: 0 2px;
         border-radius: 10px;
         text-align: center;
         box-shadow: 0 4px 8px rgba(0,0,0,0.1);
@@ -206,16 +207,18 @@ def apply_styles():
     }
 
     .kpi-title {
-        font-size: 14px;
-        margin-bottom: 5px;
+        font-size: 13px;
+        margin-bottom: 4px;
         text-transform: uppercase;
         letter-spacing: 0.5px;
         font-weight: 500;
+        line-height: 1.2;
     }
 
     .kpi-value {
-        font-size: 28px;
+        font-size: 24px;
         font-weight: bold;
+        line-height: 1.1;
     }
 
     /* Variantes de color para KPIs */

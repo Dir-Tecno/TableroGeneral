@@ -6,9 +6,23 @@ from utils.styles import setup_page
 from utils.ui_components import render_footer
 import os
 import concurrent.futures
+import sys
+
+# Determinar si estamos en producción (no en desarrollo local)
+is_production = not os.path.exists(os.path.join(os.path.dirname(__file__), "Repositorio-Reportes-main"))
+
+# Deshabilitar solo la recarga automática en producción, pero mantener la actualización de caché
+if is_production:
+    # Esta es una forma de configurar Streamlit programáticamente
+    # Equivalente a server.runOnSave = false en .streamlit/config.toml
+    os.environ['STREAMLIT_SERVER_RUN_ON_SAVE'] = 'false'
+    # No desactivamos clear_on_change para permitir que las recargas manuales (F5) obtengan datos frescos
 
 # Configuración de la página
-st.set_page_config(page_title="Dashboard Integrado", layout="wide")
+st.set_page_config(
+    page_title="Dashboard Integrado", 
+    layout="wide"
+)
 
 # Aplicar estilos y banner desde el módulo de estilos
 setup_page()
@@ -22,19 +36,16 @@ branch = "main"
 # Ruta local para desarrollo
 local_path = r"D:\DESARROLLO\DIRTECNO\EMPLEO\REPORTES\TableroGeneral\Repositorio-Reportes-main"
 
-# Determinar el modo de carga (local o GitLab)
-# En un entorno de producción, esta variable podría configurarse mediante una variable de entorno
-is_development = os.path.exists(local_path)
+# Ya determinamos is_production arriba, ahora definimos is_development para mantener compatibilidad
+is_development = not is_production
 
-# Mostrar información sobre el modo de carga
+# Mostrar información sobre el modo de carga solo en desarrollo
 if is_development:
     st.success("Modo de desarrollo: Cargando datos desde carpeta local")
-else:
-    pass
 
 # Obtener token desde secrets (solo necesario en modo producción)
 token = None
-if not is_development:
+if is_production:
     try:
         token = st.secrets["gitlab"]["token"]
     except Exception as e:

@@ -26,6 +26,7 @@ def create_bco_gente_kpis(resultados, tooltips):
             "title": "FORMULARIOS EN EVALUACIÓN",
             "categoria": "En Evaluación",
             "value_form": f"{resultados.get('En Evaluación', 0):,}".replace(',', '.'),
+            "value_pers": "0",  # Este valor se actualizará luego con el conteo real de personas únicas
             "color_class": "kpi-primary",
             "tooltip": tooltips.get("En Evaluación")
         },
@@ -369,7 +370,6 @@ def load_and_preprocess_data(data):
                                 if 'NRO_FORMULARIO' in df_recupero.columns:
                                     df_recupero = df_recupero.drop('NRO_FORMULARIO', axis=1)
                                 
-                                st.success("Se ha realizado correctamente el merge con los datos de cumplimiento de formularios.")
                             else:
                                 st.warning(f"No se pudo realizar el merge con datos de cumplimiento. Faltan columnas: {', '.join(missing_cols_cumplimiento)}")
                         except Exception as e_cumplimiento:
@@ -544,7 +544,6 @@ def render_filters(df_filtrado_global):
         
         
         return df_filtrado, selected_dpto, selected_loc, selected_lineas
-
 
 def show_bco_gente_dashboard(data, dates, is_development=False):
     """
@@ -858,16 +857,38 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
         if categoria == "Rechazados - Bajas":
             kpi_data.remove(kpi)
             continue
-        estados = ESTADO_CATEGORIAS.get(categoria, [])
-        total_formularios = resultados.get(categoria, 0)
-        if estados:
-            mask = df_filtrado_global["N_ESTADO_PRESTAMO"].isin(estados)
-            total_personas = df_filtrado_global.loc[mask, "CUIL"].nunique()
-        else:
-            total_personas = 0
+            
+        # Solo calcular el conteo de personas únicas para la categoría "En Evaluación"
         if categoria == "En Evaluación":
+            estados = ESTADO_CATEGORIAS.get(categoria, [])
+            total_formularios = resultados.get(categoria, 0)
+            
+            # Calcular personas únicas solo para esta categoría
+            if estados:
+                mask = df_filtrado_global["N_ESTADO_PRESTAMO"].isin(estados)
+                # Verificar cuántas filas cumplen con la condición
+                filas_coincidentes = mask.sum()
+                
+                if filas_coincidentes > 0:
+                    # Extraer el subconjunto de datos para análisis
+                    df_subset = df_filtrado_global.loc[mask].copy()
+                    
+                    # Verificar si hay valores no nulos en la columna CUIL y contar personas únicas
+                    df_cuil_no_nulos = df_subset.dropna(subset=['CUIL'])
+                    
+                    # Si hay CUILs no nulos, contar personas únicas; si no, usar el número de filas
+                    if not df_cuil_no_nulos.empty:
+                        total_personas = df_cuil_no_nulos['CUIL'].nunique()
+                    else:
+                        # Si todos los CUILs son nulos, usar el número de filas como aproximación
+                        total_personas = filas_coincidentes
+                else:
+                    total_personas = 0
+            else:
+                total_personas = 0
+                
             kpi["value_form"] = total_formularios
-            kpi["value_pers"] = total_personas
+            kpi["value_pers"] = f"{total_personas:,}".replace(',', '.')
         # Si en el futuro quieres aplicar a más KPIs, puedes agregar estas claves para otros casos aquí.
 
     display_kpi_row(kpi_data)
@@ -1593,12 +1614,36 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
                                 st.exception(e)  # Muestra el traceback completo para depuración
     
                             with st.expander("Ver datos de la serie histórica"):
-                                tabla_data = serie_historica[['FECHA', 'Cantidad']].copy()
-                                tabla_data['Año'] = tabla_data['FECHA'].dt.year
-                                tabla_data_agrupada = tabla_data.groupby('Año', as_index=False)['Cantidad'].sum()
-                                tabla_data_agrupada = tabla_data_agrupada.sort_values('Año', ascending=False)
-
-                                # Custom HTML table (like the others)
+                                # Crear DataFrame para resumen anual con ambas métricas
+                                resumen_anual = {}
+                                
+                                # Procesar datos de Formularios Presentados
+                                if not df_fechas_seleccionado.empty:
+                                    tabla_data_form = serie_historica[['FECHA', 'Cantidad']].copy()
+                                    tabla_data_form['Año'] = tabla_data_form['FECHA'].dt.year
+                                    tabla_data_form_agrupada = tabla_data_form.groupby('Año', as_index=False)['Cantidad'].sum()
+                                    
+                                    # Guardar datos de formularios en el diccionario
+                                    for _, row in tabla_data_form_agrupada.iterrows():
+                                        año = int(row['Año'])
+                                        if año not in resumen_anual:
+                                            resumen_anual[año] = {'Formularios Presentados': 0, 'Inicio de Pagos': 0}
+                                        resumen_anual[año]['Formularios Presentados'] = int(row['Cantidad'])
+                                
+                                # Procesar datos de Inicio de Pagos
+                                if tiene_datos_pago_filtrados:
+                                    tabla_data_pago = serie_historica_pago[['FECHA', 'Cantidad']].copy()
+                                    tabla_data_pago['Año'] = tabla_data_pago['FECHA'].dt.year
+                                    tabla_data_pago_agrupada = tabla_data_pago.groupby('Año', as_index=False)['Cantidad'].sum()
+                                    
+                                    # Guardar datos de inicio de pagos en el diccionario
+                                    for _, row in tabla_data_pago_agrupada.iterrows():
+                                        año = int(row['Año'])
+                                        if año not in resumen_anual:
+                                            resumen_anual[año] = {'Formularios Presentados': 0, 'Inicio de Pagos': 0}
+                                        resumen_anual[año]['Inicio de Pagos'] = int(row['Cantidad'])
+                                
+                                # Custom HTML table con estilos
                                 html_table = """
                                     <style>
                                         .serie-table {
@@ -1620,20 +1665,34 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
                                         .serie-table td:first-child {
                                             text-align: left;
                                         }
+                                        .serie-table .formularios {
+                                            background-color: rgba(31, 119, 180, 0.1);
+                                        }
+                                        .serie-table .pagos {
+                                            background-color: rgba(214, 39, 40, 0.1);
+                                        }
                                     </style>
                                 """
+                                
+                                # Crear encabezado de la tabla
                                 html_table += '<table class="serie-table"><thead><tr>'
-                                html_table += '<th>Año</th><th>Cantidad</th></tr></thead><tbody>'
-                                for _, row in tabla_data_agrupada.iterrows():
-                                    html_table += f'<tr><td>{row["Año"]}</td><td>{int(row["Cantidad"])}</td></tr>'
+                                html_table += '<th>Año</th><th>Formularios Presentados</th><th>Inicio de Pagos</th></tr></thead><tbody>'
+                                
+                                # Ordenar años de más reciente a más antiguo
+                                for año in sorted(resumen_anual.keys(), reverse=True):
+                                    datos = resumen_anual[año]
+                                    html_table += f'<tr>'
+                                    html_table += f'<td>{año}</td>'
+                                    html_table += f'<td class="formularios">{datos["Formularios Presentados"]}</td>'
+                                    html_table += f'<td class="pagos">{datos["Inicio de Pagos"]}</td>'
+                                    html_table += f'</tr>'
+                                
                                 html_table += '</tbody></table>'
                                 st.markdown(html_table, unsafe_allow_html=True)
 
                         
     except Exception as e:
         st.error(f"Error inesperado en la sección Serie Histórica: {e}")
-
-    
 
 def mostrar_recupero(df_filtrado, df_localidad_municipio, geojson_data, df_recupero=None, is_development=False):
     """
