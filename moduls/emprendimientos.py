@@ -15,13 +15,13 @@ def show_emprendimientos_dashboard(data=None, dates=None, is_development=False):
     local_path = os.path.abspath(local_path)
 
     df = None
-    # 1. Buscar localmente
+    # 1. Modo desarrollo: cargar localmente si existe
     if os.path.exists(local_path):
-        if nombre_archivo.lower().endswith('.csv'):
-            df = pd.read_csv(local_path, sep=';')
-        else:
-            df = pd.read_excel(local_path)
+        df = pd.read_csv(local_path, sep=';')
         is_development = True
+    # 2. Producción: tomar el DataFrame desde data (ya cargado por load_data_from_gitlab)
+    elif data and nombre_archivo in data:
+        df = data[nombre_archivo]
     else:
         st.error(f"No se encontró el archivo '{nombre_archivo}' ni localmente ni en GitLab.")
         st.write('Archivos disponibles:', list(data.keys()) if data else 'Sin datos')
