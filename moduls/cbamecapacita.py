@@ -738,10 +738,6 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                 # Si no existe, crearla nuevamente
                 df_export['No asignados'] = df_export['POSTULACIONES'] - df_export['ALUMNOS']
                 df_export['No asignados'] = df_export['No asignados'].apply(lambda x: max(0, x))
-                print(f"Columna 'No asignados' añadida a df_export para exportación")
-            
-            # Mostrar mensaje de depuración con las columnas disponibles
-            print(f"Columnas en df_export antes de exportar: {df_export.columns.tolist()}")
             
             # Botón para descargar Excel debajo de la tabla
             buffer = io.BytesIO()
