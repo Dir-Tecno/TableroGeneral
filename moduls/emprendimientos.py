@@ -8,25 +8,13 @@ def show_emprendimientos_dashboard(data=None, dates=None, is_development=False):
     Muestra el dashboard de Emprendimientos. Estructura compatible con app.py y los otros módulos.
     """
     nombre_archivo = 'desarrollo_emprendedor.csv'
-    local_path = os.path.join(
-        os.path.dirname(__file__),
-        '..', 'Repositorio-Reportes-main', nombre_archivo
-    )
-    local_path = os.path.abspath(local_path)
 
-    df = None
-    # 1. Modo desarrollo: cargar localmente si existe
-    if os.path.exists(local_path):
-        df = pd.read_csv(local_path, sep=';')
-        is_development = True
-    # 2. Producción: tomar el DataFrame desde data (ya cargado por load_data_from_gitlab)
-    elif data and nombre_archivo in data:
-        df = data[nombre_archivo]
-    else:
-        st.error(f"No se encontró el archivo '{nombre_archivo}' ni localmente ni en GitLab.")
+    if not data or nombre_archivo not in data:
+        st.error(f"No se encontró el archivo '{nombre_archivo}' en los datos cargados.")
         st.write('Archivos disponibles:', list(data.keys()) if data else 'Sin datos')
         return
 
+    df = data[nombre_archivo]
     df.columns = [col.strip() for col in df.columns]
 
     columnas_clave = ['CUIL', 'DNI', 'Nombre del Emprendimiento']
