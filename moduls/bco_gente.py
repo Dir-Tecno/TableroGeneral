@@ -3,7 +3,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 from utils.ui_components import display_kpi_row
-from utils.styles import COLORES_IDENTIDAD
+from utils.styles import COLORES_IDENTIDAD, COLOR_PRIMARY, COLOR_SECONDARY, COLOR_ACCENT_1, COLOR_ACCENT_2, COLOR_ACCENT_3, COLOR_ACCENT_4, COLOR_ACCENT_5, COLOR_TEXT_DARK
 from utils.kpi_tooltips import ESTADO_CATEGORIAS, TOOLTIPS_DESCRIPTIVOS
 from utils.data_cleaning import convert_decimal_separator
 
@@ -902,6 +902,16 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
    
 
     # Desglose dinámico de TODOS los N_ESTADO_PRESTAMO agrupados por CATEGORIA_ESTADO
+    # Mapeo de categorías a colores según los KPIs
+    categoria_colores = {
+        "En Evaluación": COLOR_PRIMARY,        # kpi-primary -> #0085c8 (Azul)
+        "A Pagar - Convocatoria": COLOR_ACCENT_3, # kpi-accent-3 -> #bccf00 (Verde lima)
+        "Pagados": COLOR_ACCENT_2,            # kpi-accent-2 -> #fbbb21 (Amarillo)
+        "En proceso de pago": COLOR_ACCENT_1,  # kpi-accent-1 -> #e73446 (Rojo)
+        "Pagados-Finalizados": COLOR_ACCENT_4, # kpi-accent-4 -> #8a1e82 (Violeta)
+        "Otros": COLOR_TEXT_DARK              # Texto oscuro por defecto
+    }
+    
     grupos_detalle = []
     for categoria, estados in ESTADO_CATEGORIAS.items():
         if estados:
@@ -909,9 +919,16 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
             for estado in estados:
                 cantidad = int(df_filtrado_global[df_filtrado_global["N_ESTADO_PRESTAMO"] == estado].shape[0])
                 estados_detalle.append(f"<b>{estado}:</b> {cantidad}")
-            grupos_detalle.append(" ".join(estados_detalle))
+            
+            # Obtener el color para esta categoría o usar un color por defecto
+            color = categoria_colores.get(categoria, COLOR_TEXT_DARK)
+            
+            # Encerrar cada grupo de estados en un span con el color correspondiente
+            categoria_html = f"<span style='color:{color}; padding:0 5px;'><b>{categoria}:</b> {' '.join(estados_detalle)}</span>"
+            grupos_detalle.append(categoria_html)
+    
     if grupos_detalle:
-        detalle_html = "<div style='font-size:13px; color:#555; margin-bottom:8px; margin-top:6px'>" + " | ".join(grupos_detalle) + "</div>"
+        detalle_html = "<div style='font-size:13px; margin-bottom:8px; margin-top:6px'>" + " | ".join(grupos_detalle) + "</div>"
         st.markdown(detalle_html, unsafe_allow_html=True)
 
 
@@ -1108,31 +1125,64 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
     with col_torta_sexo:
         try:
             if 'N_SEXO' in df_filtrado_global.columns:
+                # Incluir categorías "Pagados", "En proceso de pago" y "Pagados-Finalizados"
+                categorias_incluidas = ['Pagados', 'En proceso de pago', 'Pagados-Finalizados']
+                
+                # Filtrar por las categorías incluidas y donde N_SEXO no sea nulo
                 df_sexo = df_filtrado_global[
-                    (df_filtrado_global['CATEGORIA'] == 'Pagados') & 
+                    (df_filtrado_global['CATEGORIA'].isin(categorias_incluidas)) & 
                     (df_filtrado_global['N_SEXO'].notna())
                 ].copy()
+                
                 if df_sexo.empty:
                     st.warning("No hay datos disponibles para el gráfico de sexo después de filtrar NaNs.")
                 else:
+                    # Agregar una columna que indique la categoría para el hover
+                    df_sexo_con_categoria = df_sexo.groupby(['N_SEXO', 'CATEGORIA']).size().reset_index(name='Cantidad')
+                    
+                    # Agrupar por sexo para el gráfico principal
                     sexo_counts = df_sexo['N_SEXO'].value_counts().reset_index()
                     sexo_counts.columns = ['Sexo', 'Cantidad']
+                    
                     if sexo_counts.empty:
                         st.warning("No hay datos para mostrar en el gráfico de sexo.")
                     else:
+                        # Crear el gráfico de torta
                         fig_sexo = px.pie(
                             sexo_counts,
                             values='Cantidad',
                             names='Sexo',
                             color_discrete_sequence=px.colors.qualitative.Set3
                         )
+                        
+                        # Crear un DataFrame con el resumen por sexo y categoría para mostrar en el hover
+                        resumen_categorias = {}
+                        for sexo in sexo_counts['Sexo'].unique():
+                            resumen_categorias[sexo] = {}
+                            for categoria in categorias_incluidas:
+                                # Filtrar por sexo y categoría
+                                count = df_sexo[(df_sexo['N_SEXO'] == sexo) & 
+                                                (df_sexo['CATEGORIA'] == categoria)].shape[0]
+                                resumen_categorias[sexo][categoria] = count
+                        
+                        # Crear texto personalizado para cada segmento
+                        custom_text = []
+                        for sexo in sexo_counts['Sexo']:
+                            texto = f"<b>{sexo}</b><br>Total: {sexo_counts[sexo_counts['Sexo']==sexo]['Cantidad'].values[0]}<br>"
+                            for categoria in categorias_incluidas:
+                                texto += f"{categoria}: {resumen_categorias[sexo][categoria]}<br>"
+                            custom_text.append(texto)
+                        
+                        # Actualizar el gráfico con el texto personalizado
                         fig_sexo.update_traces(
                             textposition='inside',
                             textinfo='percent+label',
-                            hoverinfo='label+percent+value'
+                            hovertemplate='%{customdata}',
+                            customdata=custom_text
                         )
+                        
                         fig_sexo.update_layout(
-                            title="Distribución por Sexo EN CREDITOS PAGADOS",
+                            title="Distribución por Sexo (Pagados, En proceso y Finalizados)",
                             margin=dict(l=20, r=20, t=30, b=20)
                         )
                         st.plotly_chart(fig_sexo, use_container_width=True)
@@ -1302,8 +1352,16 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
             # Aplicar filtros al DataFrame para la tabla de Estados de Préstamos por Categoría
             df_categoria_estados = df_filtrado_global.copy()
             
-            # --- Filtro de rango de fechas FEC_INICIO_PAGO ---
-            if 'FEC_INICIO_PAGO' in df_categoria_estados.columns:
+            # Agregar columna de categoría basada en N_ESTADO_PRESTAMO
+            df_categoria_estados['CATEGORIA'] = 'Otros'
+            for categoria, estados in ESTADO_CATEGORIAS.items():
+                mask = df_categoria_estados['N_ESTADO_PRESTAMO'].isin(estados)
+                df_categoria_estados.loc[mask, 'CATEGORIA'] = categoria
+            
+            # --- Filtro de rango de fechas FEC_INICIO_PAGO (solo para categorías que tienen esta fecha) ---
+            aplicar_filtro_fecha = st.checkbox('Aplicar filtro por Fecha de Inicio de Pago', value=False, help="Este filtro solo afecta a préstamos que tienen fecha de inicio de pago (principalmente categoría 'Pagados')")
+            
+            if aplicar_filtro_fecha and 'FEC_INICIO_PAGO' in df_categoria_estados.columns:
                 df_categoria_estados['FEC_INICIO_PAGO'] = pd.to_datetime(df_categoria_estados['FEC_INICIO_PAGO'], errors='coerce')
                 fechas_validas = df_categoria_estados['FEC_INICIO_PAGO'].dropna().dt.date.unique()
                 fechas_validas = sorted(fechas_validas)
@@ -1316,8 +1374,16 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
                         value=(min_fecha, max_fecha),
                         key='filtro_fecha_inicio_pago_categoria'
                     )
-                    # Filtrar por rango seleccionado
-                    df_categoria_estados = df_categoria_estados[(df_categoria_estados['FEC_INICIO_PAGO'].dt.date >= fecha_inicio) & (df_categoria_estados['FEC_INICIO_PAGO'].dt.date <= fecha_fin)]
+                    
+                    # Crear una máscara para filtrar solo registros con fecha válida en el rango seleccionado
+                    mask_fecha = ((df_categoria_estados['FEC_INICIO_PAGO'].dt.date >= fecha_inicio) & 
+                                 (df_categoria_estados['FEC_INICIO_PAGO'].dt.date <= fecha_fin))
+                    
+                    # Crear una máscara para mantener registros sin fecha (NaT)
+                    mask_sin_fecha = df_categoria_estados['FEC_INICIO_PAGO'].isna()
+                    
+                    # Aplicar ambas máscaras para mantener registros que cumplen con el rango de fechas O no tienen fecha
+                    df_categoria_estados = df_categoria_estados[mask_fecha | mask_sin_fecha]
             
             # Filtrar por categorías seleccionadas
             if selected_categorias:
@@ -1357,13 +1423,8 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
             # Usar @st.cache_data para evitar recalcular si los datos no cambian
             @st.cache_data
             def prepare_categoria_data(df, categorias):
+                # La categoría ya está asignada en df_categoria_estados, no necesitamos hacerlo de nuevo
                 df_copy = df.copy()
-
-                # Agregar columna de categoría basada en N_ESTADO_PRESTAMO
-                df_copy['CATEGORIA'] = 'Otros'
-                for categoria, estados in ESTADO_CATEGORIAS.items():
-                    mask = df_copy['N_ESTADO_PRESTAMO'].isin(estados)
-                    df_copy.loc[mask, 'CATEGORIA'] = categoria
 
                 # Crear pivot table con conteo agrupado por categorías
                 pivot_df = df_copy.pivot_table(
@@ -1374,13 +1435,13 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
                     fill_value=0
                 ).reset_index()
                 
-                # Asegurar que todas las categorías estén en la tabla
-                for categoria in ESTADO_CATEGORIAS.keys():
+                # Asegurar que todas las categorías seleccionadas estén en la tabla
+                for categoria in categorias:
                     if categoria not in pivot_df.columns:
                         pivot_df[categoria] = 0
                 
                 # Reordenar columnas para mostrar en orden consistente
-                return pivot_df.reindex(columns=['N_DEPARTAMENTO', 'N_LOCALIDAD'] + list(ESTADO_CATEGORIAS.keys()))
+                return pivot_df.reindex(columns=['N_DEPARTAMENTO', 'N_LOCALIDAD'] + categorias)
             
             # Obtener el DataFrame procesado usando caché
             pivot_df = prepare_categoria_data(df_categoria_estados, categorias_orden)
