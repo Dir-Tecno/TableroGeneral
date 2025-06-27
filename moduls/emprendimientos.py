@@ -7,18 +7,35 @@ def show_emprendimientos_dashboard(data=None, dates=None, is_development=False):
     """
     Muestra el dashboard de Emprendimientos. Estructura compatible con app.py y los otros módulos.
     """
-    nombre_archivo = 'desarrollo_emprendedor.xlsx'
+    nombre_archivo = 'desarrollo_emprendedor.csv'
     local_path = os.path.join(
         os.path.dirname(__file__),
         '..', 'Repositorio-Reportes-main', nombre_archivo
     )
     local_path = os.path.abspath(local_path)
 
+    df = None
+    # 1. Buscar localmente
     if os.path.exists(local_path):
-        df = pd.read_excel(local_path)
+        if nombre_archivo.lower().endswith('.csv'):
+            df = pd.read_csv(local_path, sep=';')
+        else:
+            df = pd.read_excel(local_path)
         is_development = True
-    elif data and nombre_archivo in data:
-        df = data[nombre_archivo]
+    # 2. Buscar en data (GitLab) de forma robusta
+    elif data:
+        nombre_archivo_normalizado = nombre_archivo.strip().lower()
+        archivo_encontrado = None
+        for k in data.keys():
+            if k.strip().lower() == nombre_archivo_normalizado:
+                archivo_encontrado = k
+                break
+        if archivo_encontrado:
+            df = data[archivo_encontrado]
+        else:
+            st.error(f"No se encontró el archivo '{nombre_archivo}' ni localmente ni en GitLab.")
+            st.write('Archivos disponibles:', list(data.keys()))
+            return
     else:
         st.error(f"No se encontró el archivo '{nombre_archivo}' ni localmente ni en GitLab.")
         st.write('Archivos disponibles:', list(data.keys()) if data else 'Sin datos')
@@ -26,11 +43,10 @@ def show_emprendimientos_dashboard(data=None, dates=None, is_development=False):
 
     df.columns = [col.strip() for col in df.columns]
 
-    # normalizar nombres de columnas, usar los originales
     columnas_clave = ['CUIL', 'DNI', 'Nombre del Emprendimiento']
     for col in columnas_clave:
         if col not in df.columns:
-            st.error(f"Falta la columna '{col}' en el archivo Excel.")
+            st.error(f"Falta la columna '{col}' en el archivo de datos.")
             st.stop()
 
     # Limpieza básica de datos
@@ -91,9 +107,8 @@ def show_emprendimientos_dashboard(data=None, dates=None, is_development=False):
     rubros = rubros.value_counts().head(10)
     st.bar_chart(rubros)
 
- 
     # Tabla resumen
-    st.markdown('### Vista previa de los datos',)
+    st.markdown('### Vista previa de los datos')
     st.dataframe(df_filtrado.head(30))
 
     # Modo desarrollo

@@ -58,7 +58,7 @@ modules = {
                    'Detalle_recupero.csv', 'capa_departamentos_2010.geojson', 'LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt'],
     'cba_capacita': ['VT_ALUMNOS_EN_CURSOS.parquet','VT_INSCRIPCIONES_PRG129.parquet', 'VT_CURSOS_SEDES_GEO.parquet', 'capa_departamentos_2010.geojson'],
     'empleo': ['ppp_jesi.xlsx','mas26_jesi.xlsx','LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt','LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - DATOS_CENSALES.txt','VT_REPORTES_PPP_MAS26.parquet', 'vt_empresas_adheridas.parquet','vt_empresas_ARCA.parquet', 'VT_PUESTOS_X_FICHAS.parquet','capa_departamentos_2010.geojson', 'VT_REPORTE_LIQUIDACION_LOCALIDAD.parquet'],
-    'emprendimientos': ['desarrollo_emprendedor.xlsx']
+    'emprendimientos': ['desarrollo_emprendedor.csv']
 }
 
 
