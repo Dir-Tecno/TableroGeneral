@@ -22,20 +22,6 @@ def show_emprendimientos_dashboard(data=None, dates=None, is_development=False):
         else:
             df = pd.read_excel(local_path)
         is_development = True
-    # 2. Buscar en data (GitLab) de forma robusta
-    elif data:
-        nombre_archivo_normalizado = nombre_archivo.strip().lower()
-        archivo_encontrado = None
-        for k in data.keys():
-            if k.strip().lower() == nombre_archivo_normalizado:
-                archivo_encontrado = k
-                break
-        if archivo_encontrado:
-            df = data[archivo_encontrado]
-        else:
-            st.error(f"No se encontró el archivo '{nombre_archivo}' ni localmente ni en GitLab.")
-            st.write('Archivos disponibles:', list(data.keys()))
-            return
     else:
         st.error(f"No se encontró el archivo '{nombre_archivo}' ni localmente ni en GitLab.")
         st.write('Archivos disponibles:', list(data.keys()) if data else 'Sin datos')
