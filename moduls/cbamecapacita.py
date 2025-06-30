@@ -180,7 +180,7 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
         st.error("No se pudieron cargar los datos de CBA ME CAPACITA.")
         return
 
-    # Mostrar columnas en modo desarrollo
+    # Mostrar columnas en  desarrollo
     from utils.ui_components import show_dev_dataframe_info
     if is_development:
         show_dev_dataframe_info(data, modulo_nombre="CBA Me Capacita")
