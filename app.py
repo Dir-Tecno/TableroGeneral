@@ -1,4 +1,4 @@
-from moduls.carga import load_data_from_gitlab
+from moduls.carga import load_data_from_gitlab, load_data_from_minio, obtener_lista_archivos_minio
 import streamlit as st
 import moduls.carga as carga
 from moduls import bco_gente, cbamecapacita, empleo, emprendimientos 
@@ -6,6 +6,7 @@ from utils.styles import setup_page
 from utils.ui_components import render_footer
 import os
 import concurrent.futures
+from minio import Minio
 
 # Configuración de la página
 st.set_page_config(page_title="Dashboard Integrado", layout="wide")
@@ -72,12 +73,10 @@ for idx, tab in enumerate(tabs):
         data_key = f"{module_key}_data"
         dates_key = f"{module_key}_dates"
         if data_key not in st.session_state or dates_key not in st.session_state:
-            with st.spinner("Cargando datos..."):
+            with st.spinner("Cargando datos desde MinIO..."):
                 def load_only_data():
-                    all_data, all_dates = load_data_from_gitlab(
-                        repo_id, branch, token, 
-                        use_local=is_development, 
-                        local_path=local_path if is_development else None
+                    all_data, all_dates = load_data_from_minio(
+                        minio_client, MINIO_BUCKET, modules
                     )
                     data = {k: all_data.get(k) for k in modules[module_key] if k in all_data}
                     dates = {k: all_dates.get(k) for k in modules[module_key] if k in all_dates}
@@ -99,6 +98,20 @@ for idx, tab in enumerate(tabs):
                 st.exception(e)  # Muestra el traceback completo
         else:
             st.error(f"Error: Faltan datos necesarios. data_key: {data_key in st.session_state}, dates_key: {dates_key in st.session_state}")
+
+# Configuración MinIO
+MINIO_ENDPOINT = "dirtecno-docker.duckdns.org:7003"
+MINIO_ACCESS_KEY = "dirtecno"
+MINIO_SECRET_KEY = "dirtecnon0r3cu3rd0"
+MINIO_BUCKET = "reportes"  # Cambia por el nombre real del bucket
+
+# Cliente MinIO
+minio_client = Minio(
+    MINIO_ENDPOINT,
+    access_key=MINIO_ACCESS_KEY,
+    secret_key=MINIO_SECRET_KEY,
+    secure=True
+)
 
 # Renderizar el footer al final de la página, fuera de las pestañas
 render_footer()

@@ -10,6 +10,7 @@ import subprocess
 import sys
 import os
 import glob
+from minio import Minio
 
 def obtener_archivo_gitlab(repo_id, file_path, branch='main', token=None):
     """Obtiene un archivo de GitLab"""
@@ -424,3 +425,43 @@ def load_data_from_gitlab(repo_id, branch='main', token=None, use_local=False, l
     except Exception as e:
         st.error(f"Error al cargar datos: {str(e)}")
         return {}, {}
+
+def obtener_archivo_minio(minio_client, bucket, file_name):
+    try:
+        response = minio_client.get_object(bucket, file_name)
+        content = response.read()
+        response.close()
+        response.release_conn()
+        return content
+    except Exception as e:
+        st.error(f"Error al obtener {file_name} de MinIO: {str(e)}")
+        return None
+
+def obtener_lista_archivos_minio(minio_client, bucket):
+    try:
+        return [obj.object_name for obj in minio_client.list_objects(bucket, recursive=True)]
+    except Exception as e:
+        st.error(f"Error al listar archivos en MinIO: {str(e)}")
+        return []
+
+def load_data_from_minio(minio_client, bucket, modules):
+    all_data = {}
+    all_dates = {}
+    archivos = obtener_lista_archivos_minio(minio_client, bucket)
+    extensiones = ['.parquet', '.csv', '.geojson', '.txt', '.xlsx']
+    archivos_filtrados = [a for a in archivos if any(a.endswith(ext) for ext in extensiones)]
+
+    progress = st.progress(0)
+    total = len(archivos_filtrados)
+    for i, archivo in enumerate(archivos_filtrados):
+        progress.progress((i + 1) / total)
+        contenido = obtener_archivo_minio(minio_client, bucket, archivo)
+        if contenido is None:
+            continue
+        nombre = archivo.split('/')[-1]
+        df, fecha = procesar_archivo(nombre, contenido, es_buffer=True)
+        if df is not None:
+            all_data[nombre] = df
+            all_dates[nombre] = fecha
+    progress.empty()
+    return all_data, all_dates
