@@ -1,10 +1,8 @@
-from moduls.carga import load_data_from_gitlab, load_data_from_minio, obtener_lista_archivos_minio
+from moduls.carga import load_data_from_minio
 import streamlit as st
-import moduls.carga as carga
 from moduls import bco_gente, cbamecapacita, empleo, emprendimientos 
 from utils.styles import setup_page
 from utils.ui_components import render_footer
-import os
 import concurrent.futures
 from minio import Minio
 
@@ -16,33 +14,6 @@ setup_page()
 
 st.markdown('<div class="main-header">Tablero General de Reportes</div>', unsafe_allow_html=True)
 
-# Configuración fija de GitLab
-repo_id = "Dir-Tecno/Repositorio-Reportes"
-branch = "main"
-
-# Ruta local para desarrollo
-local_path = r"D:\DESARROLLO\DIRTECNO\EMPLEO\REPORTES\TableroGeneral\Repositorio-Reportes-main"
-#local_path = "/mnt/d/DESARROLLO/DIRTECNO/EMPLEO/REPORTES/TableroGeneral/Repositorio-Reportes-main"
-
-# Determinar el modo de carga (local o GitLab)
-# En un entorno de producción, esta variable podría configurarse mediante una variable de entorno
-is_development = os.path.exists(local_path)
-
-# Mostrar información sobre el modo de carga
-if is_development:
-    st.success("Modo de desarrollo: Cargando datos desde carpeta local")
-else:
-    pass
-
-# Obtener token desde secrets (solo necesario en modo producción)
-token = None
-if not is_development:
-    try:
-        token = st.secrets["gitlab"]["token"]
-    except Exception as e:
-        st.error(f"Error al obtener token: {str(e)}")
-        st.stop()
-
 # Mapeo de archivos por módulo
 modules = {
     'bco_gente': ['vt_nomina_rep_dpto_localidad.parquet', 'VT_NOMINA_REP_RECUPERO_X_ANIO.parquet', 
@@ -52,7 +23,23 @@ modules = {
     'empredimientos': ['desarrollo_emprendedor.xlsx']
 }
 
+# Configuración MinIO
+MINIO_ENDPOINT = "172.21.0.14:9000"
+MINIO_ACCESS_KEY = "dirtecno"
+MINIO_SECRET_KEY = "dirtecnon0r3cu3rd0"
+MINIO_BUCKET = "repositorio-dashboard"  
 
+# Cliente MinIO
+minio_client = Minio(
+    MINIO_ENDPOINT,
+    access_key=MINIO_ACCESS_KEY,
+    secret_key=MINIO_SECRET_KEY,
+    secure=False
+)
+
+# Listar objetos en el bucket de MinIO (nuevo código integrado)
+for obj in minio_client.list_objects(MINIO_BUCKET, recursive=True):
+    print(obj.object_name)
 
 # Crear pestañas
 tab_names = ["CBA Me Capacita", "Banco de la Gente",  "Programas de Empleo","Empredimientos"]
@@ -90,28 +77,13 @@ for idx, tab in enumerate(tabs):
 
         # Verificar que las claves existen en session_state antes de llamar a show_func
         if data_key in st.session_state and dates_key in st.session_state:
-            # Llamar a la función que muestra el dashboard de la pestaña actual
             try:
-                show_func(st.session_state[data_key], st.session_state[dates_key], is_development)
+                show_func(st.session_state[data_key], st.session_state[dates_key], False)
             except Exception as e:
                 st.error(f"Error al mostrar el dashboard: {str(e)}")
-                st.exception(e)  # Muestra el traceback completo
+                st.exception(e)
         else:
             st.error(f"Error: Faltan datos necesarios. data_key: {data_key in st.session_state}, dates_key: {dates_key in st.session_state}")
-
-# Configuración MinIO
-MINIO_ENDPOINT = "dirtecno-docker.duckdns.org:7003"
-MINIO_ACCESS_KEY = "dirtecno"
-MINIO_SECRET_KEY = "dirtecnon0r3cu3rd0"
-MINIO_BUCKET = "reportes"  # Cambia por el nombre real del bucket
-
-# Cliente MinIO
-minio_client = Minio(
-    MINIO_ENDPOINT,
-    access_key=MINIO_ACCESS_KEY,
-    secret_key=MINIO_SECRET_KEY,
-    secure=True
-)
 
 # Renderizar el footer al final de la página, fuera de las pestañas
 render_footer()
