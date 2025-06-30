@@ -26,3 +26,6 @@ huggingface-hub==0.20.3
 
 # Visualización adicional
 wordcloud
+
+# Herramientas de desarrollo
+minio
