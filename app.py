@@ -24,7 +24,7 @@ modules = {
 }
 
 # Configuración MinIO
-MINIO_ENDPOINT = "172.21.0.14:9000"
+MINIO_ENDPOINT = "5.161.118.67:7003"
 MINIO_ACCESS_KEY = "dirtecno"
 MINIO_SECRET_KEY = "dirtecnon0r3cu3rd0"
 MINIO_BUCKET = "repositorio-dashboard"  
