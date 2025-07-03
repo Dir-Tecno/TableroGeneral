@@ -11,7 +11,8 @@ ESTADO_CATEGORIAS = {
     "A Pagar - Convocatoria": ["A PAGAR","A PAGAR CON LOTE","A PAGAR CON BANCO","A PAGAR ENVIADO A SUAF","A PAGAR CON SUAF","MUTUO FIRMADO"],
     "En proceso de pago": ["PAGO EMITIDO","IMPAGO"],
     "Pagados": ["PAGADO","PRE-FINALIZADO","CON PLAN DE CUOTAS","CON PLAN DE CUOTAS CON IMPAGOS","MOROSO ENTRE 3 Y 4 MESES","MOROSO >= 5 MESES"],
-    "Pagados-Finalizados" : ["FINALIZADO"]
+    "Pagados-Finalizados" : ["FINALIZADO"],
+    "PAGOS GESTIONADOS" : ["IMPAGO DESISTIDO", "FINALIZADO", "PAGADO", "PRE-FINALIZADO", "CON PLAN DE CUOTAS", "CON PLAN DE CUOTAS CON IMPAGOS", "MOROSO ENTRE 3 Y 4 MESES", "MOROSO >= 5 MESES", "PAGO EMITIDO", "IMPAGO"]
 }
 
 # Diccionario semántico: explicación amigable para cada KPI
@@ -22,6 +23,7 @@ TOOLTIPS_DESCRIPTIVOS = {
     "Pagados": "Formularios con préstamos ya pagados, con plan de cuotas (PAGADO, CON PLAN DE CUOTAS, PRE-FINALIZADO,CON PLAN DE CUOTAS CON IMPAGOS,MOROSO ENTRE 3 Y 4 MESES,MOROSO >= 5 MESES)",
     "En proceso de pago": "Formularios con pago emitido o en estado de impago (PAGO EMITIDO, IMPAGO)",
     "Pagados-Finalizados": "Formularios sin deuda, con préstamos ya pagados (FINALIZADO)",
+    "PAGOS GESTIONADOS": "Total de formularios con pagos gestionados, incluyendo IMPAGO DESISTIDO y todas las categorías de Pagados-Finalizados, Pagados y En proceso de pago",
     
     # Tooltips para los KPIs de Programas de Empleo
     "BENEFICIARIOS TOTALES": "Total de beneficiarios en programas de empleo, incluyendo Entrenamiento Laboral (EL) y Contrato de Trabajo Indeterminado (CTI)",

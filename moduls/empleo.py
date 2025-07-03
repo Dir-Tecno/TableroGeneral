@@ -229,13 +229,68 @@ def show_empleo_dashboard(data, dates, is_development=False):
                 cols_tabla_censal = ["CODIGOS.Departamento", "CODIGOS.Localidad", "Tasa de Actividad", "Tasa de Empleo", "Tasa de desocupación"]
                 df_tabla_censal = df_censales_display[cols_tabla_censal].copy()
                 
+                # Crear una copia para no modificar el original
+                df_display = df_tabla_censal.copy()
                 
-                # Solo mostrar los datos originales, sin fila de totales
-                df_tabla_censal_tot = df_tabla_censal.copy()
-
+                # Aplicar estilo avanzado similar a bco_gente.py
+                def highlight_row(row):
+                    return ['background-color: #f9f9f9' if i % 2 == 0 else '' for i in range(len(row))]
+                
+                # Crear el objeto Styler
+                styled_df = df_display.style
+                
+                # Aplicar estilo a filas alternas
+                styled_df = styled_df.apply(highlight_row, axis=1)
+                
+                # Aplicar estilos generales
+                styled_df = styled_df.set_properties(**{
+                    'text-align': 'left',
+                    'font-size': '13px',
+                    'border': '1px solid #e6e6e6',
+                    'padding': '0.5em'
+                })
+                
+                # Estilo para encabezados
+                styled_df = styled_df.set_table_styles([
+                    {'selector': 'thead th', 
+                     'props': [('background-color', '#f2f2f2'), 
+                               ('color', '#333333'), 
+                               ('font-weight', 'bold'),
+                               ('text-align', 'left'),
+                               ('padding', '0.5em'),
+                               ('font-size', '14px')]}
+                ])
+                
+                # Mostrar la tabla con configuración personalizada
                 st.dataframe(
-                    df_tabla_censal_tot,
-                    use_container_width=True
+                    df_display,
+                    use_container_width=True,
+                    column_config={
+                        "CODIGOS.Departamento": st.column_config.TextColumn(
+                            "Departamento",
+                            width="medium"
+                        ),
+                        "CODIGOS.Localidad": st.column_config.TextColumn(
+                            "Localidad",
+                            width="medium"
+                        ),
+                        "Tasa de Actividad": st.column_config.TextColumn(
+                            "Tasa de Actividad",
+                            help="Porcentaje de la población activa",
+                            width="small"
+                        ),
+                        "Tasa de Empleo": st.column_config.TextColumn(
+                            "Tasa de Empleo",
+                            help="Porcentaje de la población empleada",
+                            width="small"
+                        ),
+                        "Tasa de desocupación": st.column_config.TextColumn(
+                            "Tasa de Desocupación",
+                            help="Porcentaje de la población desocupada",
+                            width="small"
+                        )
+                    },
+                    hide_index=True
                 )
             else:
                 st.warning("Datos censales no disponibles o vacíos.") 
@@ -400,16 +455,19 @@ def load_and_preprocess_data(data, dates=None, is_development=False):
         # Cargar y limpiar datos censales (si existen)
         df_censales = data.get('LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - DATOS_CENSALES.txt')
         if df_censales is not None and not df_censales.empty:
-            # Limpiar caracteres especiales en columnas numéricas
+            # Asegurar que todas las columnas sean de tipo string para evitar problemas de tipo
+            for col in df_censales.columns:
+                df_censales[col] = df_censales[col].astype(str)
+                # Reemplazar 'nan', 'None', etc. con cadena vacía
+                df_censales[col] = df_censales[col].replace(['nan', 'None', 'none', 'null', 'NaN', '<NA>', 'NA', 'undefined'], '')
+            
+            # Limpiar caracteres especiales en columnas numéricas pero mantener formato original
             numeric_cols = ['Tasa de Actividad', 'Tasa de Empleo', 'Tasa de desocupación']
             for col in numeric_cols:
                 if col in df_censales.columns:
-                    # Convertir a string primero para manejar cualquier tipo de dato
-                    df_censales[col] = df_censales[col].astype(str)
-                    # Reemplazar guión largo u otros caracteres no numéricos con NaN
-                    df_censales[col] = df_censales[col].replace(['\u2014', '\u2013', '\u2212', '-', 'nan', 'None', 'null', ''], pd.NA)
-                    # Convertir a numérico
-                    df_censales[col] = pd.to_numeric(df_censales[col], errors='coerce')
+                    # Limpiar valores no deseados pero mantener el formato con coma
+                    df_censales[col] = df_censales[col].replace(['\u2014', '\u2013', '\u2212', '-'], '')
+            
             # Actualizar el dataset en el diccionario de datos
             data['LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - DATOS_CENSALES.txt'] = df_censales
 

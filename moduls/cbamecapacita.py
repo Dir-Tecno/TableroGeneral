@@ -70,8 +70,8 @@ def load_and_preprocess_data(data):
             if "ID_PLANIFICACION" in df.columns and "N_CURSO" in df.columns:
                 df_cursos = df
     # Limpieza de separador de miles en ambos DataFrames
-    df_postulantes = clean_thousand_separator(df_postulantes)
-    df_cursos = clean_thousand_separator(df_cursos)
+    #df_postulantes = clean_thousand_separator(df_postulantes)
+    #df_cursos = clean_thousand_separator(df_cursos)
 
     # --- Tratamiento de N_DEPARTAMENTO y ZONA ---
     if df_postulantes is not None and 'N_DEPARTAMENTO' in df_postulantes.columns:
