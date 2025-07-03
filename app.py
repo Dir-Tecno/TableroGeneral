@@ -3,7 +3,7 @@ import streamlit as st
 import moduls.carga as carga
 from moduls import bco_gente, cbamecapacita, empleo, emprendimientos 
 from utils.styles import setup_page
-from utils.ui_components import render_footer
+from utils.ui_components import render_footer, show_notification_bell
 import os
 import concurrent.futures
 import sys
@@ -27,7 +27,11 @@ st.set_page_config(
 # Aplicar estilos y banner desde el módulo de estilos
 setup_page()
 
+# Mostrar título principal
 st.markdown('<div class="main-header">Tablero General de Reportes</div>', unsafe_allow_html=True)
+
+# Mostrar campanita de novedades como elemento flotante
+show_notification_bell()
 
 # Configuración fija de GitLab
 repo_id = "Dir-Tecno/Repositorio-Reportes"

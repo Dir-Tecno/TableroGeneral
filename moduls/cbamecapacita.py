@@ -33,6 +33,13 @@ def create_cbamecapacita_kpi(resultados):
             "delta_color": "#d4f7d4"
         },
         {
+            "title": "CURSOS COMENZADOS",
+            "value_form": f"{resultados.get('Cursos Comenzados', 0):,}".replace(',', '.'),
+            "color_class": "kpi-accent-3",
+            "delta": "",
+            "delta_color": "#d4f7d4"
+        },
+        {
             "title": "PARTICIPANTES INSCRIPTOS",
             "value_form": f"{resultados.get('Participantes inscriptos', 0):,}".replace(',', '.'),
             "color_class": "kpi-accent-1",
@@ -193,10 +200,32 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
 
 
     # KPIs reales usando VT_INSCRIPCIONES_PRG129.parquet (postulantes) y VT_CURSOS_SEDES_GEO.parquet (cursos)
-    total_postulantes = df_postulantes["CUIL"].nunique() if df_postulantes is not None else 0
-    total_alumnos = df_alumnos["ID_ALUMNO"].nunique() if df_alumnos is not None else 0
-    cursos_activos = df_cursos["ID_PLANIFICACION"].nunique() if df_cursos is not None else 0
-    total_capacitaciones = df_postulantes["ID_CERTIFICACION"].nunique() if df_postulantes is not None and "ID_CERTIFICACION" in df_postulantes.columns else 0
+    # Asegurarse de que los DataFrames existen y tienen las columnas necesarias
+    total_postulantes = 0
+    if df_postulantes is not None and "CUIL" in df_postulantes.columns:
+        total_postulantes = df_postulantes["CUIL"].dropna().nunique()
+        
+    total_alumnos = 0
+    if df_alumnos is not None and "ID_ALUMNO" in df_alumnos.columns:
+        total_alumnos = df_alumnos["ID_ALUMNO"].dropna().nunique()
+        
+    cursos_activos = 0
+    if df_cursos is not None and "ID_PLANIFICACION" in df_cursos.columns:
+        cursos_activos = df_cursos["ID_PLANIFICACION"].dropna().nunique()
+        
+    total_capacitaciones = 0
+    if df_postulantes is not None and "ID_CERTIFICACION" in df_postulantes.columns:
+        total_capacitaciones = df_postulantes["ID_CERTIFICACION"].dropna().nunique()
+    
+    # Calcular cursos ya comenzados (fecha actual >= FEC_INICIO)
+    cursos_comenzados = 0
+    if df_cursos is not None and 'FEC_INICIO' in df_cursos.columns:
+        # Convertir FEC_INICIO a datetime
+        df_cursos['FEC_INICIO'] = pd.to_datetime(df_cursos['FEC_INICIO'], errors='coerce')
+        # Fecha actual
+        fecha_actual = pd.Timestamp.now().normalize()
+        # Contar cursos con fecha de inicio menor o igual a la fecha actual
+        cursos_comenzados = df_cursos[df_cursos['FEC_INICIO'].notna() & (df_cursos['FEC_INICIO'] <= fecha_actual)]['ID_PLANIFICACION'].nunique()
     # Mostrar información de actualización de datos
     from utils.ui_components import show_last_update
     show_last_update(dates, 'VT_INSCRIPCIONES_PRG129.parquet')
@@ -205,6 +234,7 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
     resultados = {
         "Postulantes": total_postulantes,
         "Cursos Activos": cursos_activos,
+        "Cursos Comenzados": cursos_comenzados,
         "Capacitaciones Elegidas": total_capacitaciones,
         "Participantes inscriptos": total_alumnos
     }
@@ -425,10 +455,10 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                 
                 # Definir mapeo para todos los posibles formatos
                 sexo_map = {
-                    1: 'Varón', '1': 'Varón',
-                    2: 'Mujer', '2': 'Mujer',
-                    3: 'Ambos', '3': 'Ambos',
-                    4: 'No Binario', '4': 'No Binario'
+                    1: 'Varón', '01': 'Varón',
+                    2: 'Mujer', '02': 'Mujer',
+                    3: 'Ambos', '03': 'Ambos',
+                    4: 'No Binario', '04': 'No Binario'
                 }
                 
                 # Aplicar el mapeo de manera más robusta
@@ -682,7 +712,8 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                 "ID_PLANIFICACION",
                 "N_INSTITUCION",
                 "N_CURSO",
-
+                "FEC_INICIO",
+                "FEC_FIN",
                 "N_SECTOR_PRODUCTIVO",
                 "N_SEDE",
                 "N_DEPARTAMENTO",
@@ -705,6 +736,8 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                 "ID_PLANIFICACION",
                 "N_INSTITUCION",
                 "N_CURSO",
+                "FEC_INICIO",
+                "FEC_FIN",
                 "N_SECTOR_PRODUCTIVO",
                 "N_SEDE",
                 "CONVENIO_MUNICIPIO_COMUNA",

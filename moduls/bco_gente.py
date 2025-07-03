@@ -5,7 +5,6 @@ from datetime import datetime, timedelta
 from utils.ui_components import display_kpi_row
 from utils.styles import COLORES_IDENTIDAD, COLOR_PRIMARY, COLOR_SECONDARY, COLOR_ACCENT_1, COLOR_ACCENT_2, COLOR_ACCENT_3, COLOR_ACCENT_4, COLOR_ACCENT_5, COLOR_TEXT_DARK
 from utils.kpi_tooltips import ESTADO_CATEGORIAS, TOOLTIPS_DESCRIPTIVOS
-from utils.data_cleaning import convert_decimal_separator
 
 # Crear diccionario para tooltips de categorías (técnico, lista de estados)
 tooltips_categorias = {k: ", ".join(v) for k, v in ESTADO_CATEGORIAS.items()}
@@ -586,12 +585,17 @@ def show_bco_gente_dashboard(data, dates, is_development=False):
     if is_development:
         st.write("Datos Globales ya cruzados (después de load_and_preprocess_data):")
         if df_global is not None and not df_global.empty: # Asegurarse que df_global existe
-            # Definir df_to_download dentro del bloque condicional
+            # Mostrar solo información resumida del DataFrame
+            st.write(f"Dimensiones del DataFrame: {df_global.shape[0]} filas x {df_global.shape[1]} columnas")
+            st.write(f"Columnas disponibles: {', '.join(df_global.columns.tolist()[:20])}{'...' if len(df_global.columns) > 20 else ''}")
+            
+            # Mostrar solo las primeras 5 filas
+            st.write("Primeras 5 filas:")
             if 'geometry' in df_global.columns:
-                st.dataframe(df_global.drop(columns=['geometry']))
+                st.dataframe(df_global.drop(columns=['geometry']).head(5), use_container_width=True)
                 df_to_download = df_global.drop(columns=['geometry'])
             else:
-                st.dataframe(df_global)
+                st.dataframe(df_global.head(5), use_container_width=True)
                 df_to_download = df_global
                 
             # Mover el código de descarga dentro del bloque condicional
@@ -835,7 +839,7 @@ def mostrar_global(df_filtrado_global, tooltips_categorias):
             kpi["value_pers"] = f"{total_personas:,}".replace(',', '.')
         # Si en el futuro quieres aplicar a más KPIs, puedes agregar estas claves para otros casos aquí.
 
-    display_kpi_row(kpi_data)
+    display_kpi_row(kpi_data, num_columns=6)
 
     # DEBUG VISUAL: Mostrar info de CUIL únicos para 'En Evaluación'
     estados_eval = ESTADO_CATEGORIAS["En Evaluación"]
@@ -1711,18 +1715,17 @@ def mostrar_recupero(df_filtrado_recupero=None, is_development=False):
     import numpy as np
     st.header("Análisis de Recupero")
     
-    # Mostrar df_filtrado_recupero en modo desarrollo siempre al inicio
+    # Mostrar df_filtrado_recupero en modo desarrollo siempre al inicio (versión limitada)
     if is_development and df_filtrado_recupero is not None and not df_filtrado_recupero.empty:
-        st.subheader("DataFrame de Recupero Completo (Modo Desarrollo)")
+        st.subheader("DataFrame de Recupero (Modo Desarrollo - Vista Reducida)")
         
-        # Usar la función show_dev_dataframe_info para mostrar información del DataFrame
-        from utils.ui_components import show_dev_dataframe_info
+        # Mostrar solo información básica del DataFrame para evitar problemas de tamaño
+        st.write(f"Dimensiones del DataFrame: {df_filtrado_recupero.shape[0]} filas x {df_filtrado_recupero.shape[1]} columnas")
+        st.write(f"Columnas disponibles: {', '.join(df_filtrado_recupero.columns.tolist())}")
         
-        # Crear un diccionario temporal con el DataFrame de recupero
-        temp_data = {"df_filtrado_recupero": df_filtrado_recupero}
-        
-        # Mostrar información detallada del DataFrame
-        show_dev_dataframe_info(temp_data, modulo_nombre="Recupero")
+        # Mostrar solo las primeras 5 filas en lugar del DataFrame completo
+        st.write("Primeras 5 filas:")
+        st.dataframe(df_filtrado_recupero.head(5), use_container_width=True)
         
         # Verificar si existe la columna PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO
         if 'PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO' in df_filtrado_recupero.columns:
