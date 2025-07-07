@@ -1,6 +1,6 @@
 services:
   reportes_cba:
-    container_name: reportes_cba_test
+    container_name: reportes_cba
     build: 
       context: https://oauth2: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@github.com/Dir-Tecno/TableroGeneral.git
     restart: unless-stopped
