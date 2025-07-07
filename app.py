@@ -2,9 +2,10 @@ from moduls.carga import load_data_from_minio
 import streamlit as st
 from moduls import bco_gente, cbamecapacita, empleo, emprendimientos 
 from utils.styles import setup_page
-from utils.ui_components import render_footer
+from utils.ui_components import render_footer, show_notification_bell
 import concurrent.futures
 from minio import Minio
+from os import path
 
 # Configuración de la página
 st.set_page_config(
@@ -19,13 +20,15 @@ setup_page()
 st.markdown('<div class="main-header">Tablero General de Reportes</div>', unsafe_allow_html=True)
 
 # Mostrar campanita de novedades como elemento flotante
-# show_notification_bell()
+show_notification_bell()
 
 # Configuración fija de GitLab
 repo_id = "Dir-Tecno/Repositorio-Reportes"
 branch = "main"
 
 # Ruta local para desarrollo
+# Determinar si estamos en producción (no en desarrollo local)
+is_production = not path.exists(path.join(path.dirname(__file__), "Repositorio-Reportes-main"))
 local_path = r"D:\DESARROLLO\REPORTES\TableroGeneral\Repositorio-Reportes-main"
 
 # Ya determinamos is_production arriba, ahora definimos is_development para mantener compatibilidad
