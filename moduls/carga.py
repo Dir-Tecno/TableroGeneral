@@ -147,7 +147,64 @@ def obtener_lista_archivos_minio(minio_client, bucket):
         st.error(f"Error al listar archivos en MinIO: {str(e)}")
         return []
 
+def load_data_from_local(local_path, modules):
+    """
+    Carga datos desde la ruta local en modo desarrollo.
+    
+    Args:
+        local_path (str): Ruta local donde se encuentran los archivos.
+        modules (dict): Diccionario con los módulos y sus archivos.
+        
+    Returns:
+        tuple: (all_data, all_dates) con los datos y fechas de actualización.
+    """
+    import os
+    from pathlib import Path
+    
+    all_data = {}
+    all_dates = {}
+    
+    # Obtener lista de todos los archivos necesarios para todos los módulos
+    all_files = []
+    for module_files in modules.values():
+        all_files.extend(module_files)
+    all_files = list(set(all_files))  # Eliminar duplicados
+    
+    progress = st.progress(0)
+    total = len(all_files)
+    
+    for i, nombre in enumerate(all_files):
+        progress.progress((i + 1) / total)
+        file_path = os.path.join(local_path, nombre)
+        
+        if not os.path.exists(file_path):
+            st.warning(f"Archivo no encontrado en ruta local: {file_path}")
+            continue
+            
+        try:
+            df, fecha = procesar_archivo(nombre, file_path, es_buffer=False)
+            if df is not None:
+                all_data[nombre] = df
+                all_dates[nombre] = fecha
+        except Exception as e:
+            st.warning(f"Error al cargar archivo local {nombre}: {str(e)}")
+    
+    progress.empty()
+    st.write("Archivos cargados desde local:", list(all_data.keys()))
+    return all_data, all_dates
+
 def load_data_from_minio(minio_client, bucket, modules):
+    """
+    Carga datos desde MinIO en modo producción.
+    
+    Args:
+        minio_client: Cliente de MinIO.
+        bucket (str): Nombre del bucket.
+        modules (dict): Diccionario con los módulos y sus archivos.
+        
+    Returns:
+        tuple: (all_data, all_dates) con los datos y fechas de actualización.
+    """
     all_data = {}
     all_dates = {}
     archivos = obtener_lista_archivos_minio(minio_client, bucket)
@@ -169,4 +226,4 @@ def load_data_from_minio(minio_client, bucket, modules):
             all_dates[nombre] = fecha
     progress.empty()
     st.write("Archivos cargados:", list(all_data.keys()))  # Línea de depuración
-    return all_data, all_dates  # <-- AGREGA ESTA LÍNEA
+    return all_data, all_dates
