@@ -3,7 +3,7 @@ name: 🚀 Portainer Webhook
 on:
   push:
     branches:
-      - test
+      - main
 
 jobs:
   deploy:
