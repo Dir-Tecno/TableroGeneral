@@ -7,20 +7,49 @@ import concurrent.futures
 from minio import Minio
 
 # Configuración de la página
-st.set_page_config(page_title="Dashboard Integrado", layout="wide")
+st.set_page_config(
+    page_title="Dashboard Integrado", 
+    layout="wide"
+)
 
 # Aplicar estilos y banner desde el módulo de estilos
 setup_page()
 
+# Mostrar título principal
 st.markdown('<div class="main-header">Tablero General de Reportes</div>', unsafe_allow_html=True)
+
+# Mostrar campanita de novedades como elemento flotante
+# show_notification_bell()
+
+# Configuración fija de GitLab
+repo_id = "Dir-Tecno/Repositorio-Reportes"
+branch = "main"
+
+# Ruta local para desarrollo
+local_path = r"D:\DESARROLLO\REPORTES\TableroGeneral\Repositorio-Reportes-main"
+
+# Ya determinamos is_production arriba, ahora definimos is_development para mantener compatibilidad
+is_development = not is_production
+
+# Mostrar información sobre el modo de carga solo en desarrollo
+if is_development:
+    st.success("Modo de desarrollo: Cargando datos desde carpeta local")
+
+# Obtener token desde secrets (solo necesario en modo producción)
+token = None
+if is_production:
+    try:
+        token = st.secrets["gitlab"]["token"]
+    except Exception as e:
+        st.error(f"Error al obtener token: {str(e)}")
+        st.stop()
 
 # Mapeo de archivos por módulo
 modules = {
-    'bco_gente': ['vt_nomina_rep_dpto_localidad.parquet', 'VT_NOMINA_REP_RECUPERO_X_ANIO.parquet', 
-                   'Detalle_recupero.csv', 'capa_departamentos_2010.geojson', 'LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt'],
-    'cba_capacita': ['VT_INSCRIPCIONES_PRG129.parquet', 'VT_CURSOS_SEDES_GEO.parquet', 'capa_departamentos_2010.geojson'],
-    'empleo': ['ppp_jesi.xlsx','mas26_jesi.xlsx','LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt','LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - DATOS_CENSALES.txt','VT_REPORTES_PPP_MAS26.parquet', 'vt_empresas_adheridas.parquet','vt_empresas_ARCA.parquet', 'VT_PUESTOS_X_FICHAS.parquet','capa_departamentos_2010.geojson', 'VT_REPORTE_LIQUIDACION_LOCALIDAD.parquet'],
-    'empredimientos': ['desarrollo_emprendedor.xlsx']
+    'bco_gente': ['VT_CUMPLIMIENTO_FORMULARIOS.parquet', 'VT_NOMINA_REP_RECUPERO_X_ANIO.parquet', 
+                   'capa_departamentos_2010.geojson', 'LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt'],
+    'cba_capacita': ['VT_ALUMNOS_EN_CURSOS.parquet','VT_INSCRIPCIONES_PRG129.parquet', 'VT_CURSOS_SEDES_GEO.parquet', 'capa_departamentos_2010.geojson'],
+    'empleo': ['LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt','VT_REPORTES_PPP_MAS26.parquet', 'vt_empresas_adheridas.parquet','vt_empresas_ARCA.parquet', 'VT_PUESTOS_X_FICHAS.parquet','capa_departamentos_2010.geojson']
 }
 
 # Configuración MinIO
@@ -42,14 +71,13 @@ for obj in minio_client.list_objects(MINIO_BUCKET, recursive=True):
     print(obj.object_name)
 
 # Crear pestañas
-tab_names = ["CBA Me Capacita", "Banco de la Gente",  "Programas de Empleo","Empredimientos"]
+tab_names = ["CBA Me Capacita", "Banco de la Gente",  "Programas de Empleo"]
 tabs = st.tabs(tab_names)
-tab_keys = ['cba_capacita', 'bco_gente', 'empleo','empredimientos']
+tab_keys = ['cba_capacita', 'bco_gente', 'empleo']
 tab_functions = [
     cbamecapacita.show_cba_capacita_dashboard,
     bco_gente.show_bco_gente_dashboard,
     empleo.show_empleo_dashboard,
-    emprendimientos.show_emprendimientos_dashboard
 ]
 
 for idx, tab in enumerate(tabs):

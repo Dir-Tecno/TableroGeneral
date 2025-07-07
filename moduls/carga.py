@@ -99,7 +99,7 @@ def procesar_archivo(nombre, contenido, es_buffer):
             return df, fecha
         elif nombre.endswith('.xlsx'):
             if es_buffer:
-                df = pd.read_excel(io.BytesIO(contenido), engine='openpyxl')
+                df = pd.read_excel(io.BytesIO(contenido), engine='openpyxl', header=header)
                 fecha = datetime.datetime.now()
             else:
                 df = pd.read_excel(contenido, engine='openpyxl')

@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import requests
+import datetime
 
 def show_dev_dataframe_info(data, modulo_nombre="Módulo", info_caption=None):
     """
@@ -230,3 +231,176 @@ def display_kpi_row(kpi_data, num_columns=5):
                 ),
                 unsafe_allow_html=True
             )
+
+
+def show_notification_bell(novedades=None):
+    """
+    Muestra una campanita con novedades del tablero usando st.expander.
+    
+    Args:
+        novedades (list): Lista de diccionarios con novedades
+                         [{"titulo": "Título", "descripcion": "Descripción", "fecha": "YYYY-MM-DD", "modulo": "Nombre del módulo"}, ...]
+    """
+    # Evitar duplicación usando un identificador único en session_state
+    if "campanita_mostrada" in st.session_state:
+        return
+    
+    # Marcar que ya se mostró la campanita
+    st.session_state["campanita_mostrada"] = True
+    
+    if novedades is None:
+        # Novedades por defecto si no se proporcionan
+        novedades = [
+            {
+                "titulo": "Normalización de fechas en Banco de la Gente",
+                "descripcion": "Se corrigió el formato de fechas para mostrar consistentemente DD/MM/AAAA en todos los reportes.",
+                "fecha": "2025-07-01",
+                "modulo": "Banco de la Gente"
+            },
+            {
+                "titulo": "Nuevo KPI de Cursos Comenzados",
+                "descripcion": "Se agregó un nuevo KPI que muestra la cantidad de cursos que ya han comenzado según la fecha actual.",
+                "fecha": "2025-07-02",
+                "modulo": "CBA Me Capacita"
+            },
+            {
+                "titulo": "Optimización de rendimiento",
+                "descripcion": "Se mejoró el tiempo de carga de los gráficos y tablas en todos los módulos.",
+                "fecha": "2025-07-03",
+                "modulo": "General"
+            }
+        ]
+    
+    # Filtrar novedades recientes (últimos 7 días)
+    hoy = datetime.datetime.now().date()
+    novedades_recientes = []
+    for novedad in novedades:
+        try:
+            fecha_novedad = datetime.datetime.strptime(novedad.get("fecha", ""), "%Y-%m-%d").date()
+            dias_diferencia = (hoy - fecha_novedad).days
+            if dias_diferencia <= 7:  # Novedades de los últimos 7 días
+                novedades_recientes.append(novedad)
+        except ValueError:
+            # Si la fecha no es válida, no incluir en recientes
+            pass
+    
+    # Contar novedades recientes
+    num_novedades = len(novedades_recientes)
+    
+    # Crear un contenedor para el expander
+    container = st.container()
+    
+    # Aplicar CSS para posicionar y estilizar el expander
+    st.markdown("""
+    <style>
+    /* Ocultar el HTML sin procesar */
+    .element-container:has(> div.stNotification) {
+        display: none;
+    }
+    
+    /* Estilo para posicionar el expander de la campanita */
+    .campanita-container div[data-testid="stExpander"] {
+        position: absolute;
+        top: 70px;
+        left: 20px;
+        width: 350px;
+        z-index: 999;
+    }
+    
+    /* Estilo para el título del expander de la campanita */
+    .campanita-container div[data-testid="stExpander"] > div:first-child {
+        background-color: white !important;
+        border-radius: 20px !important;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2) !important;
+    }
+    
+    /* Estilo para el contenido del expander de la campanita */
+    .campanita-container div[data-testid="stExpander"] > details > div {
+        background-color: white !important;
+        border-radius: 0 0 8px 8px !important;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1) !important;
+    }
+    
+    /* Estilo para la barra de color en cada novedad */
+    .novedad-item {
+        margin-bottom: 15px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #eee;
+    }
+    
+    /* Estilo para el badge de notificaciones */
+    .notification-badge {
+        background-color: #ff4b4b;
+        color: white;
+        border-radius: 50%;
+        padding: 0px 6px;
+        font-size: 12px;
+        margin-left: 5px;
+    }
+    
+    /* Asegurar que el texto del expander se vea correctamente */
+    .campanita-container div[data-testid="stExpander"] > div:first-child p {
+        font-size: 16px !important;
+        font-weight: 500 !important;
+        color: #333 !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    # Crear div contenedor para aplicar los estilos específicos
+    st.markdown('<div class="campanita-container">', unsafe_allow_html=True)
+    
+    # Título del expander con campanita y badge
+    bell_icon = "🔔"
+    # Usamos markdown para el título en lugar de f-string para mejor renderizado
+    if num_novedades > 0:
+        expander_title = f"{bell_icon} Novedades ({num_novedades})"
+    else:
+        expander_title = f"{bell_icon} Novedades"
+    
+    # Crear el expander
+    with container.expander(expander_title, expanded=False):
+        if num_novedades > 0:
+            for novedad in novedades_recientes:
+                titulo = novedad.get("titulo", "")
+                descripcion = novedad.get("descripcion", "")
+                fecha = novedad.get("fecha", "")
+                modulo = novedad.get("modulo", "")
+                
+                # Formatear fecha para mostrar
+                try:
+                    fecha_obj = datetime.datetime.strptime(fecha, "%Y-%m-%d")
+                    fecha_mostrar = fecha_obj.strftime("%d/%m/%Y")
+                except ValueError:
+                    fecha_mostrar = fecha
+                
+                # Color según el módulo
+                color_modulo = "#0085c8"  # Color por defecto (azul)
+                if modulo == "Banco de la Gente":
+                    color_modulo = "#0085c8"  # Azul
+                elif modulo == "CBA Me Capacita":
+                    color_modulo = "#fbbb21"  # Amarillo
+                elif modulo == "Programas de Empleo":
+                    color_modulo = "#e94235"  # Rojo
+                elif modulo == "Emprendimientos":
+                    color_modulo = "#34a853"  # Verde
+                
+                # Mostrar la novedad con barra de color
+                st.markdown(f"""
+                <div class="novedad-item">
+                    <div style="display: flex; align-items: center;">
+                        <div style="width: 4px; height: 40px; background-color: {color_modulo}; margin-right: 10px;"></div>
+                        <div>
+                            <h4 style="margin: 0; color: #333;">{titulo}</h4>
+                            <p style="margin: 5px 0 0 0; font-size: 12px; color: #666;">{modulo} · {fecha_mostrar}</p>
+                        </div>
+                    </div>
+                    <p style="margin: 10px 0 0 14px; font-size: 14px; color: #444;">{descripcion}</p>
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.info("No hay novedades recientes")
+    
+    # Cerrar el div contenedor
+    st.markdown('</div>', unsafe_allow_html=True)
+
