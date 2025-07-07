@@ -3,9 +3,8 @@ import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 from utils.ui_components import display_kpi_row
-from utils.styles import COLORES_IDENTIDAD
+from utils.styles import COLORES_IDENTIDAD, COLOR_PRIMARY, COLOR_SECONDARY, COLOR_ACCENT_1, COLOR_ACCENT_2, COLOR_ACCENT_3, COLOR_ACCENT_4, COLOR_ACCENT_5, COLOR_TEXT_DARK
 from utils.kpi_tooltips import ESTADO_CATEGORIAS, TOOLTIPS_DESCRIPTIVOS
-from utils.data_cleaning import convert_decimal_separator
 
 # Crear diccionario para tooltips de categorías (técnico, lista de estados)
 tooltips_categorias = {k: ", ".join(v) for k, v in ESTADO_CATEGORIAS.items()}
@@ -26,6 +25,7 @@ def create_bco_gente_kpis(resultados, tooltips):
             "title": "FORMULARIOS EN EVALUACIÓN",
             "categoria": "En Evaluación",
             "value_form": f"{resultados.get('En Evaluación', 0):,}".replace(',', '.'),
+            "value_pers": "0",  # Este valor se actualizará luego con el conteo real de personas únicas
             "color_class": "kpi-primary",
             "tooltip": tooltips.get("En Evaluación")
         },
@@ -56,6 +56,13 @@ def create_bco_gente_kpis(resultados, tooltips):
             "value_form": f"{resultados.get('Pagados-Finalizados', 0):,}".replace(',', '.'),
             "color_class": "kpi-success",
             "tooltip": tooltips.get("Pagados-Finalizados")
+        },
+        {
+            "title": "PAGOS GESTIONADOS",
+            "categoria": "PAGOS GESTIONADOS",
+            "value_form": f"{resultados.get('PAGOS GESTIONADOS', 0):,}".replace(',', '.'),
+            "color_class": "kpi-accent-4",
+            "tooltip": tooltips.get("PAGOS GESTIONADOS")
         }
     ]
     return kpis
@@ -86,7 +93,7 @@ def mostrar_kpis_fiscales(df_global):
         "IMP_IVA",
         "MONOTRIBUTO",
         "INTEGRANTE_SOC",
-        "EMPLEADOR",
+        "EMPLEADO",
         "ACTIVIDAD_MONOTRIBUTO"
     ]
 
@@ -201,47 +208,77 @@ def mostrar_resumen_creditos(df_global):
             mime="text/csv"
         )
 
-# --- Ejemplo de integración (descomentar para usar en el flujo principal) ---
 # mostrar_resumen_creditos(df_global)
 
 def load_and_preprocess_data(data):
     """
-    Carga y preprocesa los datos necesarios para el dashboard.
+    Carga y preprocesa los datos para el dashboard.
     
     Args:
-        data: Diccionario de dataframes cargados desde GitLab
+        data (dict): Diccionario con los datos cargados.
         
     Returns:
-        Tupla con los dataframes procesados y flags de disponibilidad
+        tuple: (df_global, geojson_data, df_localidad_municipio, df_global_pagados)
     """
+    # Función auxiliar para verificar y corregir el DataFrame
+    def ensure_dataframe(df):
+        """Asegura que el objeto sea un DataFrame y no una Serie"""
+        if df is None:
+            return pd.DataFrame()
+        if isinstance(df, pd.Series):
+            return pd.DataFrame([df])
+        if not isinstance(df, pd.DataFrame):
+            st.warning(f"Tipo de dato inesperado: {type(df)}. Convirtiendo a DataFrame vacío.")
+            return pd.DataFrame()
+        return df.copy()  # Devolver una copia para evitar modificaciones no deseadas
     with st.spinner("Cargando y procesando datos..."):
-        # Extraer los dataframes necesarios
-        df_global = data.get('vt_nomina_rep_dpto_localidad.parquet')
-        df_recupero = data.get('VT_NOMINA_REP_RECUPERO_X_ANIO.parquet')
-        geojson_data = data.get('capa_departamentos_2010.geojson')
-        df_localidad_municipio = data.get('LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt')
+        # Extraer los dataframes necesarios y asegurar que sean DataFrames válidos
+        df_global = ensure_dataframe(data.get('VT_NOMINA_REP_RECUPERO_X_ANIO.parquet'))
+        df_cumplimiento = ensure_dataframe(data.get('VT_CUMPLIMIENTO_FORMULARIOS.parquet'))
+        geojson_data = data.get('capa_departamentos_2010.geojson')  # Este es un GeoJSON, no un DataFrame
+        df_localidad_municipio = ensure_dataframe(data.get('LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt'))
         
-        # Verificar silenciosamente si los archivos existen
-        has_global_data = df_global is not None and not df_global.empty
-        has_recupero_data = df_recupero is not None and not df_recupero.empty
-        # Check if geojson_data was loaded (it might be bytes, dict, or None initially)
-        has_geojson_data = geojson_data is not None 
+        
+        has_global_data = not df_global.empty
+        has_cumplimiento_data = not df_cumplimiento.empty
+        
+        # Verificar la estructura del DataFrame para diagnóstico
+        if has_global_data and st.session_state.get('debug_mode', False):
+            st.write("Estructura de df_global al inicio:")
+            st.write(f"Tipo: {type(df_global)}")
+            st.write(f"Columnas: {df_global.columns.tolist()}")
+            st.write(f"Tipos de datos: {df_global.dtypes}")
+ 
 
-        # Agregar columna de CATEGORIA a df_recupero si está disponible
+        # Agregar columna de CATEGORIA a df_global si está disponible y filtrar solo por 'Pagados' y 'Pagados-Finalizados'
         
-        if has_recupero_data and 'N_ESTADO_PRESTAMO' in df_recupero.columns:
-            df_recupero['CATEGORIA'] = 'Otros'
-            for categoria, estados in ESTADO_CATEGORIAS.items():
-                mask = df_recupero['N_ESTADO_PRESTAMO'].isin(estados)
-                df_recupero.loc[mask, 'CATEGORIA'] = categoria
+        if has_global_data and 'N_ESTADO_PRESTAMO' in df_global.columns:
+            # Crear una copia para evitar modificaciones que puedan alterar la estructura
+            df_global = df_global.copy()
+            
+            # Inicializar la columna CATEGORIA con un valor predeterminado
+            df_global['CATEGORIA'] = 'Otros'
+            
+            # Método alternativo para asignar categorías sin usar .loc
+            # Crear una función para mapear estados a categorías
+            def asignar_categoria(estado):
+                for categoria, estados in ESTADO_CATEGORIAS.items():
+                    if estado in estados:
+                        return categoria
+                return 'Otros'
+            
+            # Aplicar la función a cada fila
+            df_global['CATEGORIA'] = df_global['N_ESTADO_PRESTAMO'].apply(asignar_categoria)
+            
+            # Verificar que df_global sigue siendo un DataFrame después de la asignación
+            df_global = ensure_dataframe(df_global)
+            
 
-        # Check if df_localidad_municipio (likely a string) is not None and not an empty string
-        has_localidad_municipio_data = df_localidad_municipio is not None and df_localidad_municipio != "" 
-        
-        # Renombrar valores en N_LINEA_PRESTAMO
-        if has_global_data and 'N_LINEA_PRESTAMO' in df_global.columns:
-            # Reemplazar "L4." por "INICIAR EMPRENDIMIENTO"
-            df_global['N_LINEA_PRESTAMO'] = df_global['N_LINEA_PRESTAMO'].replace("L4.", "INICIAR EMPRENDIMIENTO")
+                
+            # Reemplazar "L4." por "INICIAR EMPRENDIMIENTO" usando un método alternativo
+            df_global['N_LINEA_PRESTAMO'] = df_global['N_LINEA_PRESTAMO'].apply(
+                lambda x: "INICIAR EMPRENDIMIENTO" if x == "L4." else x
+            )
 
         # --- Normalizar N_DEPARTAMENTO: dejar solo los válidos, el resto 'OTROS' ---
         departamentos_validos = [
@@ -296,61 +333,32 @@ def load_and_preprocess_data(data):
             
             # Crear la columna ZONA
             df_global['ZONA'] = df_global['N_DEPARTAMENTO'].apply(
-                lambda x: 'ZONA FAVORECIDA' if x in zonas_favorecidas else 'ZONA REGULAR'
+                lambda x: 'ZONA NOC Y SUR' if x in zonas_favorecidas else 'ZONA REGULAR'
             )
         
-        # Realizar el cruce entre df_global y df_recupero si ambos están disponibles
-        if has_global_data and has_recupero_data and 'NRO_SOLICITUD' in df_recupero.columns:
-            try:
-                # Verificar si existen las columnas necesarias en df_recupero
-                # Añadir FEC_INICIO_PAGO si existe en df_recupero
-                required_columns = ['FEC_NACIMIENTO','CUIL','NRO_SOLICITUD', 'DEUDA', 'DEUDA_NO_VENCIDA', 'MONTO_OTORGADO','IMP_GANANCIAS','IMP_IVA','MONOTRIBUTO','INTEGRANTE_SOC','EMPLEADOR','ACTIVIDAD_MONOTRIBUTO','FEC_INICIO_PAGO']
-                missing_columns = [col for col in required_columns if col not in df_recupero.columns]
+            # Renombrar DEUDA como DEUDA_VENCIDA
+            df_global  = df_global.rename(columns={'DEUDA': 'DEUDA_VENCIDA'})
+                    
+            # Convertir columnas numéricas a tipo float
+            for col in ['DEUDA_VENCIDA', 'DEUDA_NO_VENCIDA', 'MONTO_OTORGADO']:
+                df_global[col] = pd.to_numeric(df_global[col], errors='coerce')
+                   
+            
                 
-                if not missing_columns:
-                    # Seleccionar solo las columnas necesarias de df_recupero para el merge
-                    df_recupero_subset = df_recupero[required_columns].copy()
+            # Rellenar valores NaN con 0 en df_global
+            for col in ['DEUDA_VENCIDA', 'DEUDA_NO_VENCIDA', 'MONTO_OTORGADO']:
+                df_global[col] = pd.to_numeric(df_global[col], errors='coerce').fillna(0)
                     
-                    # Renombrar DEUDA como DEUDA_VENCIDA
-                    df_recupero_subset = df_recupero_subset.rename(columns={'DEUDA': 'DEUDA_VENCIDA'})
+            # Añadir campos calculados a df_global
+            df_global['DEUDA_A_RECUPERAR'] = df_global['DEUDA_VENCIDA'] + df_global['DEUDA_NO_VENCIDA']
+            df_global['RECUPERADO'] = df_global['MONTO_OTORGADO'] - df_global['DEUDA_A_RECUPERAR']
+            
+            
                     
-                    # Convertir columnas numéricas a tipo float
-                    for col in ['DEUDA_VENCIDA', 'DEUDA_NO_VENCIDA', 'MONTO_OTORGADO']:
-                        df_recupero_subset[col] = pd.to_numeric(df_recupero_subset[col], errors='coerce')
-
-                missing_columns = [col for col in required_columns if col not in df_recupero.columns]
-                
-                if not missing_columns:
-                    # Seleccionar solo las columnas necesarias de df_recupero para el merge
-                    df_recupero_subset = df_recupero[required_columns].copy()
-                    
-                    # Renombrar DEUDA como DEUDA_VENCIDA
-                    df_recupero_subset = df_recupero_subset.rename(columns={'DEUDA': 'DEUDA_VENCIDA'})
-                    
-                    # Convertir columnas numéricas a tipo float
-                    for col in ['DEUDA_VENCIDA', 'DEUDA_NO_VENCIDA', 'MONTO_OTORGADO']:
-                        df_recupero_subset[col] = pd.to_numeric(df_recupero_subset[col], errors='coerce')
-                    
-                    # Realizar el merge (left join)
-                    df_global = pd.merge(
-                        df_global,
-                        df_recupero_subset,
-                        on='NRO_SOLICITUD',
-                        how='left'
-                    )
-                    
-                    # Rellenar valores NaN con 0
-                    for col in ['DEUDA_VENCIDA', 'DEUDA_NO_VENCIDA', 'MONTO_OTORGADO']:
-                        df_global[col] = pd.to_numeric(df_global[col], errors='coerce').fillna(0)
-                    
-                    # Añadir campos calculados
-                    df_global['DEUDA_A_RECUPERAR'] = df_global['DEUDA_VENCIDA'] + df_global['DEUDA_NO_VENCIDA']
-                    df_global['RECUPERADO'] = df_global['MONTO_OTORGADO'] - df_global['DEUDA_A_RECUPERAR']
-                    
-                    # --- INICIO: Nuevo Merge con df_localidad_municipio ---
-                    if df_localidad_municipio is not None and not df_localidad_municipio.empty:
-                        # Definir columnas a traer desde df_localidad_municipio (incluyendo la clave)
-                        cols_to_merge = [
+            # --- INICIO: Nuevo Merge con df_localidad_municipio ---
+            if df_localidad_municipio is not None and not df_localidad_municipio.empty:
+                # Definir columnas a traer desde df_localidad_municipio (incluyendo la clave)
+                cols_to_merge = [
                             'ID_LOCALIDAD', # Clave del merge (asumimos mismo nombre en ambos DFs)
                             'ID_GOBIERNO_LOCAL',
                             'TIPO', 
@@ -360,75 +368,42 @@ def load_and_preprocess_data(data):
                             'LEGISLADOR DEPARTAMENTAL', 
                             'LATITUD', 
                             'LONGITUD'
-                        ]
+                ]
                         
-                        # Verificar que la columna clave 'ID_LOCALIDAD' exista en ambos DataFrames
-                        key_col = 'ID_LOCALIDAD'
-                        if key_col not in df_global.columns:
-                             st.warning(f"No se encontró la columna clave '{key_col}' en df_global para el cruce con df_localidad_municipio.")
-                             can_merge = False
-                        elif key_col not in df_localidad_municipio.columns:
-                             st.warning(f"No se encontró la columna clave '{key_col}' en df_localidad_municipio para el cruce.")
-                             can_merge = False
-                        else:
-                             can_merge = True
-
-                        # Verificar que todas las columnas *a traer* existan en df_localidad_municipio
-                        # (Excluimos la clave que ya verificamos)
-                        missing_loc_cols = [col for col in cols_to_merge if col != key_col and col not in df_localidad_municipio.columns]
-                        if missing_loc_cols:
-                            st.warning(f"No se pudo realizar el cruce con df_localidad_municipio. Faltan columnas en df_localidad_municipio: {', '.join(missing_loc_cols)}")
-                            can_merge = False
-                        
-                        if can_merge:
-                            try:
-                                # Seleccionar solo las columnas necesarias (incluida la clave)
-                                df_localidad_subset = df_localidad_municipio[cols_to_merge].copy()
-                                
-                                # Realizar el segundo merge (left join) usando la misma clave
-                                df_global = pd.merge(
-                                    df_global,
-                                    df_localidad_subset,
-                                    on=key_col, # Usar 'on' ya que la clave tiene el mismo nombre
-                                    how='left'
-                                )
-                                
-                                # --- Limpieza de LATITUD y LONGITUD SOLO después del merge con df_localidad_municipio ---
-                                def limpiar_lat_lon(valor):
-                                    if isinstance(valor, str):
-                                        # Si tiene más de un punto, eliminar todos menos el último
-                                        if valor.count('.') > 1:
-                                            partes = valor.split('.')
-                                            valor = ''.join(partes[:-1]) + '.' + partes[-1]
-                                        valor = valor.replace(',', '.')  # Por si viene con coma decimal
-                                    return valor
-
-                                for col in ['LATITUD', 'LONGITUD']:
-                                    if col in df_global.columns:
-                                        df_global[col] = df_global[col].astype(str).apply(limpiar_lat_lon)
-                                        df_global[col] = pd.to_numeric(df_global[col], errors='coerce')
-
-                            except Exception as e_merge2:
-                                st.warning(f"Error durante el segundo merge con df_localidad_municipio: {str(e_merge2)}")
-                        # No es necesario un 'else' aquí, las advertencias ya se mostraron si can_merge es False
-                    else:
-                         st.info("df_localidad_municipio no está disponible o está vacío, se omite el segundo cruce.")
-                    # --- FIN: Nuevo Merge con df_localidad_municipio ---
+                try:
+                    # Seleccionar solo las columnas necesarias (incluida la clave)
+                    df_localidad_subset = df_localidad_municipio[cols_to_merge].copy()
                     
-                else:
-                    st.warning(f"No se pudo realizar el cruce con datos de recupero. Faltan columnas: {', '.join(missing_columns)}")
-            except Exception as e:
-                st.warning(f"Error al realizar el cruce con datos de recupero: {str(e)}")
-        
-        # Añadir la categoría a cada estado
-        if has_global_data and 'N_ESTADO_PRESTAMO' in df_global.columns:
-            # Crear la columna CATEGORIA basada en el estado del préstamo
-            df_global['CATEGORIA'] = 'Otros'
-            for categoria, estados in ESTADO_CATEGORIAS.items():
-                # Crear una máscara para los estados que pertenecen a esta categoría
-                mask = df_global['N_ESTADO_PRESTAMO'].isin(estados)
-                # Asignar la categoría a los registros que cumplen con la máscara
-                df_global.loc[mask, 'CATEGORIA'] = categoria
+                    # Realizar el segundo merge (left join) usando la misma clave
+                    df_global = pd.merge(
+                        df_global,
+                        df_localidad_subset,
+                        on='ID_LOCALIDAD', # Usar 'on' ya que la clave tiene el mismo nombre
+                        how='left'
+                    )
+                                
+                    # --- Limpieza de LATITUD y LONGITUD SOLO después del merge con df_localidad_municipio ---
+                    def limpiar_lat_lon(valor):
+                        if isinstance(valor, str):
+                            # Si tiene más de un punto, eliminar todos menos el último
+                            if valor.count('.') > 1:
+                                partes = valor.split('.')
+                                valor = ''.join(partes[:-1]) + '.' + partes[-1]
+                                valor = valor.replace(',', '.')  # Por si viene con coma decimal
+                            return valor
+
+                    for col in ['LATITUD', 'LONGITUD']:
+                        if col in df_global.columns:
+                            df_global[col] = df_global[col].astype(str).apply(limpiar_lat_lon)
+                            df_global[col] = pd.to_numeric(df_global[col], errors='coerce')
+
+                except Exception as e_merge2:
+                    st.warning(f"Error durante el segundo merge con df_localidad_municipio: {str(e_merge2)}")
+                # No es necesario un 'else' aquí, las advertencias ya se mostraron si can_merge es False
+            else:
+                st.info("df_localidad_municipio no está disponible o está vacío, se omite el segundo cruce.")
+            # --- FIN: Nuevo Merge con df_localidad_municipio ---
+
         
         # Filtrar líneas de préstamo que no deben ser consideradas
         if has_global_data and 'N_LINEA_PRESTAMO' in df_global.columns:
@@ -445,7 +420,85 @@ def load_and_preprocess_data(data):
             # # Verificar si todavía hay datos después del filtrado
             # has_global_data = not df_global.empty
 
-        return df_global, df_recupero, geojson_data, df_localidad_municipio, has_global_data, has_recupero_data, has_geojson_data, has_localidad_municipio_data
+        
+        # Verificar la estructura final para diagnóstico
+        if has_global_data and st.session_state.get('debug_mode', False):
+            st.write("Estructura final de df_global:")
+            st.write(f"Tipo: {type(df_global)}")
+            st.write(f"Columnas: {df_global.columns.tolist()}")
+            st.write(f"Tipos de datos: {df_global.dtypes}")
+        
+        # Convertir cualquier columna que sea Series a valores nativos
+        if has_global_data and not df_global.empty:
+            for col in df_global.columns:
+                try:
+                    if len(df_global) > 0 and isinstance(df_global[col].iloc[0], pd.Series):
+                        # Si la columna contiene Series, convertirla a valores nativos
+                        df_global[col] = df_global[col].apply(lambda x: x.values[0] if isinstance(x, pd.Series) else x)
+                except Exception as e:
+                    st.warning(f"Error al procesar columna {col}: {str(e)}")
+                    # Intentar convertir la columna completa si es una Serie
+                    if isinstance(df_global[col], pd.Series):
+                        try:
+                            df_global[col] = df_global[col].apply(lambda x: x if not isinstance(x, pd.Series) else x.iloc[0] if len(x) > 0 else None)
+                        except:
+                            pass
+                    # Crear un DataFrame adicional que contenga solo las categorías 'Pagados' y 'Pagados-Finalizados'
+            # para operaciones específicas que requieren solo estos datos
+        categorias_validas = ['Pagados', 'Pagados-Finalizados']
+        df_global_pagados = df_global[df_global['CATEGORIA'].isin(categorias_validas)].copy()
+        # Realizar el merge con df_cumplimiento directamente en df_global si está disponible
+        if has_cumplimiento_data and 'NRO_FORMULARIO' in df_cumplimiento.columns:
+            try:
+                # Columnas a obtener del DataFrame de cumplimiento
+                columnas_cumplimiento = [
+                    'NRO_FORMULARIO',
+                    'PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO'
+                ]
+
+                # Verificar que todas las columnas existan
+                missing_cols_cumplimiento = [col for col in columnas_cumplimiento if col not in df_cumplimiento.columns]
+
+                if not missing_cols_cumplimiento:
+                    # Seleccionar solo las columnas necesarias
+                    df_cumplimiento_subset = df_cumplimiento[columnas_cumplimiento].copy()
+
+                    # Convertir columna numérica a tipo float
+                    df_cumplimiento_subset['PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO'] = pd.to_numeric(
+                        df_cumplimiento_subset['PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO'], 
+                        errors='coerce'
+                    )
+
+                    # Realizar el merge (left join) con df_global_pagados
+                    df_global_pagados = pd.merge(
+                        df_global_pagados,
+                        df_cumplimiento_subset,
+                        left_on='NRO_SOLICITUD',  # Clave en df_global_pagados
+                        right_on='NRO_FORMULARIO',  # Clave en df_cumplimiento
+                        how='left'
+                    )
+                    # Eliminar la columna duplicada NRO_FORMULARIO si existe
+                    if 'NRO_FORMULARIO' in df_global_pagados.columns:
+                        df_global_pagados = df_global_pagados.drop('NRO_FORMULARIO', axis=1)
+                else:
+                    st.warning(f"No se pudo realizar el merge con datos de cumplimiento. Faltan columnas: {', '.join(missing_cols_cumplimiento)}")
+            except Exception as e_cumplimiento:
+                st.warning(f"Error al realizar el merge con datos de cumplimiento: {str(e_cumplimiento)}")
+        else:
+            st.info("Los datos de cumplimiento no están disponibles o no contienen la columna NRO_FORMULARIO.")
+        # Rellenar valores NaN con 0 en df_global_pagados
+        for col in ['DEUDA_VENCIDA', 'DEUDA_NO_VENCIDA', 'MONTO_OTORGADO']:
+            if col in df_global_pagados.columns:
+                df_global_pagados[col] = pd.to_numeric(df_global_pagados[col], errors='coerce').fillna(0)
+                
+        # Añadir campos calculados a df_global_pagados
+        if all(col in df_global_pagados.columns for col in ['DEUDA_VENCIDA', 'DEUDA_NO_VENCIDA']):
+            df_global_pagados['DEUDA_A_RECUPERAR'] = df_global_pagados['DEUDA_VENCIDA'] + df_global_pagados['DEUDA_NO_VENCIDA']
+            
+        if all(col in df_global_pagados.columns for col in ['MONTO_OTORGADO', 'DEUDA_A_RECUPERAR']):
+            df_global_pagados['RECUPERADO'] = df_global_pagados['MONTO_OTORGADO'] - df_global_pagados['DEUDA_A_RECUPERAR']
+        
+        return df_global, geojson_data, df_localidad_municipio, df_global_pagados
 
 def render_filters(df_filtrado_global):
     """
@@ -507,7 +560,6 @@ def render_filters(df_filtrado_global):
         
         return df_filtrado, selected_dpto, selected_loc, selected_lineas
 
-
 def show_bco_gente_dashboard(data, dates, is_development=False):
     """
     Muestra el dashboard de Banco de la Gente.
@@ -525,46 +577,51 @@ def show_bco_gente_dashboard(data, dates, is_development=False):
         show_dev_dataframe_info(data, modulo_nombre="Banco de la Gente")
 
     df_global = None
-    df_recupero = None
+    df_global_pagados = None
     
      # Cargar y preprocesar datos
-    df_global, df_recupero, geojson_data, df_localidad_municipio, has_global_data, has_recupero_data, has_geojson_data, has_localidad_municipio_data = load_and_preprocess_data(data)
+    df_global, geojson_data, df_localidad_municipio, df_global_pagados = load_and_preprocess_data(data)
     
     if is_development:
         st.write("Datos Globales ya cruzados (después de load_and_preprocess_data):")
         if df_global is not None and not df_global.empty: # Asegurarse que df_global existe
+            # Mostrar solo información resumida del DataFrame
+            st.write(f"Dimensiones del DataFrame: {df_global.shape[0]} filas x {df_global.shape[1]} columnas")
+            st.write(f"Columnas disponibles: {', '.join(df_global.columns.tolist()[:20])}{'...' if len(df_global.columns) > 20 else ''}")
+            
+            # Mostrar solo las primeras 5 filas
+            st.write("Primeras 5 filas:")
             if 'geometry' in df_global.columns:
-                st.dataframe(df_global.drop(columns=['geometry']))
+                st.dataframe(df_global.drop(columns=['geometry']).head(5), use_container_width=True)
                 df_to_download = df_global.drop(columns=['geometry'])
             else:
-                st.dataframe(df_global)
+                st.dataframe(df_global.head(5), use_container_width=True)
                 df_to_download = df_global
-        import io
-        csv = df_to_download.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="Descargar CSV de Datos Globales",
-            data=csv,
-            file_name="datos_globales.csv",
-            mime="text/csv"
-        )
-    # Verificar que los datos globales existan antes de continuar
-    if not has_global_data:
-        st.error("No se pudieron cargar los datos globales de Banco de la Gente. Verifique que el archivo 'vt_nomina_rep_dpto_localidad.parquet' exista en el repositorio.")
-        return
+                
+            # Mover el código de descarga dentro del bloque condicional
+            import io
+            csv = df_to_download.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="Descargar CSV de Datos Globales",
+                data=csv,
+                file_name="datos_globales.csv",
+                mime="text/csv"
+            )
+
     
     # Crear una copia del DataFrame para trabajar con él
     df_filtrado_global = df_global.copy()
     
     # Mostrar última actualización
     from utils.ui_components import show_last_update
-    show_last_update(dates, 'vt_nomina_rep_dpto_localidad.parquet')
+    show_last_update(dates, 'VT_NOMINA_REP_RECUPERO_X_ANIO.parquet')
     
     # Crear pestañas para las diferentes vistas
     tab_global, tab_recupero = st.tabs(["GLOBAL", "RECUPERO"])
     
     with tab_global:
         # Filtros específicos para la pestaña GLOBAL
-        if has_global_data:
+        if df_filtrado_global is not None and not df_filtrado_global.empty:
             st.markdown('<h3 style="font-size: 18px; margin-top: 0;">Filtros - GLOBAL</h3>', unsafe_allow_html=True)
             
             # Crear tres columnas para los filtros
@@ -632,117 +689,46 @@ def show_bco_gente_dashboard(data, dates, is_development=False):
 
             # Mostrar los datos filtrados en la pestaña GLOBAL
             with st.spinner("Cargando visualizaciones globales..."):
-                mostrar_global(df_filtrado_global_tab, TOOLTIPS_DESCRIPTIVOS, df_recupero)
-            # --- NUEVA SECCIÓN: Mapa de Monto Otorgado por Localidad (Pagados) ---
-            st.markdown("<hr style='border: 2px solid #cccccc;'>", unsafe_allow_html=True)
-            st.subheader("Mapa de Monto Otorgado por Localidad (solo préstamos Pagados)")
-            try:
-                # Filtrar por CATEGORIA == "Pagados" y por línea seleccionada
-                df_map = df_global[
-                    (df_global["CATEGORIA"] == "Pagados") &
-                    (df_global["N_LINEA_PRESTAMO"].isin(selected_lineas))
-                ].copy()
-                
-                # Filtro interactivo por línea de préstamo
-                lineas_disponibles = df_global["N_LINEA_PRESTAMO"].dropna().unique().tolist()
-                lineas_disponibles.sort()
-                selected_lineas = st.multiselect(
-                    "Filtrar por Línea de Préstamo:",
-                    options=lineas_disponibles,
-                    default=lineas_disponibles,
-                    key="filtro_linea_prestamo_mapa"
-                )
+                mostrar_global(df_filtrado_global_tab, TOOLTIPS_DESCRIPTIVOS)
 
-                # Agrupar por localidad y sumar monto otorgado
-                df_map_grouped = df_map.groupby([
-                    "N_LOCALIDAD", "N_DEPARTAMENTO", "LATITUD", "LONGITUD"
-                ], dropna=False)["MONTO_OTORGADO"].sum().reset_index()
-                # Limpiar y convertir LATITUD y LONGITUD a float usando la función centralizada
-                df_map_grouped = convert_decimal_separator(df_map_grouped, columns=["LATITUD", "LONGITUD"])
-                # Reemplazar valores nulos de LATITUD y LONGITUD por las coordenadas de Córdoba Capital
-                df_map_grouped["LATITUD"] = df_map_grouped["LATITUD"].fillna(-31.4135000)
-                df_map_grouped["LONGITUD"] = df_map_grouped["LONGITUD"].fillna(-64.1810500)
-                # Si quedan strings vacíos, convertirlos también
-                df_map_grouped.loc[df_map_grouped["LATITUD"].astype(str).str.strip() == '', "LATITUD"] = -31.4135000
-                df_map_grouped.loc[df_map_grouped["LONGITUD"].astype(str).str.strip() == '', "LONGITUD"] = -64.1810500
-                # Convertir a float por seguridad
-                df_map_grouped["LATITUD"] = df_map_grouped["LATITUD"].astype(float)
-                df_map_grouped["LONGITUD"] = df_map_grouped["LONGITUD"].astype(float)
-                if df_map_grouped.empty:
-                    st.info("No hay datos de préstamos pagados con coordenadas para mostrar en el mapa.")
-                else:
-                    import plotly.express as px
-                    col_mapa, col_tabla = st.columns([1, 3])
-                    with col_mapa:
-                        st.markdown("#### Mapa de Localidades")
-                        fig = px.scatter_mapbox(
-                            df_map_grouped,
-                            lat="LATITUD",
-                            lon="LONGITUD",
-                            color="MONTO_OTORGADO",
-                            size="MONTO_OTORGADO",
-                            size_max=40,
-                            hover_name="N_LOCALIDAD",
-                            hover_data=None,
-                            zoom=6,
-                            mapbox_style="carto-positron",
-                            color_continuous_scale="Viridis",
-                            labels={
-                                "N_LOCALIDAD": "Localidad",
-                                "N_DEPARTAMENTO": "Departamento",
-                                "MONTO_OTORGADO": "Monto Otorgado"
-                            },
-                            custom_data=[
-                                "N_LOCALIDAD",
-                                "N_DEPARTAMENTO",
-                                "MONTO_OTORGADO",
-                                "LATITUD",
-                                "LONGITUD"
-                            ]
-                        )
-                        fig.update_traces(
-                            hovertemplate=
-                                "<b>%{customdata[0]}</b><br>" +
-                                "Departamento: %{customdata[1]}<br>" +
-                                "Monto Otorgado: $%{customdata[2]:,.0f}<extra></extra>"
-                        )
-                        fig.update_layout(mapbox_center={"lat": -31.4167, "lon": -64.1833})
-                        st.plotly_chart(fig, use_container_width=True)
-                    with col_tabla:
-                        st.markdown("#### Tabla de Localidades por monto otorgado")
-                        styled_table = (
-                            df_map_grouped[["N_LOCALIDAD", "N_DEPARTAMENTO", "MONTO_OTORGADO"]]
-                            .sort_values("MONTO_OTORGADO", ascending=False)
-                            .style
-                            .background_gradient(cmap="Blues", subset=["MONTO_OTORGADO"])
-                            .format({"MONTO_OTORGADO": "{:,.0f}"})
-                        )
-                        st.dataframe(
-                            styled_table,
-                            use_container_width=True,
-                            hide_index=True
-                        )
-            except Exception as e:
-                st.error(f"Error al generar el mapa de monto otorgado: {e}")
             
 
     with tab_recupero:
         # Filtros específicos para la pestaña RECUPERO
-        if has_global_data and df_global is not None and not df_global.empty:
+        # Usar df_global_pagados en lugar de df_global para la pestaña de recupero
+        # ya que solo necesitamos los préstamos pagados para esta vista
+        if df_global_pagados is not None and not df_global_pagados.empty:
             st.markdown('<h3 style="font-size: 18px; margin-top: 0;">Filtros - RECUPERO</h3>', unsafe_allow_html=True)
+            
+            # Crear una copia del DataFrame para trabajar con él
+            df_filtrado_recupero = df_global_pagados.copy()
+            
+            # Asegurar que df_filtrado_recupero tenga todas las columnas calculadas necesarias
+            # Rellenar valores NaN con 0
+            for col in ['DEUDA_VENCIDA', 'DEUDA_NO_VENCIDA', 'MONTO_OTORGADO']:
+                if col in df_filtrado_recupero.columns:
+                    df_filtrado_recupero[col] = pd.to_numeric(df_filtrado_recupero[col], errors='coerce').fillna(0)
+            
+            # Calcular DEUDA_A_RECUPERAR si no existe
+            if 'DEUDA_A_RECUPERAR' not in df_filtrado_recupero.columns and all(col in df_filtrado_recupero.columns for col in ['DEUDA_VENCIDA', 'DEUDA_NO_VENCIDA']):
+                df_filtrado_recupero['DEUDA_A_RECUPERAR'] = df_filtrado_recupero['DEUDA_VENCIDA'] + df_filtrado_recupero['DEUDA_NO_VENCIDA']
+            
+            # Calcular RECUPERADO si no existe
+            if 'RECUPERADO' not in df_filtrado_recupero.columns and all(col in df_filtrado_recupero.columns for col in ['MONTO_OTORGADO', 'DEUDA_A_RECUPERAR']):
+                df_filtrado_recupero['RECUPERADO'] = df_filtrado_recupero['MONTO_OTORGADO'] - df_filtrado_recupero['DEUDA_A_RECUPERAR']
             
             # Crear tres columnas para los filtros
             col1, col2, col3 = st.columns(3)
             
             # Filtro de departamento en la primera columna
             with col1:
-                departamentos = sorted(df_filtrado_global['N_DEPARTAMENTO'].dropna().unique())
+                departamentos = sorted(df_filtrado_recupero['N_DEPARTAMENTO'].dropna().unique())
                 all_dpto_option = "Todos los departamentos"
                 selected_dpto_rec = st.selectbox("Departamento:", [all_dpto_option] + list(departamentos), key="recupero_dpto_filter")
             
             # Filtrar por departamento seleccionado
             if selected_dpto_rec != all_dpto_option:
-                df_filtrado_recupero_tab = df_filtrado_global[df_filtrado_global['N_DEPARTAMENTO'] == selected_dpto_rec]
+                df_filtrado_recupero_tab = df_filtrado_recupero[df_filtrado_recupero['N_DEPARTAMENTO'] == selected_dpto_rec]
                 # Filtro de localidad (dependiente del departamento)
                 localidades = sorted(df_filtrado_recupero_tab['N_LOCALIDAD'].dropna().unique())
                 all_loc_option = "Todas las localidades"
@@ -755,9 +741,9 @@ def show_bco_gente_dashboard(data, dates, is_development=False):
                     df_filtrado_recupero_tab = df_filtrado_recupero_tab[df_filtrado_recupero_tab['N_LOCALIDAD'] == selected_loc_rec]
             else:
                 # Si no se seleccionó departamento, mostrar todas las localidades
-                localidades = sorted(df_filtrado_global['N_LOCALIDAD'].dropna().unique())
+                localidades = sorted(df_filtrado_recupero['N_LOCALIDAD'].dropna().unique())
                 all_loc_option = "Todas las localidades"
-                df_filtrado_recupero_tab = df_filtrado_global
+                df_filtrado_recupero_tab = df_filtrado_recupero
                 
                 # Mostrar filtro de localidad en la segunda columna
                 with col2:
@@ -777,18 +763,17 @@ def show_bco_gente_dashboard(data, dates, is_development=False):
             
             # Mostrar los datos de recupero en la pestaña RECUPERO
             with st.spinner("Cargando visualizaciones de recupero..."):
-                mostrar_recupero(df_filtrado_recupero_tab, df_localidad_municipio, geojson_data)
+                mostrar_recupero( df_filtrado_recupero_tab, is_development)
         else:
             st.info("No hay datos de recupero disponibles para mostrar.")
 
-def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
+def mostrar_global(df_filtrado_global, tooltips_categorias):
     """
     Muestra los datos globales del Banco de la Gente.
     
     Args:
         df_filtrado_global: DataFrame filtrado con datos globales
         tooltips_categorias: Diccionario con tooltips para cada categoría
-        df_recupero: DataFrame con datos de recupero para la serie histórica
     """
     # Crear el conteo de estados
     try:
@@ -820,19 +805,41 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
         if categoria == "Rechazados - Bajas":
             kpi_data.remove(kpi)
             continue
-        estados = ESTADO_CATEGORIAS.get(categoria, [])
-        total_formularios = resultados.get(categoria, 0)
-        if estados:
-            mask = df_filtrado_global["N_ESTADO_PRESTAMO"].isin(estados)
-            total_personas = df_filtrado_global.loc[mask, "CUIL"].nunique()
-        else:
-            total_personas = 0
+            
+        # Solo calcular el conteo de personas únicas para la categoría "En Evaluación"
         if categoria == "En Evaluación":
+            estados = ESTADO_CATEGORIAS.get(categoria, [])
+            total_formularios = resultados.get(categoria, 0)
+            
+            # Calcular personas únicas solo para esta categoría
+            if estados:
+                mask = df_filtrado_global["N_ESTADO_PRESTAMO"].isin(estados)
+                # Verificar cuántas filas cumplen con la condición
+                filas_coincidentes = mask.sum()
+                
+                if filas_coincidentes > 0:
+                    # Extraer el subconjunto de datos para análisis
+                    df_subset = df_filtrado_global.loc[mask].copy()
+                    
+                    # Verificar si hay valores no nulos en la columna CUIL y contar personas únicas
+                    df_cuil_no_nulos = df_subset.dropna(subset=['CUIL'])
+                    
+                    # Si hay CUILs no nulos, contar personas únicas; si no, usar el número de filas
+                    if not df_cuil_no_nulos.empty:
+                        total_personas = df_cuil_no_nulos['CUIL'].nunique()
+                    else:
+                        # Si todos los CUILs son nulos, usar el número de filas como aproximación
+                        total_personas = filas_coincidentes
+                else:
+                    total_personas = 0
+            else:
+                total_personas = 0
+                
             kpi["value_form"] = total_formularios
-            kpi["value_pers"] = total_personas
+            kpi["value_pers"] = f"{total_personas:,}".replace(',', '.')
         # Si en el futuro quieres aplicar a más KPIs, puedes agregar estas claves para otros casos aquí.
 
-    display_kpi_row(kpi_data)
+    display_kpi_row(kpi_data, num_columns=6)
 
     # DEBUG VISUAL: Mostrar info de CUIL únicos para 'En Evaluación'
     estados_eval = ESTADO_CATEGORIAS["En Evaluación"]
@@ -843,6 +850,16 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
    
 
     # Desglose dinámico de TODOS los N_ESTADO_PRESTAMO agrupados por CATEGORIA_ESTADO
+    # Mapeo de categorías a colores según los KPIs
+    categoria_colores = {
+        "En Evaluación": COLOR_PRIMARY,        # kpi-primary -> #0085c8 (Azul)
+        "A Pagar - Convocatoria": COLOR_ACCENT_3, # kpi-accent-3 -> #bccf00 (Verde lima)
+        "Pagados": COLOR_ACCENT_2,            # kpi-accent-2 -> #fbbb21 (Amarillo)
+        "En proceso de pago": COLOR_ACCENT_1,  # kpi-accent-1 -> #e73446 (Rojo)
+        "Pagados-Finalizados": COLOR_ACCENT_4, # kpi-accent-4 -> #8a1e82 (Violeta)
+        "Otros": COLOR_TEXT_DARK              # Texto oscuro por defecto
+    }
+    
     grupos_detalle = []
     for categoria, estados in ESTADO_CATEGORIAS.items():
         if estados:
@@ -850,9 +867,16 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
             for estado in estados:
                 cantidad = int(df_filtrado_global[df_filtrado_global["N_ESTADO_PRESTAMO"] == estado].shape[0])
                 estados_detalle.append(f"<b>{estado}:</b> {cantidad}")
-            grupos_detalle.append(" ".join(estados_detalle))
+            
+            # Obtener el color para esta categoría o usar un color por defecto
+            color = categoria_colores.get(categoria, COLOR_TEXT_DARK)
+            
+            # Encerrar cada grupo de estados en un span con el color correspondiente
+            categoria_html = f"<span style='color:{color}; padding:0 5px;'><b>{categoria}:</b> {' '.join(estados_detalle)}</span>"
+            grupos_detalle.append(categoria_html)
+    
     if grupos_detalle:
-        detalle_html = "<div style='font-size:13px; color:#555; margin-bottom:8px; margin-top:6px'>" + " | ".join(grupos_detalle) + "</div>"
+        detalle_html = "<div style='font-size:13px; margin-bottom:8px; margin-top:6px'>" + " | ".join(grupos_detalle) + "</div>"
         st.markdown(detalle_html, unsafe_allow_html=True)
 
 
@@ -1009,8 +1033,8 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
     # NUEVA SECCIÓN: Gráficos de Torta Demográficos
     st.subheader("Distribución de Créditos", help="Distribución demográfica de los beneficiarios")
     
-    # Crear tres columnas para los gráficos: Línea, Sexo, Edades
-    col_torta_cat, col_torta_sexo, col_edades = st.columns(3)
+    # Crear cuatro columnas para los gráficos: Línea, Sexo, Empleado, Edades
+    col_torta_cat, col_torta_sexo=st.columns(2)
 
     # Gráfico de torta por categoría
     with col_torta_cat:
@@ -1049,31 +1073,64 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
     with col_torta_sexo:
         try:
             if 'N_SEXO' in df_filtrado_global.columns:
+                # Incluir categorías "Pagados", "En proceso de pago" y "Pagados-Finalizados"
+                categorias_incluidas = ['Pagados', 'En proceso de pago', 'Pagados-Finalizados']
+                
+                # Filtrar por las categorías incluidas y donde N_SEXO no sea nulo
                 df_sexo = df_filtrado_global[
-                    (df_filtrado_global['CATEGORIA'] == 'Pagados') & 
+                    (df_filtrado_global['CATEGORIA'].isin(categorias_incluidas)) & 
                     (df_filtrado_global['N_SEXO'].notna())
                 ].copy()
+                
                 if df_sexo.empty:
                     st.warning("No hay datos disponibles para el gráfico de sexo después de filtrar NaNs.")
                 else:
+                    # Agregar una columna que indique la categoría para el hover
+                    df_sexo_con_categoria = df_sexo.groupby(['N_SEXO', 'CATEGORIA']).size().reset_index(name='Cantidad')
+                    
+                    # Agrupar por sexo para el gráfico principal
                     sexo_counts = df_sexo['N_SEXO'].value_counts().reset_index()
                     sexo_counts.columns = ['Sexo', 'Cantidad']
+                    
                     if sexo_counts.empty:
                         st.warning("No hay datos para mostrar en el gráfico de sexo.")
                     else:
+                        # Crear el gráfico de torta
                         fig_sexo = px.pie(
                             sexo_counts,
                             values='Cantidad',
                             names='Sexo',
                             color_discrete_sequence=px.colors.qualitative.Set3
                         )
+                        
+                        # Crear un DataFrame con el resumen por sexo y categoría para mostrar en el hover
+                        resumen_categorias = {}
+                        for sexo in sexo_counts['Sexo'].unique():
+                            resumen_categorias[sexo] = {}
+                            for categoria in categorias_incluidas:
+                                # Filtrar por sexo y categoría
+                                count = df_sexo[(df_sexo['N_SEXO'] == sexo) & 
+                                                (df_sexo['CATEGORIA'] == categoria)].shape[0]
+                                resumen_categorias[sexo][categoria] = count
+                        
+                        # Crear texto personalizado para cada segmento
+                        custom_text = []
+                        for sexo in sexo_counts['Sexo']:
+                            texto = f"<b>{sexo}</b><br>Total: {sexo_counts[sexo_counts['Sexo']==sexo]['Cantidad'].values[0]}<br>"
+                            for categoria in categorias_incluidas:
+                                texto += f"{categoria}: {resumen_categorias[sexo][categoria]}<br>"
+                            custom_text.append(texto)
+                        
+                        # Actualizar el gráfico con el texto personalizado
                         fig_sexo.update_traces(
                             textposition='inside',
                             textinfo='percent+label',
-                            hoverinfo='label+percent+value'
+                            hovertemplate='%{customdata}',
+                            customdata=custom_text
                         )
+                        
                         fig_sexo.update_layout(
-                            title="Distribución por Sexo EN CREDITOS PAGADOS",
+                            title="Distribución por Sexo (Pagados, En proceso y Finalizados)",
                             margin=dict(l=20, r=20, t=30, b=20)
                         )
                         st.plotly_chart(fig_sexo, use_container_width=True)
@@ -1082,6 +1139,54 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
                 st.warning("La columna 'N_SEXO' no está presente en el DataFrame.")
         except Exception as e:
             st.error(f"Error al generar el gráfico de sexo: {e}")
+    
+    col_torta_empleado, col_edades = st.columns(2)
+    
+    # Gráfico de torta por estado de empleo
+    with col_torta_empleado:
+        try:
+            if 'EMPLEADO' in df_filtrado_global.columns:
+                df_empleado = df_filtrado_global[
+                    (df_filtrado_global['CATEGORIA'] == 'Pagados') & 
+                    (df_filtrado_global['EMPLEADO'].notna())
+                ].copy()
+                if df_empleado.empty:
+                    st.warning("No hay datos disponibles para el gráfico de empleo después de filtrar NaNs.")
+                else:
+                    # Contar valores únicos de EMPLEADO
+                    empleado_counts = df_empleado['EMPLEADO'].value_counts().reset_index()
+                    empleado_counts.columns = ['Estado de Empleo', 'Cantidad']
+                    
+                    # Reemplazar valores numéricos por etiquetas descriptivas
+                    empleado_counts['Estado de Empleo'] = empleado_counts['Estado de Empleo'].replace({
+                        'S': 'Empleado',
+                        'N': 'No Empleado'
+                    })
+                    
+                    if empleado_counts.empty:
+                        st.warning("No hay datos para mostrar en el gráfico de empleo.")
+                    else:
+                        fig_empleado = px.pie(
+                            empleado_counts,
+                            values='Cantidad',
+                            names='Estado de Empleo',
+                            color_discrete_sequence=px.colors.qualitative.Pastel
+                        )
+                        fig_empleado.update_traces(
+                            textposition='inside',
+                            textinfo='percent+label',
+                            hoverinfo='label+percent+value',
+                            marker=dict(line=dict(color='#FFFFFF', width=1))
+                        )
+                        fig_empleado.update_layout(
+                            title="Distribución por Estado de Empleo EN CREDITOS PAGADOS",
+                            margin=dict(l=20, r=20, t=30, b=20)
+                        )
+                        st.plotly_chart(fig_empleado, use_container_width=True)
+            else:
+                st.warning("La columna 'EMPLEADO' no está presente en el DataFrame.")
+        except Exception as e:
+            st.error(f"Error al generar el gráfico de empleo: {e}")
 
     # Gráfico de distribución de edades con filtro propio de categoría
     with col_edades:
@@ -1096,8 +1201,8 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
                 default=categorias_estado,
                 key="filtro_categoria_edades"
             )
-            if df_recupero is not None and 'FEC_NACIMIENTO' in df_recupero.columns and 'N_ESTADO_PRESTAMO' in df_recupero.columns:
-                df_edades = df_recupero[['FEC_NACIMIENTO', 'N_ESTADO_PRESTAMO']].copy()
+            if df_filtrado_global is not None and 'FEC_NACIMIENTO' in df_filtrado_global.columns and 'N_ESTADO_PRESTAMO' in df_filtrado_global.columns and 'FEC_FORM' in df_filtrado_global.columns:
+                df_edades = df_filtrado_global[['FEC_NACIMIENTO', 'N_ESTADO_PRESTAMO', 'FEC_FORM']].copy()
                 # Mapear N_ESTADO_PRESTAMO a CATEGORIA
                 df_edades['CATEGORIA'] = 'Otros'
                 for categoria, estados in ESTADO_CATEGORIAS.items():
@@ -1108,9 +1213,15 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
                     df_edades = df_edades[df_edades['CATEGORIA'].isin(selected_categorias_edades)]
                 # Convertir a datetime y quitar hora
                 df_edades['FEC_NACIMIENTO'] = pd.to_datetime(df_edades['FEC_NACIMIENTO'], errors='coerce').dt.date
-                # Calcular edad
-                hoy = datetime.now().date()
-                df_edades['EDAD'] = df_edades['FEC_NACIMIENTO'].apply(lambda x: hoy.year - x.year - ((hoy.month, hoy.day) < (x.month, x.day)) if pd.notnull(x) else None)
+                df_edades['FEC_FORM'] = pd.to_datetime(df_edades['FEC_FORM'], errors='coerce').dt.date
+                # Calcular edad usando FEC_FORM en lugar de la fecha actual
+                df_edades['EDAD'] = df_edades.apply(
+                    lambda row: row['FEC_FORM'].year - row['FEC_NACIMIENTO'].year - 
+                    ((row['FEC_FORM'].month, row['FEC_FORM'].day) < 
+                     (row['FEC_NACIMIENTO'].month, row['FEC_NACIMIENTO'].day)) 
+                    if pd.notnull(row['FEC_NACIMIENTO']) and pd.notnull(row['FEC_FORM']) else None, 
+                    axis=1
+                )
                 # Definir rangos de edad
                 bins = [0, 17, 29, 39, 49, 59, 69, 200]
                 labels = ['<18', '18-29', '30-39', '40-49', '50-59', '60-69','70+']
@@ -1121,14 +1232,14 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
                     conteo_edades,
                     x='Rango de Edad',
                     y='Cantidad',
-                    title='Distribución por Rango de Edad',
+                    title='Distribución por Rango de Edad (a Fecha de Solicitud)',
                     color='Rango de Edad',
                     color_discrete_sequence=px.colors.qualitative.Pastel
                 )
                 fig_edades.update_layout(margin=dict(l=20, r=20, t=30, b=20))
                 st.plotly_chart(fig_edades, use_container_width=True)
             else:
-                st.warning("No hay datos de FEC_NACIMIENTO o N_ESTADO_PRESTAMO disponibles en df_recupero.")
+                st.warning("No hay datos de FEC_NACIMIENTO o N_ESTADO_PRESTAMO disponibles en df_filtrado_global.")
         except Exception as e:
             st.error(f"Error al generar el gráfico de edades: {e}")
 
@@ -1189,8 +1300,16 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
             # Aplicar filtros al DataFrame para la tabla de Estados de Préstamos por Categoría
             df_categoria_estados = df_filtrado_global.copy()
             
-            # --- Filtro de rango de fechas FEC_INICIO_PAGO ---
-            if 'FEC_INICIO_PAGO' in df_categoria_estados.columns:
+            # Agregar columna de categoría basada en N_ESTADO_PRESTAMO
+            df_categoria_estados['CATEGORIA'] = 'Otros'
+            for categoria, estados in ESTADO_CATEGORIAS.items():
+                mask = df_categoria_estados['N_ESTADO_PRESTAMO'].isin(estados)
+                df_categoria_estados.loc[mask, 'CATEGORIA'] = categoria
+            
+            # --- Filtro de rango de fechas FEC_INICIO_PAGO (solo para categorías que tienen esta fecha) ---
+            aplicar_filtro_fecha = st.checkbox('Aplicar filtro por Fecha de Inicio de Pago', value=False, help="Este filtro solo afecta a préstamos que tienen fecha de inicio de pago (principalmente categoría 'Pagados')")
+            
+            if aplicar_filtro_fecha and 'FEC_INICIO_PAGO' in df_categoria_estados.columns:
                 df_categoria_estados['FEC_INICIO_PAGO'] = pd.to_datetime(df_categoria_estados['FEC_INICIO_PAGO'], errors='coerce')
                 fechas_validas = df_categoria_estados['FEC_INICIO_PAGO'].dropna().dt.date.unique()
                 fechas_validas = sorted(fechas_validas)
@@ -1203,8 +1322,16 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
                         value=(min_fecha, max_fecha),
                         key='filtro_fecha_inicio_pago_categoria'
                     )
-                    # Filtrar por rango seleccionado
-                    df_categoria_estados = df_categoria_estados[(df_categoria_estados['FEC_INICIO_PAGO'].dt.date >= fecha_inicio) & (df_categoria_estados['FEC_INICIO_PAGO'].dt.date <= fecha_fin)]
+                    
+                    # Crear una máscara para filtrar solo registros con fecha válida en el rango seleccionado
+                    mask_fecha = ((df_categoria_estados['FEC_INICIO_PAGO'].dt.date >= fecha_inicio) & 
+                                 (df_categoria_estados['FEC_INICIO_PAGO'].dt.date <= fecha_fin))
+                    
+                    # Crear una máscara para mantener registros sin fecha (NaT)
+                    mask_sin_fecha = df_categoria_estados['FEC_INICIO_PAGO'].isna()
+                    
+                    # Aplicar ambas máscaras para mantener registros que cumplen con el rango de fechas O no tienen fecha
+                    df_categoria_estados = df_categoria_estados[mask_fecha | mask_sin_fecha]
             
             # Filtrar por categorías seleccionadas
             if selected_categorias:
@@ -1244,13 +1371,8 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
             # Usar @st.cache_data para evitar recalcular si los datos no cambian
             @st.cache_data
             def prepare_categoria_data(df, categorias):
+                # La categoría ya está asignada en df_categoria_estados, no necesitamos hacerlo de nuevo
                 df_copy = df.copy()
-
-                # Agregar columna de categoría basada en N_ESTADO_PRESTAMO
-                df_copy['CATEGORIA'] = 'Otros'
-                for categoria, estados in ESTADO_CATEGORIAS.items():
-                    mask = df_copy['N_ESTADO_PRESTAMO'].isin(estados)
-                    df_copy.loc[mask, 'CATEGORIA'] = categoria
 
                 # Crear pivot table con conteo agrupado por categorías
                 pivot_df = df_copy.pivot_table(
@@ -1261,13 +1383,13 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
                     fill_value=0
                 ).reset_index()
                 
-                # Asegurar que todas las categorías estén en la tabla
-                for categoria in ESTADO_CATEGORIAS.keys():
+                # Asegurar que todas las categorías seleccionadas estén en la tabla
+                for categoria in categorias:
                     if categoria not in pivot_df.columns:
                         pivot_df[categoria] = 0
                 
                 # Reordenar columnas para mostrar en orden consistente
-                return pivot_df.reindex(columns=['N_DEPARTAMENTO', 'N_LOCALIDAD'] + list(ESTADO_CATEGORIAS.keys()))
+                return pivot_df.reindex(columns=['N_DEPARTAMENTO', 'N_LOCALIDAD'] + categorias)
             
             # Obtener el DataFrame procesado usando caché
             pivot_df = prepare_categoria_data(df_categoria_estados, categorias_orden)
@@ -1360,16 +1482,16 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
                     help="Muestra la cantidad total de solicitud de préstamos, agrupados por mes, dentro del rango de fechas seleccionado. " 
                         "Formularios presentados.") 
     try: 
-            if df_recupero is None or df_recupero.empty: 
+            if df_filtrado_global is None or df_filtrado_global.empty: 
                 st.info("No hay datos de recupero disponibles para la serie histórica.") 
-            elif 'FEC_FORM' not in df_recupero.columns: 
+            elif 'FEC_FORM' not in df_filtrado_global.columns: 
                 st.warning("La columna 'FEC_FORM' necesaria para la serie histórica no se encuentra en los datos de recupero.") 
             else: 
                 # Verificar si existe la columna FEC_INICIO_PAGO
-                tiene_fecha_inicio_pago = 'FEC_INICIO_PAGO' in df_recupero.columns
+                tiene_fecha_inicio_pago = 'FEC_INICIO_PAGO' in df_filtrado_global.columns
                 
                 # Preparar DataFrame de fechas de formulario
-                df_fechas = df_recupero[['FEC_FORM']].copy()
+                df_fechas = df_filtrado_global[['FEC_FORM']].copy()
                 df_fechas['FEC_FORM'] = pd.to_datetime(df_fechas['FEC_FORM'], errors='coerce')
                 df_fechas.dropna(subset=['FEC_FORM'], inplace=True)
                 fecha_actual = datetime.now()
@@ -1379,7 +1501,7 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
                 
                 # Preparar DataFrame de fechas de inicio de pago si existe la columna
                 if tiene_fecha_inicio_pago:
-                    df_fechas_pago = df_recupero[['FEC_INICIO_PAGO']].copy()
+                    df_fechas_pago = df_filtrado_global[['FEC_INICIO_PAGO']].copy()
                     df_fechas_pago['FEC_INICIO_PAGO'] = pd.to_datetime(df_fechas_pago['FEC_INICIO_PAGO'], errors='coerce')
                     df_fechas_pago.dropna(subset=['FEC_INICIO_PAGO'], inplace=True)
                     df_fechas_pago = df_fechas_pago[df_fechas_pago['FEC_INICIO_PAGO'] <= fecha_actual]
@@ -1501,12 +1623,36 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
                                 st.exception(e)  # Muestra el traceback completo para depuración
     
                             with st.expander("Ver datos de la serie histórica"):
-                                tabla_data = serie_historica[['FECHA', 'Cantidad']].copy()
-                                tabla_data['Año'] = tabla_data['FECHA'].dt.year
-                                tabla_data_agrupada = tabla_data.groupby('Año', as_index=False)['Cantidad'].sum()
-                                tabla_data_agrupada = tabla_data_agrupada.sort_values('Año', ascending=False)
-
-                                # Custom HTML table (like the others)
+                                # Crear DataFrame para resumen anual con ambas métricas
+                                resumen_anual = {}
+                                
+                                # Procesar datos de Formularios Presentados
+                                if not df_fechas_seleccionado.empty:
+                                    tabla_data_form = serie_historica[['FECHA', 'Cantidad']].copy()
+                                    tabla_data_form['Año'] = tabla_data_form['FECHA'].dt.year
+                                    tabla_data_form_agrupada = tabla_data_form.groupby('Año', as_index=False)['Cantidad'].sum()
+                                    
+                                    # Guardar datos de formularios en el diccionario
+                                    for _, row in tabla_data_form_agrupada.iterrows():
+                                        año = int(row['Año'])
+                                        if año not in resumen_anual:
+                                            resumen_anual[año] = {'Formularios Presentados': 0, 'Inicio de Pagos': 0}
+                                        resumen_anual[año]['Formularios Presentados'] = int(row['Cantidad'])
+                                
+                                # Procesar datos de Inicio de Pagos
+                                if tiene_datos_pago_filtrados:
+                                    tabla_data_pago = serie_historica_pago[['FECHA', 'Cantidad']].copy()
+                                    tabla_data_pago['Año'] = tabla_data_pago['FECHA'].dt.year
+                                    tabla_data_pago_agrupada = tabla_data_pago.groupby('Año', as_index=False)['Cantidad'].sum()
+                                    
+                                    # Guardar datos de inicio de pagos en el diccionario
+                                    for _, row in tabla_data_pago_agrupada.iterrows():
+                                        año = int(row['Año'])
+                                        if año not in resumen_anual:
+                                            resumen_anual[año] = {'Formularios Presentados': 0, 'Inicio de Pagos': 0}
+                                        resumen_anual[año]['Inicio de Pagos'] = int(row['Cantidad'])
+                                
+                                # Custom HTML table con estilos
                                 html_table = """
                                     <style>
                                         .serie-table {
@@ -1528,12 +1674,28 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
                                         .serie-table td:first-child {
                                             text-align: left;
                                         }
+                                        .serie-table .formularios {
+                                            background-color: rgba(31, 119, 180, 0.1);
+                                        }
+                                        .serie-table .pagos {
+                                            background-color: rgba(214, 39, 40, 0.1);
+                                        }
                                     </style>
                                 """
+                                
+                                # Crear encabezado de la tabla
                                 html_table += '<table class="serie-table"><thead><tr>'
-                                html_table += '<th>Año</th><th>Cantidad</th></tr></thead><tbody>'
-                                for _, row in tabla_data_agrupada.iterrows():
-                                    html_table += f'<tr><td>{row["Año"]}</td><td>{int(row["Cantidad"])}</td></tr>'
+                                html_table += '<th>Año</th><th>Formularios Presentados</th><th>Inicio de Pagos</th></tr></thead><tbody>'
+                                
+                                # Ordenar años de más reciente a más antiguo
+                                for año in sorted(resumen_anual.keys(), reverse=True):
+                                    datos = resumen_anual[año]
+                                    html_table += f'<tr>'
+                                    html_table += f'<td>{año}</td>'
+                                    html_table += f'<td class="formularios">{datos["Formularios Presentados"]}</td>'
+                                    html_table += f'<td class="pagos">{datos["Inicio de Pagos"]}</td>'
+                                    html_table += f'</tr>'
+                                
                                 html_table += '</tbody></table>'
                                 st.markdown(html_table, unsafe_allow_html=True)
 
@@ -1541,44 +1703,305 @@ def mostrar_global(df_filtrado_global, tooltips_categorias, df_recupero=None):
     except Exception as e:
         st.error(f"Error inesperado en la sección Serie Histórica: {e}")
 
-    
-
-def mostrar_recupero(df_filtrado, df_localidad_municipio, geojson_data):
+def mostrar_recupero(df_filtrado_recupero=None, is_development=False):
     """
     Muestra la sección de recupero de deudas, utilizando datos ya filtrados.
     
     Args:
-        df_filtrado: DataFrame con datos globales ya filtrados por render_filters.
-        df_localidad_municipio: DataFrame con mapeo localidad-municipio.
-        geojson_data: Datos GeoJSON para mapas.
+        df_filtrado_recupero: DataFrame con datos de recupero completos (basado en df_global_pagados).
+        is_development: Indica si se está en modo desarrollo.
     """
+    # Importar bibliotecas necesarias
+    import numpy as np
     st.header("Análisis de Recupero")
-    if df_filtrado is None or df_filtrado.empty:
-        # Ajustar mensaje, ya que el df está filtrado
-        st.warning("No hay datos disponibles para el análisis de recupero con los filtros seleccionados.")
-        return
-
+    
+    # Mostrar df_filtrado_recupero en modo desarrollo siempre al inicio (versión limitada)
+    if is_development and df_filtrado_recupero is not None and not df_filtrado_recupero.empty:
+        st.subheader("DataFrame de Recupero (Modo Desarrollo - Vista Reducida)")
+        
+        # Mostrar solo información básica del DataFrame para evitar problemas de tamaño
+        st.write(f"Dimensiones del DataFrame: {df_filtrado_recupero.shape[0]} filas x {df_filtrado_recupero.shape[1]} columnas")
+        st.write(f"Columnas disponibles: {', '.join(df_filtrado_recupero.columns.tolist())}")
+        
+        # Mostrar solo las primeras 5 filas en lugar del DataFrame completo
+        st.write("Primeras 5 filas:")
+        st.dataframe(df_filtrado_recupero.head(5), use_container_width=True)
+        
+        # Verificar si existe la columna PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO
+        if 'PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO' in df_filtrado_recupero.columns:
+            st.success("✅ La columna PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO está presente en df_filtrado_recupero")
+        else:
+            st.error("❌ La columna PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO NO está presente en df_filtrado_recupero")
+        
+    # Añadir botón para descargar el DataFrame df_filtrado_recupero
+    col1, col2 = st.columns([1, 3])
+    with col1:
+        # Función para convertir el DataFrame a CSV
+        def convert_df_to_csv(df):
+            return df.to_csv(index=False).encode('utf-8')
+        
+        # Botón de descarga - solo mostrar si df_filtrado_recupero no es None
+        if df_filtrado_recupero is not None and not df_filtrado_recupero.empty:
+            csv = convert_df_to_csv(df_filtrado_recupero)
+            st.download_button(
+                label="⬇️ Descargar datos de recupero",
+            data=csv,
+            file_name='datos_recupero.csv',
+            mime='text/csv',
+            help="Descargar el DataFrame completo de recupero en formato CSV"
+        )
+    
+    with col2:
+        st.info("El archivo descargado contendrá todos los registros relacionados a 'recupero', incluyendo la columna PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO.")
+        
+        # Mostrar dimensiones del DataFrame
+        if df_filtrado_recupero is not None and not df_filtrado_recupero.empty:
+            st.caption(f"Dimensiones del DataFrame: {df_filtrado_recupero.shape[0]:,} filas x {df_filtrado_recupero.shape[1]:,} columnas")
+    
+    # Agregar una línea divisoria
+    st.markdown("---")
+        
+    # Agregar histograma con curva normal superpuesta para PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO
+    if df_filtrado_recupero is not None and 'PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO' in df_filtrado_recupero.columns:
+        st.subheader("Análisis de Distribución de Cumplimiento de Formularios")
+        st.markdown("<div class='info-box'>Para cuotas pagadas, se calcula la diferencia entre la fecha de vencimiento (FEC_CUOTA) y la fecha de pago (FEC_PAGO), donde un valor positivo indica atraso en el pago y un valor negativo refleja un pago anticipado. En el caso de cuotas vencidas no pagadas, se mide la diferencia entre la fecha de vencimiento y la fecha actual (SYSDATE), representando el atraso acumulado. Las cuotas futuras o sin vencimiento se registran como 0 para no afectar el promedio. A mayor número de días, menor es el cumplimiento del cliente, ya que valores altos señalan demoras prolongadas en los pagos.</div>", unsafe_allow_html=True)
+        
+        # Crear una copia del DataFrame para trabajar con él
+        df_cumplimiento = df_filtrado_recupero.copy()
+        
+        # Primero asegurarse de que la columna sea numérica y eliminar nulos de PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO
+        df_cumplimiento['PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO'] = pd.to_numeric(
+            df_cumplimiento['PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO'], errors='coerce'
+        )
+        
+        # Eliminar valores nulos de la columna de interés antes de filtrar por categoría
+        df_cumplimiento = df_cumplimiento.dropna(subset=['PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO'])
+        
+        # Filtrar directamente por la categoría "Pagados" si existe la columna CATEGORIA
+        if 'CATEGORIA' in df_cumplimiento.columns:
+            # Verificar si existe la categoría "Pagados"
+            if 'Pagados' in df_cumplimiento['CATEGORIA'].values:
+                # Filtrar solo por la categoría "Pagados"
+                registros_antes = len(df_cumplimiento)
+                df_cumplimiento = df_cumplimiento[df_cumplimiento['CATEGORIA'] == 'Pagados']
+                registros_filtrados = registros_antes - len(df_cumplimiento)
+                
+                # Mostrar información sobre el filtrado
+                st.success(f"Análisis limitado a categoría 'Pagados': {len(df_cumplimiento):,} registros")
+            else:
+                st.warning("La categoría 'Pagados' no existe en los datos. Se usarán todos los registros disponibles.")
+        else:
+            st.warning("La columna CATEGORIA no está disponible. Se usarán todos los registros disponibles.")
+        
+        # Mantener la variable total_registros_originales para cálculos posteriores
+        total_registros_originales = len(df_filtrado_recupero)
+        
+        # Agregar opción para filtrar outliers
+        col1, col2 = st.columns(2)
+        with col1:
+            # Agregar opción para filtrar outliers
+            filtrar_outliers = st.checkbox(
+                "Filtrar valores extremos (outliers)",
+                value=True,
+                help="Elimina valores extremadamente altos usando el método IQR con umbral conservador (3*IQR)"
+            )
+        
+        # Nota: Los valores negativos representan días adelantados a la fecha de vencimiento de cuotas
+        # Son importantes para analizar el cumplimiento, así que los mantenemos
+        negativos_filtrados = 0
+        
+        # Filtrar outliers solo si la opción está activada
+        outliers_filtrados = 0
+        limite_superior = None
+        if filtrar_outliers and len(df_cumplimiento) > 10:  # Necesitamos suficientes datos
+            # Filtrar valores extremos (outliers) usando el método IQR
+            Q1 = df_cumplimiento['PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO'].quantile(0.25)
+            Q3 = df_cumplimiento['PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO'].quantile(0.75)
+            IQR = Q3 - Q1
+            
+            # Definir límites para outliers (usando 3*IQR para ser conservadores)
+            limite_superior = Q3 + 3 * IQR
+            
+            # Guardar cantidad antes del filtrado de outliers
+            registros_antes = len(df_cumplimiento)
+            
+            # Filtrar outliers extremos
+            df_cumplimiento = df_cumplimiento[df_cumplimiento['PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO'] <= limite_superior]
+            outliers_filtrados = registros_antes - len(df_cumplimiento)
+        
+        # Ahora configuramos el slider DESPUÉS de filtrar outliers
+        with col2:
+            # Obtener valores mínimo y máximo para el slider (incluyendo valores negativos)
+            min_dias_raw = df_cumplimiento['PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO'].min()
+            max_dias_raw = df_cumplimiento['PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO'].max()
+            
+            # Redondear a enteros para el slider, asegurándonos de incluir todo el rango de datos
+            min_dias = int(np.floor(min_dias_raw)) if pd.notna(min_dias_raw) else -30
+            max_dias = int(np.ceil(max_dias_raw)) if pd.notna(max_dias_raw) else 365
+            
+            # Crear slider para filtrar por rango de días
+            rango_dias = st.slider(
+                "Rango de días de cumplimiento:",
+                min_value=min_dias,
+                max_value=max_dias,
+                value=(min_dias, max_dias),
+                step=1,
+                help="Valores negativos indican días adelantados al vencimiento (mejor cumplimiento)"
+            )
+        
+        # Aplicar filtro de rango de días (si se ha definido el slider)
+        if 'rango_dias' in locals():
+            min_rango, max_rango = rango_dias
+            df_cumplimiento = df_cumplimiento[
+                (df_cumplimiento['PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO'] >= min_rango) & 
+                (df_cumplimiento['PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO'] <= max_rango)
+            ]
+            
+        # Resumen de datos filtrados con información consolidada
+        if not df_cumplimiento.empty:
+            min_despues = df_cumplimiento['PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO'].min()
+            max_despues = df_cumplimiento['PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO'].max()
+            
+            # Crear un mensaje informativo consolidado
+            info_mensaje = f"Datos listos para análisis: {len(df_cumplimiento):,} registros válidos. "
+            
+            if outliers_filtrados > 0:
+                info_mensaje += f"Se filtraron {outliers_filtrados:,} outliers extremos (valores > {limite_superior:.1f} días). "
+                
+            info_mensaje += f"Rango de días en datos filtrados: {min_despues:.1f} a {max_despues:.1f} días."
+            
+            st.success(info_mensaje)
+            
+            # Mostrar advertencia si se filtraron muchos registros
+            if (negativos_filtrados + outliers_filtrados) > total_registros_originales * 0.2:  # Si se filtró más del 20%
+                st.warning("Se filtraron muchos registros. Los resultados podrían no ser representativos de toda la población.")
+        
+        if not df_cumplimiento.empty:
+            # Importar bibliotecas necesarias
+            import plotly.graph_objects as go
+            import numpy as np
+            from scipy import stats
+            
+            # Obtener datos para el histograma
+            datos = df_cumplimiento['PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO']
+            
+            # Calcular estadísticas descriptivas
+            media = datos.mean()
+            desv_std = datos.std()
+            mediana = datos.median()
+            n_registros = len(datos)
+            
+            # Mostrar estadísticas descriptivas
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("Media", f"{media:.1f} días")
+            col2.metric("Desviación Estándar", f"{desv_std:.1f} días")
+            col3.metric("Mediana", f"{mediana:.1f} días")
+            col4.metric("Número de Registros", f"{n_registros:,}")
+            
+            # Determinar el número de bins para el histograma
+            # Regla de Sturges: k = 1 + 3.322 * log10(n)
+            n_bins = int(1 + 3.322 * np.log10(n_registros))
+            
+            # Crear el histograma
+            fig = go.Figure()
+            
+            # Agregar el histograma
+            fig.add_trace(go.Histogram(
+                x=datos,
+                nbinsx=n_bins,
+                name='Frecuencia',
+                marker_color='rgba(73, 160, 181, 0.7)',
+                opacity=0.75
+            ))
+            
+            # Generar puntos para la curva normal teórica
+            x_range = np.linspace(max(0, datos.min() - desv_std), datos.max() + desv_std, 1000)
+            y_norm = stats.norm.pdf(x_range, media, desv_std)
+            
+            # Escalar la curva normal para que coincida con la altura del histograma
+            # Necesitamos estimar la altura máxima del histograma
+            hist_values, bin_edges = np.histogram(datos, bins=n_bins)
+            max_height = max(hist_values)
+            scaling_factor = max_height / max(y_norm)
+            
+            # Agregar la curva normal superpuesta
+            fig.add_trace(go.Scatter(
+                x=x_range,
+                y=y_norm * scaling_factor,
+                mode='lines',
+                name='Curva Normal Teórica',
+                line=dict(color='rgba(255, 0, 0, 0.8)', width=2)
+            ))
+            
+            # Personalizar diseño
+            fig.update_layout(
+                title='Histograma de Días de Cumplimiento con Curva Normal Superpuesta',
+                xaxis_title='Días de Cumplimiento (Mayor número = Menor cumplimiento)',
+                yaxis_title='Frecuencia',
+                legend_title='Distribución',
+                height=500,
+                hovermode='closest',
+                bargap=0.1
+            )
+            
+            # Agregar líneas verticales para la media y mediana
+            fig.add_shape(type="line",
+                x0=media, y0=0, x1=media, y1=max_height,
+                line=dict(color="red", width=2, dash="dash"),
+                name="Media"
+            )
+            
+            fig.add_shape(type="line",
+                x0=mediana, y0=0, x1=mediana, y1=max_height,
+                line=dict(color="green", width=2, dash="dash"),
+                name="Mediana"
+            )
+            
+            # Agregar anotaciones para la media y mediana
+            fig.add_annotation(
+                x=media, y=max_height*0.95,
+                text=f"Media: {media:.1f}",
+                showarrow=True,
+                arrowhead=1,
+                ax=40,
+                ay=-40
+            )
+            
+            fig.add_annotation(
+                x=mediana, y=max_height*0.85,
+                text=f"Mediana: {mediana:.1f}",
+                showarrow=True,
+                arrowhead=1,
+                ax=-40,
+                ay=-40
+            )
+            
+            # Mostrar gráfico
+            st.plotly_chart(fig, use_container_width=True)
+            
+            
+            # Agregar explicación sobre la importancia del análisis
+            st.markdown("---")
+            st.markdown("**¿Por qué es importante este análisis?**")
+            st.markdown("• Permite entender el patrón de cumplimiento de pagos de los beneficiarios")
+            st.markdown("• Ayuda a identificar si hay comportamientos atípicos o esperados en los tiempos de pago")
+            st.markdown("• Facilita la toma de decisiones basadas en datos sobre políticas de cobro y seguimiento")
+            st.write(f"**Conclusión:** La media de días de cumplimiento es de {media:.1f} días, con una desviación estándar de {desv_std:.1f} días. "
+                     f"La mediana es de {mediana:.1f} días, lo que significa que el 50% de los casos tienen un tiempo de cumplimiento menor o igual a este valor.")
+            
+            
+        else:
+            st.warning("No hay datos válidos de cumplimiento para mostrar en el histograma.")
+    
+    st.markdown("---")
+  
     # --- Nueva Sección: Tabla Agrupada de Pagados (usando datos ya filtrados) ---
     st.subheader("Detalle de Préstamos Pagados por Localidad", help="Muestra la suma de préstamos pagados, no finalizados, con planes de cuotas, por localidad")
     
-    # Asegurarse de que las columnas necesarias existan en el df_filtrado
-    # 'N_LINEA_PRESTAMO' ya está implícitamente filtrada por render_filters, pero la necesitamos para la verificación
-    required_cols = ['N_DEPARTAMENTO', 'N_LOCALIDAD', 'N_LINEA_PRESTAMO', 
-                     'CATEGORIA', 'NRO_SOLICITUD', 'DEUDA_VENCIDA', 
-                     'DEUDA_NO_VENCIDA', 'MONTO_OTORGADO', 
-                     'DEUDA_A_RECUPERAR', 'RECUPERADO']
-    if not all(col in df_filtrado.columns for col in required_cols):
-        st.error("Faltan columnas requeridas en los datos filtrados para la tabla de pagados. Columnas presentes: " + str(df_filtrado.columns.tolist()))
-        return
-
-    # --- Filtros multiselect eliminados: La tabla ahora usa df_filtrado que viene de render_filters ---
-        
     # Filtrar solo por la categoría "Pagados" sobre el DataFrame ya filtrado
-    df_filtrado_pagados = df_filtrado[
-        (df_filtrado['CATEGORIA'] == "Pagados")
+    df_filtrado_pagados = df_filtrado_recupero[
+        (df_filtrado_recupero['CATEGORIA'] == "Pagados")
     ].copy()
-    # Las condiciones de N_DEPARTAMENTO, N_LOCALIDAD, N_LINEA_PRESTAMO ya no son necesarias aquí
-    # porque df_filtrado ya las tiene aplicadas desde render_filters.
     
     if df_filtrado_pagados.empty:
         st.info("No se encontraron préstamos 'Pagados' con los filtros seleccionados.")
