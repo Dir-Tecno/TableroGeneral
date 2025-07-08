@@ -18,7 +18,7 @@ st.set_page_config(
 setup_page()
 
 # Mostrar título principal
-st.markdown('<div class="main-header">Tablero General de Reportes</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header">Tablero General de Reportes para TEST</div>', unsafe_allow_html=True)
 
 # Mostrar campanita de novedades como elemento flotante
 show_notification_bell()
