@@ -1,11 +1,12 @@
-from moduls.carga import load_data_from_minio
 import streamlit as st
+from moduls.carga import load_data_from_minio, load_data_from_local 
 from moduls import bco_gente, cbamecapacita, empleo, emprendimientos 
 from utils.styles import setup_page
 from utils.ui_components import render_footer, show_notification_bell
 import concurrent.futures
 from minio import Minio
 from os import path
+
 
 # Configuración de la página
 st.set_page_config(
@@ -38,21 +39,13 @@ is_development = not is_production
 if is_development:
     st.success("Modo de desarrollo: Cargando datos desde carpeta local")
 
-# Obtener token desde secrets (solo necesario en modo producción)
-token = None
-if is_production:
-    try:
-        token = st.secrets["gitlab"]["token"]
-    except Exception as e:
-        st.error(f"Error al obtener token: {str(e)}")
-        st.stop()
-
 # Mapeo de archivos por módulo
 modules = {
     'bco_gente': ['VT_CUMPLIMIENTO_FORMULARIOS.parquet', 'VT_NOMINA_REP_RECUPERO_X_ANIO.parquet', 
                    'capa_departamentos_2010.geojson', 'LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt'],
     'cba_capacita': ['VT_ALUMNOS_EN_CURSOS.parquet','VT_INSCRIPCIONES_PRG129.parquet', 'VT_CURSOS_SEDES_GEO.parquet', 'capa_departamentos_2010.geojson'],
-    'empleo': ['LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt','VT_REPORTES_PPP_MAS26.parquet', 'vt_empresas_adheridas.parquet','vt_empresas_ARCA.parquet', 'VT_PUESTOS_X_FICHAS.parquet','capa_departamentos_2010.geojson']
+    'empleo': ['LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt','VT_REPORTES_PPP_MAS26.parquet', 'vt_empresas_adheridas.parquet','vt_empresas_ARCA.parquet', 'VT_PUESTOS_X_FICHAS.parquet','capa_departamentos_2010.geojson'],
+    'emprendimientos': ['desarrollo_emprendedor.csv']
 }
 
 # Configuración MinIO
@@ -74,13 +67,14 @@ for obj in minio_client.list_objects(MINIO_BUCKET, recursive=True):
     print(obj.object_name)
 
 # Crear pestañas
-tab_names = ["CBA Me Capacita", "Banco de la Gente",  "Programas de Empleo"]
+tab_names = ["CBA Me Capacita", "Banco de la Gente",  "Programas de Empleo", "Emprendimientos"]
 tabs = st.tabs(tab_names)
-tab_keys = ['cba_capacita', 'bco_gente', 'empleo']
+tab_keys = ['cba_capacita', 'bco_gente', 'empleo', 'emprendimientos']
 tab_functions = [
     cbamecapacita.show_cba_capacita_dashboard,
     bco_gente.show_bco_gente_dashboard,
     empleo.show_empleo_dashboard,
+    emprendimientos.show_emprendimientos_dashboard
 ]
 
 for idx, tab in enumerate(tabs):
@@ -91,14 +85,19 @@ for idx, tab in enumerate(tabs):
         data_key = f"{module_key}_data"
         dates_key = f"{module_key}_dates"
         if data_key not in st.session_state or dates_key not in st.session_state:
-            with st.spinner("Cargando datos desde MinIO..."):
+            spinner_message = "Cargando datos desde " + ("carpeta local..." if is_development else "MinIO...")
+            with st.spinner(spinner_message):
                 def load_only_data():
-                    all_data, all_dates = load_data_from_minio(
-                        minio_client, MINIO_BUCKET, modules
-                    )
+                    # --- LÓGICA DE CARGA CONDICIONAL ---
+                    if is_development:
+                        all_data, all_dates = load_data_from_local(local_path, modules)
+                    else:
+                        all_data, all_dates = load_data_from_minio(minio_client, MINIO_BUCKET, modules)
+                    
                     data = {k: all_data.get(k) for k in modules[module_key] if k in all_data}
                     dates = {k: all_dates.get(k) for k in modules[module_key] if k in all_dates}
                     return data, dates
+                
                 with concurrent.futures.ThreadPoolExecutor() as executor:
                     future = executor.submit(load_only_data)
                     data, dates = future.result()
@@ -109,7 +108,7 @@ for idx, tab in enumerate(tabs):
         # Verificar que las claves existen en session_state antes de llamar a show_func
         if data_key in st.session_state and dates_key in st.session_state:
             try:
-                show_func(st.session_state[data_key], st.session_state[dates_key], False)
+                show_func(st.session_state[data_key], st.session_state[dates_key], is_development)
             except Exception as e:
                 st.error(f"Error al mostrar el dashboard: {str(e)}")
                 st.exception(e)
