@@ -5,6 +5,7 @@ import io
 import datetime
 import numpy as np
 from minio import Minio
+import os 
 
 def convert_numpy_types(df):
     if df is None or df.empty:
@@ -107,10 +108,10 @@ def procesar_archivo(nombre, contenido, es_buffer):
             return df, fecha
         elif nombre.endswith('.csv') or nombre.endswith('.txt'):
             if es_buffer:
-                df = pd.read_csv(io.BytesIO(contenido))
+                df = pd.read_csv(io.BytesIO(contenido), sep=';')
                 fecha = datetime.datetime.now()
             else:
-                df = pd.read_csv(contenido)
+                df = pd.read_csv(contenido, sep=';')
                 fecha = datetime.datetime.now()
             return df, fecha
         elif nombre.endswith('.geojson'):
@@ -126,6 +127,37 @@ def procesar_archivo(nombre, contenido, es_buffer):
     except Exception as e:
         st.warning(f"Error al procesar {nombre}: {str(e)}")
         return None, None
+
+# --- NUEVA FUNCIÓN PARA CARGA LOCAL ---
+def load_data_from_local(local_path, modules):
+    all_data = {}
+    all_dates = {}
+
+    if not os.path.exists(local_path):
+        st.error(f"Error Crítico: La ruta para desarrollo local no existe -> {local_path}")
+        return all_data, all_dates
+
+    st.info(f"Cargando archivos desde la carpeta local: {local_path}")
+
+    all_files_to_load = [file for files in modules.values() for file in files]
+    progress = st.progress(0)
+    total = len(all_files_to_load)
+
+    for i, archivo in enumerate(all_files_to_load):
+        progress.progress((i + 1) / total)
+        file_path = os.path.join(local_path, archivo)
+        if os.path.exists(file_path):
+            df, fecha = procesar_archivo(archivo, file_path, es_buffer=False)
+            if df is not None:
+                all_data[archivo] = df
+                all_dates[archivo] = fecha
+        else:
+            st.warning(f"Archivo no encontrado en la ruta local: {file_path}")
+            
+    progress.empty()
+    st.write("Archivos cargados localmente:", list(all_data.keys()))
+    return all_data, all_dates
+
 
 def obtener_archivo_minio(minio_client, bucket, file_name):
     try:
