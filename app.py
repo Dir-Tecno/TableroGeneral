@@ -1,3 +1,4 @@
+from moduls.carga import load_data_from_minio, load_data_from_local
 import streamlit as st
 from moduls.carga import load_data_from_minio, load_data_from_local 
 from moduls import bco_gente, cbamecapacita, empleo, emprendimientos 
