@@ -69,9 +69,14 @@ minio_client = Minio(
     secure=False
 )
 
-# Listar objetos en el bucket de MinIO (nuevo código integrado)
-for obj in minio_client.list_objects(MINIO_BUCKET, recursive=True):
-    print(obj.object_name)
+# Listar objetos en el bucket de MinIO (en modo producción)
+if is_production:
+    try:
+        # Solo imprimir en consola, no en la UI de Streamlit
+        for obj in minio_client.list_objects(MINIO_BUCKET, recursive=True):
+            print(obj.object_name)
+    except Exception as e:
+        print(f"Error al listar objetos en MinIO: {str(e)}")
 
 # Crear pestañas
 tab_names = ["CBA Me Capacita", "Banco de la Gente",  "Programas de Empleo"]
@@ -98,14 +103,16 @@ for idx, tab in enumerate(tabs):
                     # Usar la función adecuada según el modo de ejecución
                     if is_development:
                         # En modo desarrollo, cargar desde la ruta local
-                        all_data, all_dates = load_data_from_local(
+                        all_data, all_dates, logs = load_data_from_local(
                             local_path, modules
                         )
                     else:
                         # En modo producción, cargar desde MinIO
-                        all_data, all_dates = load_data_from_minio(
+                        all_data, all_dates, logs = load_data_from_minio(
                             minio_client, MINIO_BUCKET, modules
                         )
+                    # Guardar logs para mostrarlos después de que el hilo termine
+                    st.session_state[f"{module_key}_logs"] = logs
                     data = {k: all_data.get(k) for k in modules[module_key] if k in all_data}
                     dates = {k: all_dates.get(k) for k in modules[module_key] if k in all_dates}
                     return data, dates
@@ -114,6 +121,17 @@ for idx, tab in enumerate(tabs):
                     data, dates = future.result()
                 st.session_state[data_key] = data
                 st.session_state[dates_key] = dates
+                
+                # Mostrar logs después de que el hilo haya terminado
+                logs_key = f"{module_key}_logs"
+                if logs_key in st.session_state:
+                    # Mostrar advertencias
+                    for warning in st.session_state[logs_key].get("warnings", []):
+                        st.warning(warning)
+                    
+                    # Mostrar información (opcional, puede ser comentado para reducir la salida)
+                    # for info in st.session_state[logs_key].get("info", []):
+                    #    st.info(info)
         st.markdown("***") # Separador visual
 
         # Verificar que las claves existen en session_state antes de llamar a show_func
