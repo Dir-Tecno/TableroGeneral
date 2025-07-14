@@ -36,10 +36,8 @@ class ParquetLoader:
                 df = convert_numpy_types(df)
                 return df
             else:
-                st.warning(f"Error al cargar archivo: {error}")
                 return None
         except Exception as e:
-            st.warning(f"Error al cargar archivo: {str(e)}")
             return None
 
 def safe_read_parquet(file_path_or_buffer, is_buffer=False):
@@ -87,7 +85,9 @@ def safe_read_parquet(file_path_or_buffer, is_buffer=False):
                 df[col] = df[col].astype(str)
     return df, None
 
-def procesar_archivo(nombre, contenido, es_buffer):
+def procesar_archivo(nombre, contenido, es_buffer, logs=None):
+    if logs is None:
+        logs = {"warnings": [], "info": []}
     try:
         if nombre.endswith('.parquet'):
             if es_buffer:
@@ -99,7 +99,7 @@ def procesar_archivo(nombre, contenido, es_buffer):
             return df, fecha
         elif nombre.endswith('.xlsx'):
             if es_buffer:
-                df = pd.read_excel(io.BytesIO(contenido), engine='openpyxl', header=header)
+                df = pd.read_excel(io.BytesIO(contenido), engine='openpyxl')
                 fecha = datetime.datetime.now()
             else:
                 df = pd.read_excel(contenido, engine='openpyxl')
@@ -124,10 +124,12 @@ def procesar_archivo(nombre, contenido, es_buffer):
         else:
             return None, None
     except Exception as e:
-        st.warning(f"Error al procesar {nombre}: {str(e)}")
+        logs["warnings"].append(f"Error al procesar {nombre}: {str(e)}")
         return None, None
 
-def obtener_archivo_minio(minio_client, bucket, file_name):
+def obtener_archivo_minio(minio_client, bucket, file_name, logs=None):
+    if logs is None:
+        logs = {"warnings": [], "info": []}
     try:
         response = minio_client.get_object(bucket, file_name)
         content = response.read()
@@ -135,16 +137,18 @@ def obtener_archivo_minio(minio_client, bucket, file_name):
         response.release_conn()
         return content
     except Exception as e:
-        st.error(f"Error al obtener {file_name} de MinIO: {str(e)}")
+        logs["warnings"].append(f"Error al obtener {file_name} de MinIO: {str(e)}")
         return None
 
-def obtener_lista_archivos_minio(minio_client, bucket):
+def obtener_lista_archivos_minio(minio_client, bucket, logs=None):
+    if logs is None:
+        logs = {"warnings": [], "info": []}
     try:
         archivos = [obj.object_name for obj in minio_client.list_objects(bucket, recursive=True)]
-        st.write(f"Archivos encontrados en MinIO ({bucket}):", archivos)  # Línea de depuración
+        logs["info"].append(f"Archivos encontrados en MinIO ({bucket}): {archivos}")
         return archivos
     except Exception as e:
-        st.error(f"Error al listar archivos en MinIO: {str(e)}")
+        logs["warnings"].append(f"Error al listar archivos en MinIO: {str(e)}")
         return []
 
 def load_data_from_local(local_path, modules):
@@ -156,13 +160,14 @@ def load_data_from_local(local_path, modules):
         modules (dict): Diccionario con los módulos y sus archivos.
         
     Returns:
-        tuple: (all_data, all_dates) con los datos y fechas de actualización.
+        tuple: (all_data, all_dates, logs) con los datos, fechas de actualización y logs.
     """
     import os
     from pathlib import Path
     
     all_data = {}
     all_dates = {}
+    logs = {"warnings": [], "info": []}
     
     # Obtener lista de todos los archivos necesarios para todos los módulos
     all_files = []
@@ -170,28 +175,25 @@ def load_data_from_local(local_path, modules):
         all_files.extend(module_files)
     all_files = list(set(all_files))  # Eliminar duplicados
     
-    progress = st.progress(0)
     total = len(all_files)
     
     for i, nombre in enumerate(all_files):
-        progress.progress((i + 1) / total)
         file_path = os.path.join(local_path, nombre)
         
         if not os.path.exists(file_path):
-            st.warning(f"Archivo no encontrado en ruta local: {file_path}")
+            logs["warnings"].append(f"Archivo no encontrado en ruta local: {file_path}")
             continue
             
         try:
-            df, fecha = procesar_archivo(nombre, file_path, es_buffer=False)
+            df, fecha = procesar_archivo(nombre, file_path, es_buffer=False, logs=logs)
             if df is not None:
                 all_data[nombre] = df
                 all_dates[nombre] = fecha
         except Exception as e:
-            st.warning(f"Error al cargar archivo local {nombre}: {str(e)}")
+            logs["warnings"].append(f"Error al cargar archivo local {nombre}: {str(e)}")
     
-    progress.empty()
-    st.write("Archivos cargados desde local:", list(all_data.keys()))
-    return all_data, all_dates
+    logs["info"].append(f"Archivos cargados desde local: {list(all_data.keys())}")
+    return all_data, all_dates, logs
 
 def load_data_from_minio(minio_client, bucket, modules):
     """
@@ -203,27 +205,37 @@ def load_data_from_minio(minio_client, bucket, modules):
         modules (dict): Diccionario con los módulos y sus archivos.
         
     Returns:
-        tuple: (all_data, all_dates) con los datos y fechas de actualización.
+        tuple: (all_data, all_dates, logs) con los datos, fechas de actualización y logs.
     """
     all_data = {}
     all_dates = {}
-    archivos = obtener_lista_archivos_minio(minio_client, bucket)
+    logs = {"warnings": [], "info": []}
+    
+    try:
+        archivos = [obj.object_name for obj in minio_client.list_objects(bucket, recursive=True)]
+    except Exception as e:
+        logs["warnings"].append(f"Error al listar archivos en MinIO: {str(e)}")
+        return all_data, all_dates, logs
+        
     extensiones = ['.parquet', '.csv', '.geojson', '.txt', '.xlsx']
     archivos_filtrados = [a for a in archivos if any(a.endswith(ext) for ext in extensiones)]
-    st.write("Archivos filtrados:", archivos_filtrados)  # Línea de depuración
+    logs["info"].append(f"Archivos filtrados: {archivos_filtrados}")
 
-    progress = st.progress(0)
     total = len(archivos_filtrados)
     for i, archivo in enumerate(archivos_filtrados):
-        progress.progress((i + 1) / total)
-        contenido = obtener_archivo_minio(minio_client, bucket, archivo)
-        if contenido is None:
+        try:
+            response = minio_client.get_object(bucket, archivo)
+            contenido = response.read()
+            response.close()
+            response.release_conn()
+            nombre = archivo.split('/')[-1]
+            df, fecha = procesar_archivo(nombre, contenido, es_buffer=True, logs=logs)
+            if df is not None:
+                all_data[nombre] = df
+                all_dates[nombre] = fecha
+        except Exception as e:
+            logs["warnings"].append(f"Error al obtener {archivo} de MinIO: {str(e)}")
             continue
-        nombre = archivo.split('/')[-1]
-        df, fecha = procesar_archivo(nombre, contenido, es_buffer=True)
-        if df is not None:
-            all_data[nombre] = df
-            all_dates[nombre] = fecha
-    progress.empty()
-    st.write("Archivos cargados:", list(all_data.keys()))  # Línea de depuración
-    return all_data, all_dates
+    
+    logs["info"].append(f"Archivos cargados: {list(all_data.keys())}")
+    return all_data, all_dates, logs
