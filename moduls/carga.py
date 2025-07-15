@@ -4,6 +4,10 @@ import streamlit as st
 import io
 import datetime
 import numpy as np
+import requests
+import sys
+import os
+import glob
 from minio import Minio
 
 def convert_numpy_types(df):
@@ -144,12 +148,118 @@ def obtener_lista_archivos_minio(minio_client, bucket, logs=None):
     if logs is None:
         logs = {"warnings": [], "info": []}
     try:
-        archivos = [obj.object_name for obj in minio_client.list_objects(bucket, recursive=True)]
-        logs["info"].append(f"Archivos encontrados en MinIO ({bucket}): {archivos}")
-        return archivos
+        return [obj.object_name for obj in minio_client.list_objects(bucket)], logs
     except Exception as e:
         logs["warnings"].append(f"Error al listar archivos en MinIO: {str(e)}")
-        return []
+        return [], logs
+
+def obtener_lista_archivos_gitlab(repo_id, branch, token, logs=None):
+    """
+    Obtiene una lista de archivos desde un repositorio GitLab.
+    
+    Args:
+        repo_id (str): ID del repositorio en formato "namespace/project".
+        branch (str): Rama del repositorio.
+        token (str): Token de acceso a GitLab.
+        logs (dict, optional): Diccionario para registrar logs. Defaults to None.
+    
+    Returns:
+        tuple: (lista de archivos, logs)
+    """
+    if logs is None:
+        logs = {"warnings": [], "info": []}
+    
+    if not token:
+        logs["warnings"].append("Token de GitLab no proporcionado")
+        return [], logs
+    
+    # Probar diferentes formatos de ID
+    formatos_id = [
+        repo_id,
+        requests.utils.quote(repo_id, safe=''),
+        repo_id.replace('/', '%2F')
+    ]
+    
+    for id_formato in formatos_id:
+        url = f'https://gitlab.com/api/v4/projects/{id_formato}/repository/tree'
+        headers = {'PRIVATE-TOKEN': token}
+        params = {'ref': branch, 'recursive': True}
+        
+        try:
+            response = requests.get(url, headers=headers, params=params)
+            
+            if response.status_code == 200:
+                items = response.json()
+                files = [item['path'] for item in items if item['type'] == 'blob']
+                logs["info"].append(f"Se encontraron {len(files)} archivos en GitLab.")
+                return files, logs
+        except Exception as e:
+            logs["warnings"].append(f"Error al obtener lista de archivos con formato {id_formato}: {str(e)}")
+            continue
+    
+    # Intentar listar proyectos disponibles para ayudar al diagnóstico
+    try:
+        logs["info"].append("Verificando proyectos accesibles con el token...")
+        url = 'https://gitlab.com/api/v4/projects?membership=true&per_page=5'
+        headers = {'PRIVATE-TOKEN': token}
+        response = requests.get(url, headers=headers)
+        
+        if response.status_code == 200:
+            projects = response.json()
+            if projects:
+                projects_info = ", ".join([f"{p['id']}: {p['path_with_namespace']}" for p in projects[:3]])
+                logs["info"].append(f"Proyectos disponibles con el token: {projects_info}")
+            else:
+                logs["warnings"].append("No se tiene acceso a ningún proyecto con este token")
+        else:
+            logs["warnings"].append(f"Error al verificar proyectos: {response.status_code}")
+    except Exception as e:
+        logs["warnings"].append(f"Error al listar proyectos: {str(e)}")
+    
+    return [], logs
+
+def obtener_archivo_gitlab(repo_id, branch, file_name, token, logs=None):
+    """
+    Obtiene un archivo desde un repositorio GitLab.
+    
+    Args:
+        repo_id (str): ID del repositorio en formato "namespace/project".
+        branch (str): Rama del repositorio.
+        file_name (str): Nombre del archivo.
+        token (str): Token de acceso a GitLab.
+        logs (dict, optional): Diccionario para registrar logs. Defaults to None.
+    
+    Returns:
+        tuple: (contenido del archivo, logs)
+    """
+    if logs is None:
+        logs = {"warnings": [], "info": []}
+        
+    if not token:
+        logs["warnings"].append("Token de GitLab no proporcionado")
+        return None, logs
+        
+    # Asegurar que el repo_id esté correctamente formateado
+    repo_id_encoded = requests.utils.quote(str(repo_id), safe='')
+    
+    # Asegurar que el file_path esté correctamente formateado
+    file_path_encoded = requests.utils.quote(file_name, safe='')
+    
+    url = f'https://gitlab.com/api/v4/projects/{repo_id_encoded}/repository/files/{file_path_encoded}/raw'
+    headers = {'PRIVATE-TOKEN': token}
+    params = {'ref': branch}
+    
+    try:
+        response = requests.get(url, headers=headers, params=params)
+        if response.status_code == 200:
+            logs["info"].append(f"Se obtuvo el archivo {file_name} de GitLab.")
+            return response.content, logs
+        else:
+            logs["warnings"].append(f"Error al obtener archivo {file_name}: {response.status_code} - {response.text}")
+            return None, logs
+    except Exception as e:
+        logs["warnings"].append(f"Error de conexión al obtener {file_name}: {str(e)}")
+        return None, logs
 
 def load_data_from_local(local_path, modules):
     """
@@ -238,4 +348,92 @@ def load_data_from_minio(minio_client, bucket, modules):
             continue
     
     logs["info"].append(f"Archivos cargados: {list(all_data.keys())}")
+    return all_data, all_dates, logs
+
+def load_data_from_gitlab(repo_id, branch, token, modules):
+    """
+    Carga datos desde GitLab.
+    
+    Args:
+        repo_id (str): ID del repositorio en formato "namespace/project".
+        branch (str): Rama del repositorio.
+        token (str): Token de acceso a GitLab.
+        modules (dict): Diccionario con los módulos y sus archivos.
+        
+    Returns:
+        tuple: (all_data, all_dates, logs) con los datos, fechas de actualización y logs.
+    """
+    all_data = {}
+    all_dates = {}
+    logs = {"warnings": [], "info": []}
+    
+    try:
+        # Obtener lista de archivos disponibles en GitLab
+        archivos_disponibles, logs = obtener_lista_archivos_gitlab(repo_id, branch, token, logs)
+        
+        if not archivos_disponibles:
+            logs["warnings"].append(f"No se encontraron archivos disponibles en GitLab para el repositorio {repo_id}.")
+            return all_data, all_dates, logs
+            
+        # Filtrar por extensiones soportadas
+        extensiones = ['.parquet', '.csv', '.geojson', '.txt', '.xlsx']
+        archivos_filtrados = [a for a in archivos_disponibles if any(a.endswith(ext) for ext in extensiones)]
+        
+        # Crear un conjunto de archivos solicitados por los módulos
+        archivos_solicitados = set()
+        for modulo, archivos in modules.items():
+            for archivo in archivos:
+                # Normalizar path para comparaciones
+                archivo_normalizado = archivo.replace('\\', '/')
+                archivos_solicitados.add(archivo_normalizado)
+        
+        # Procesar cada archivo de todos los módulos
+        for modulo, archivos in modules.items():
+            for archivo in archivos:
+                # En GitLab, los paths pueden venir con estructura de directorios
+                archivo_gitlab = archivo.replace('\\', '/')
+                
+                if archivo_gitlab in archivos_disponibles:
+                    try:
+                        # Obtener y procesar archivo
+                        contenido, logs = obtener_archivo_gitlab(repo_id, branch, archivo_gitlab.replace('/', '%2F'), token, logs)
+                        if contenido:
+                            df, fecha = procesar_archivo(archivo, contenido, True, logs)
+                            if df is not None:
+                                all_data[archivo] = df
+                                all_dates[archivo] = fecha
+                                logs["info"].append(f"Cargado {archivo} correctamente desde GitLab.")
+                            else:
+                                logs["warnings"].append(f"Error al procesar {archivo} desde GitLab.")
+                        else:
+                            logs["warnings"].append(f"No se pudo obtener el contenido de {archivo} desde GitLab.")
+                    except Exception as e:
+                        logs["warnings"].append(f"Error al cargar {archivo} desde GitLab: {str(e)}")
+                else:
+                    # Buscar archivos con nombre similar (puede estar en otra ruta)
+                    nombre_archivo = archivo.split('/')[-1]
+                    archivos_similares = [a for a in archivos_disponibles if a.endswith('/' + nombre_archivo)]
+                    
+                    if archivos_similares:
+                        archivo_candidato = archivos_similares[0]
+                        try:
+                            contenido, logs = obtener_archivo_gitlab(repo_id, branch, archivo_candidato.replace('/', '%2F'), token, logs)
+                            if contenido:
+                                df, fecha = procesar_archivo(archivo, contenido, True, logs)
+                                if df is not None:
+                                    all_data[archivo] = df
+                                    all_dates[archivo] = fecha
+                                    logs["info"].append(f"Cargado {archivo} (desde {archivo_candidato}) correctamente.")
+                                else:
+                                    logs["warnings"].append(f"Error al procesar {archivo_candidato} desde GitLab.")
+                        except Exception as e:
+                            logs["warnings"].append(f"Error al cargar {archivo_candidato}: {str(e)}")
+                    else:
+                        logs["warnings"].append(f"Archivo {archivo} no disponible en GitLab.")
+                        
+        # Resumen final
+        logs["info"].append(f"Total archivos cargados desde GitLab: {len(all_data)}/{len(archivos_solicitados)}")
+    except Exception as e:
+        logs["warnings"].append(f"Error general en carga desde GitLab: {str(e)}")
+    
     return all_data, all_dates, logs
