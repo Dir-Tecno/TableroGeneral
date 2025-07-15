@@ -283,6 +283,54 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
     
     with tab1:
         st.subheader("Análisis de Postulantes y alumnos")
+      
+        # 5. Distribución de alumnos por estado (INSCRIPTO, ACTIVO, etc.)
+        st.subheader("Distribución de Alumnos por Estado")
+        
+        if df_alumnos is not None and 'N_ESTADO' in df_alumnos.columns:
+            # Contar alumnos por estado
+            alumnos_por_estado = df_alumnos['N_ESTADO'].value_counts().reset_index()
+            alumnos_por_estado.columns = ['Estado', 'Cantidad']
+            
+            # Ordenar por cantidad descendente
+            alumnos_por_estado = alumnos_por_estado.sort_values('Cantidad', ascending=False)
+            
+            # Crear paleta de colores para los estados
+            color_sequence_estados = px.colors.qualitative.Bold
+            
+            # Crear gráfico de barras para estados de alumnos
+            fig_estados = px.bar(
+                alumnos_por_estado, 
+                x='Estado', 
+                y='Cantidad',
+                text='Cantidad',
+                title='Distribución de Alumnos por Estado',
+                color='Estado',
+                color_discrete_sequence=color_sequence_estados
+            )
+            
+            # Mejorar diseño del gráfico
+            fig_estados.update_traces(texttemplate='%{text:,}', textposition='outside')
+            fig_estados.update_layout(
+                xaxis_title='Estado',
+                yaxis_title='Cantidad de Alumnos',
+                xaxis={'categoryorder':'total descending'}
+            )
+            
+            # Mostrar el gráfico
+            st.plotly_chart(fig_estados, use_container_width=True)
+            
+            # Añadir una tabla con los porcentajes
+            total_alumnos = alumnos_por_estado['Cantidad'].sum()
+            alumnos_por_estado['Porcentaje'] = (alumnos_por_estado['Cantidad'] / total_alumnos * 100).round(2)
+            alumnos_por_estado['Porcentaje'] = alumnos_por_estado['Porcentaje'].apply(lambda x: f"{x}%")
+            
+            with st.expander("Ver detalles de estados de alumnos"):
+                st.dataframe(alumnos_por_estado, hide_index=True)
+        else:
+            st.info("No se encontraron datos sobre estados de alumnos.")
+        
+        st.markdown("***") # Separador
         if df_postulantes is not None and not df_postulantes.empty:
             # Filtros interactivos
             col1, col2 = st.columns(2)
@@ -701,8 +749,8 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
             st.warning("No hay datos de postulantes disponibles para mostrar reportes de alumnos.")
     
     with tab2:
-        st.markdown("## Análisis de Cursos")
         
+
         # Gráficos de Gauge para visualizar ocupación de cursos
         if df_cursos is not None and 'ALUMNOS' in df_cursos.columns:
             st.markdown("### Porcentaje de Ocupación de Cursos")
