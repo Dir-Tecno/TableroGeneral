@@ -252,22 +252,10 @@ def show_notification_bell(novedades=None):
         # Novedades por defecto si no se proporcionan
         novedades = [
             {
-                "titulo": "Normalización de fechas en Banco de la Gente",
-                "descripcion": "Se corrigió el formato de fechas para mostrar consistentemente DD/MM/AAAA en todos los reportes.",
-                "fecha": "2025-07-01",
-                "modulo": "Banco de la Gente"
-            },
-            {
-                "titulo": "Nuevo KPI de Cursos Comenzados",
-                "descripcion": "Se agregó un nuevo KPI que muestra la cantidad de cursos que ya han comenzado según la fecha actual.",
-                "fecha": "2025-07-02",
+                "titulo": "Más datos en cbamecapacita",
+                "descripcion": "Se agregaron datos de alumnos en localidades y en cursos, también se añadió información de cursos comenzados.",
+                "fecha": "2025-07-15",
                 "modulo": "CBA Me Capacita"
-            },
-            {
-                "titulo": "Optimización de rendimiento",
-                "descripcion": "Se mejoró el tiempo de carga de los gráficos y tablas en todos los módulos.",
-                "fecha": "2025-07-03",
-                "modulo": "General"
             }
         ]
     
