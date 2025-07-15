@@ -20,7 +20,7 @@ setup_page()
 st.markdown('<div class="main-header">Tablero General de Reportes</div>', unsafe_allow_html=True)
 
 # Mostrar campanita de novedades como elemento flotante
-show_notification_bell()
+#show_notification_bell()
 
 # Configuración fija de GitLab
 repo_id = "Dir-Tecno/Repositorio-Reportes"
