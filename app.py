@@ -1,4 +1,4 @@
-from moduls.carga import load_data_from_minio, load_data_from_local
+from moduls.carga import load_data_from_minio, load_data_from_local, load_data_from_gitlab
 import streamlit as st
 from moduls import bco_gente, cbamecapacita, empleo 
 from utils.styles import setup_page
@@ -22,21 +22,34 @@ st.markdown('<div class="main-header">Tablero General de Reportes</div>', unsafe
 # Mostrar campanita de novedades como elemento flotante
 #show_notification_bell()
 
-# Configuración fija de GitLab
+# Configuración general
+
+# Opciones de fuente de datos: 'minio', 'gitlab', 'local'
+FUENTE_DATOS = "gitlab"  # Configurable por código: minio, gitlab o local
+
+# Configuración de GitLab
 repo_id = "Dir-Tecno/Repositorio-Reportes"
 branch = "main"
 
 # Ruta local para desarrollo
-# Determinar si estamos en producción (no en desarrollo local)
-is_production = not path.exists(path.join(path.dirname(__file__), "Repositorio-Reportes-main"))
 local_path = r"D:\DESARROLLO\REPORTES\TableroGeneral\Repositorio-Reportes-main"
 
-# Ya determinamos is_production arriba, ahora definimos is_development para mantener compatibilidad
-is_development = not is_production
+# Determinar el modo de desarrollo basado en la fuente de datos
+is_local = path.exists(local_path) and FUENTE_DATOS == "local"
+is_minio = FUENTE_DATOS == "minio" and not is_local
+is_gitlab = FUENTE_DATOS == "gitlab" and not is_local
 
-# Mostrar información sobre el modo de carga solo en desarrollo
-if is_development:
+# Compatibilidad con código existente
+is_development = is_local
+is_production = not is_development
+
+# Mostrar información sobre el modo de carga
+if is_local:
     st.success("Modo de desarrollo: Cargando datos desde carpeta local")
+elif is_minio:
+    st.success("Modo de producción: Cargando datos desde MinIO")
+elif is_gitlab:
+    st.success("Modo de producción: Cargando datos desde GitLab")
 
 # Obtener token desde secrets (solo necesario en modo producción)
 token = None
@@ -96,20 +109,33 @@ for idx, tab in enumerate(tabs):
         data_key = f"{module_key}_data"
         dates_key = f"{module_key}_dates"
         if data_key not in st.session_state or dates_key not in st.session_state:
-            # Mensaje diferente según el modo de ejecución
-            spinner_message = "Cargando datos desde carpeta local..." if is_development else "Cargando datos desde MinIO..."
+            # Mensaje según la fuente de datos configurada
+            if is_local:
+                spinner_message = "Cargando datos desde carpeta local..."
+            elif is_minio:
+                spinner_message = "Cargando datos desde MinIO..."
+            elif is_gitlab:
+                spinner_message = "Cargando datos desde GitLab..."
+            else:
+                spinner_message = "Cargando datos..."
+                
             with st.spinner(spinner_message):
                 def load_only_data():
-                    # Usar la función adecuada según el modo de ejecución
-                    if is_development:
-                        # En modo desarrollo, cargar desde la ruta local
+                    # Usar la función adecuada según la fuente de datos configurada
+                    if is_local:
+                        # Cargar desde la ruta local
                         all_data, all_dates, logs = load_data_from_local(
                             local_path, modules
                         )
-                    else:
-                        # En modo producción, cargar desde MinIO
+                    elif is_minio:
+                        # Cargar desde MinIO
                         all_data, all_dates, logs = load_data_from_minio(
                             minio_client, MINIO_BUCKET, modules
+                        )
+                    elif is_gitlab:
+                        # Cargar desde GitLab
+                        all_data, all_dates, logs = load_data_from_gitlab(
+                            repo_id, branch, token, modules
                         )
                     # Guardar logs para mostrarlos después de que el hilo termine
                     st.session_state[f"{module_key}_logs"] = logs
