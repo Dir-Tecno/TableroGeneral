@@ -137,16 +137,20 @@ for idx, tab in enumerate(tabs):
                         all_data, all_dates, logs = load_data_from_gitlab(
                             repo_id, branch, token, modules
                         )
-                    # Guardar logs para mostrarlos después de que el hilo termine
-                    st.session_state[f"{module_key}_logs"] = logs
+                    # No guardar logs aquí, los devolveremos junto con los datos
                     data = {k: all_data.get(k) for k in modules[module_key] if k in all_data}
                     dates = {k: all_dates.get(k) for k in modules[module_key] if k in all_dates}
-                    return data, dates
+                    return data, dates, logs
+                
+                # Ejecutar la carga de datos en un hilo separado
                 with concurrent.futures.ThreadPoolExecutor() as executor:
                     future = executor.submit(load_only_data)
-                    data, dates = future.result()
+                    data, dates, logs = future.result()
+                
+                # Actualizar session_state SOLO desde el hilo principal
                 st.session_state[data_key] = data
                 st.session_state[dates_key] = dates
+                st.session_state[f"{module_key}_logs"] = logs
                 
                 # Mostrar logs después de que el hilo haya terminado
                 logs_key = f"{module_key}_logs"
