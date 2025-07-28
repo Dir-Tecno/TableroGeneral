@@ -252,10 +252,10 @@ def show_notification_bell(novedades=None):
         # Novedades por defecto si no se proporcionan
         novedades = [
             {
-                "titulo": "Más datos en cbamecapacita",
-                "descripcion": "Se agregaron datos de alumnos en localidades y en cursos, también se añadió información de cursos comenzados.",
-                "fecha": "2025-07-15",
-                "modulo": "CBA Me Capacita"
+                "titulo": "Empresas adheridas con datos de contacto",
+                "descripcion": "Se agregaron datos de empresas adheridas con datos de contacto. En la pestaña Empresas de Empleo",
+                "fecha": "2025-07-27",
+                "modulo": "EMPLEO"
             }
         ]
     
