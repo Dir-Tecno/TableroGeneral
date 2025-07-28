@@ -868,7 +868,7 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
             )
             
             # Contar cursos por rango de postulantes
-            df_rangos = df_cursos.groupby('Rango_Postulantes').size().reset_index(name='Cantidad_Cursos')
+            df_rangos = df_cursos.groupby('Rango_Postulantes', observed=False).size().reset_index(name='Cantidad_Cursos')
             
             # Filtrar rangos con 0 cursos
             df_rangos = df_rangos[df_rangos['Cantidad_Cursos'] > 0]

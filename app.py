@@ -28,7 +28,7 @@ def load_data_by_source(source_type, local_path, minio_client, bucket, repo_id, 
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Dashboard Integrado", 
+    page_title="Dashboard Resumen del Ministerio de Desarrollo Social y Promoción del Empleo", 
     layout="wide"
 )
 
@@ -44,7 +44,7 @@ show_notification_bell()
 # Configuración general
 
 # Opciones de fuente de datos: 'minio', 'gitlab', 'local'
-FUENTE_DATOS = "gitlab"  # Configurable por código: minio, gitlab o local
+FUENTE_DATOS = "local"  # Configurable por código: minio, gitlab o local
 
 # Configuración de GitLab
 repo_id = "Dir-Tecno/Repositorio-Reportes"
