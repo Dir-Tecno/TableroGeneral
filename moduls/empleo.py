@@ -242,7 +242,7 @@ def load_and_preprocess_data(data, dates=None, is_development=False):
             df_empresas['CUIT'] = df_empresas['CUIT'].astype(str).str.replace('-', '', regex=False)
             df_arca['CUIT'] = df_arca['CUIT'].astype(str).str.replace('-', '', regex=False)
             # Seleccionar solo las columnas de interés de ARCA
-            cols_arca = ['CUIT', 'IMP_GANANCIAS', 'IMP_IVA', 'MONOTRIBUTO', 'INTEGRANTE_SOC', 'EMPLEADOR', 'ACTIVIDAD_MONOTRIBUTO','NOMBRE_TIPO_EMPRESA']
+            cols_arca = ['CUIT', 'IMP_GANANCIAS', 'IMP_IVA', 'MONOTRIBUTO', 'INTEGRANTE_SOC', 'EMPLEADOR', 'ACTIVIDAD_MONOTRIBUTO','NOMBRE_TIPO_EMPRESA','TELEFONO', 'CELULAR', 'MAIL', 'VACANTES', 'SITIO_WEB', 'TEL_CONTACTO', 'EMAIL_CONTACTO', 'NOMBRE_FANTASIA']
             df_arca_sel = df_arca[cols_arca].copy()
             # Merge left
             df_empresas = df_empresas.merge(df_arca_sel, on='CUIT', how='left')
@@ -896,7 +896,7 @@ def show_companies(df_empresas, geojson_data):
     columns_to_select = [col for col in ['N_LOCALIDAD', 'N_DEPARTAMENTO', 'CUIT', 'N_EMPRESA', 
                                        'NOMBRE_TIPO_EMPRESA', 'ADHERIDO', 'CANTIDAD_EMPLEADOS', 
                                        'VACANTES', 'CUPO', 'IMP_GANANCIAS', 'IMP_IVA', 'MONOTRIBUTO',
-                                       'INTEGRANTE_SOC', 'EMPLEADOR', 'ACTIVIDAD_MONOTRIBUTO', 'BENEF'] 
+                                       'INTEGRANTE_SOC', 'EMPLEADOR', 'ACTIVIDAD_MONOTRIBUTO', 'BENEF', 'TELEFONO', 'CELULAR', 'MAIL', 'SITIO_WEB', 'TEL_CONTACTO', 'EMAIL_CONTACTO', 'NOMBRE_FANTASIA'] 
                        if col in df_empresas.columns]
 
     if 'CUIT' in df_empresas.columns and 'ADHERIDO' in df_empresas.columns:
@@ -1332,4 +1332,3 @@ def show_inscriptions(df_inscriptos, df_poblacion, geojson_data, file_date):
                 <strong>Información:</strong> Se mostrarán los datos disponibles: {str(e)}
             </div>
         """, unsafe_allow_html=True)
-

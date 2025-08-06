@@ -1,42 +1,29 @@
 import pandas as pd
 
-def clean_thousand_separator(df: pd.DataFrame) -> pd.DataFrame:
+def convert_decimal_separator(df, columns):
     """
-    Limpia el separador de miles (",") en todas las columnas tipo string que parezcan numéricas y convierte a tipo numérico.
-    Devuelve el DataFrame modificado (inplace).
+    Convierte el separador decimal de coma a punto en las columnas especificadas
+    y convierte la columna a tipo numérico.
     """
-    if df is not None:
-        for col in df.columns:
-            if df[col].dtype == object:
-                # Si hay string con ',' y parecen números, limpiar
-                if df[col].str.contains(r'^-?\d{1,3}(,\d{3})*(\.\d+)?$', na=False).any():
-                    df[col] = df[col].str.replace(',', '', regex=False)
-                    df[col] = pd.to_numeric(df[col], errors='ignore')
+    for col in columns:
+        if col in df.columns:
+            # Reemplazar coma por punto y convertir a numérico.
+            # Usar errors='coerce' para convertir valores no válidos en NaN,
+            # lo cual es la práctica recomendada en lugar de 'ignore'.
+            df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', '.', regex=False), errors='coerce')
     return df
 
-def convert_decimal_separator(df: pd.DataFrame, columns=None) -> pd.DataFrame:
+def clean_thousand_separator(df, columns=None):
     """
-    Convierte separadores decimales de coma a punto en columnas específicas o todas.
-    Reemplaza las comas por puntos en valores que parecen decimales,
-    siguiendo el enfoque de bco_gente.py.
-    
-    Args:
-        df: DataFrame a procesar
-        columns: Lista opcional de columnas a procesar (None = todas)
-        
-    Returns:
-        DataFrame procesado
+    Limpia el separador de miles (punto) de las columnas especificadas
+    y las convierte a tipo numérico.
     """
-    if df is None:
-        return None
-        
-    cols_to_process = columns if columns else df.columns
-    
-    for col in cols_to_process:
-        if col in df.columns and df[col].dtype == object:
-            # Reemplazar comas por puntos en valores que podrían ser decimales
-            df[col] = df[col].astype(str).str.replace(",", ".", regex=False)
-            # Intentar convertir a numérico
-            df[col] = pd.to_numeric(df[col], errors='ignore')
-    
+    if columns is None:
+        columns = df.select_dtypes(include=['object']).columns
+
+    for col in columns:
+        if col in df.columns and df[col].dtype == 'object':
+            if df[col].str.contains(r'\.', na=False).any():
+                df[col] = df[col].str.replace('.', '', regex=False)
+                df[col] = pd.to_numeric(df[col], errors='coerce')
     return df
