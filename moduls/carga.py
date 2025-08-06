@@ -350,58 +350,69 @@ def load_data_from_minio(minio_client, bucket, modules):
     logs["info"].append(f"Archivos cargados: {list(all_data.keys())}")
     return all_data, all_dates, logs
 
+def obtener_fecha_commit_gitlab(repo_id, branch, file_path, token):
+    url = f"https://gitlab.com/api/v4/projects/{repo_id}/repository/commits"
+    headers = {'PRIVATE-TOKEN': token}
+    params = {'ref_name': branch, 'path': file_path, 'per_page': 1}
+    response = requests.get(url, headers=headers, params=params)
+    if response.status_code == 200:
+        commits = response.json()
+        if commits:
+            return commits[0]['committed_date']
+    return None
+
 def load_data_from_gitlab(repo_id, branch, token, modules):
     """
     Carga datos desde GitLab.
-    
     Args:
         repo_id (str): ID del repositorio en formato "namespace/project".
         branch (str): Rama del repositorio.
         token (str): Token de acceso a GitLab.
         modules (dict): Diccionario con los módulos y sus archivos.
-        
     Returns:
         tuple: (all_data, all_dates, logs) con los datos, fechas de actualización y logs.
     """
     all_data = {}
     all_dates = {}
     logs = {"warnings": [], "info": []}
-    
+
     try:
-        # Obtener lista de archivos disponibles en GitLab
         archivos_disponibles, logs = obtener_lista_archivos_gitlab(repo_id, branch, token, logs)
-        
         if not archivos_disponibles:
             logs["warnings"].append(f"No se encontraron archivos disponibles en GitLab para el repositorio {repo_id}.")
             return all_data, all_dates, logs
-            
-        # Filtrar por extensiones soportadas
+
         extensiones = ['.parquet', '.csv', '.geojson', '.txt', '.xlsx']
         archivos_filtrados = [a for a in archivos_disponibles if any(a.endswith(ext) for ext in extensiones)]
-        
-        # Crear un conjunto de archivos solicitados por los módulos
+
         archivos_solicitados = set()
         for modulo, archivos in modules.items():
             for archivo in archivos:
-                # Normalizar path para comparaciones
                 archivo_normalizado = archivo.replace('\\', '/')
                 archivos_solicitados.add(archivo_normalizado)
-        
-        # Procesar cada archivo de todos los módulos
+
         for modulo, archivos in modules.items():
             for archivo in archivos:
-                # En GitLab, los paths pueden venir con estructura de directorios
                 archivo_gitlab = archivo.replace('\\', '/')
-                
+                # Buscar el path real en archivos_disponibles
+                path_real = None
                 if archivo_gitlab in archivos_disponibles:
+                    path_real = archivo_gitlab
+                else:
+                    nombre_archivo = archivo.split('/')[-1]
+                    archivos_similares = [a for a in archivos_disponibles if a.endswith('/' + nombre_archivo) or a == nombre_archivo]
+                    if archivos_similares:
+                        path_real = archivos_similares[0]
+                if path_real:
                     try:
-                        # Obtener y procesar archivo
-                        contenido, logs = obtener_archivo_gitlab(repo_id, branch, archivo_gitlab.replace('/', '%2F'), token, logs)
+                        contenido, logs = obtener_archivo_gitlab(repo_id, branch, path_real.replace('/', '%2F'), token, logs)
                         if contenido:
-                            df, fecha = procesar_archivo(archivo, contenido, True, logs)
+                            df, _ = procesar_archivo(archivo, contenido, True, logs)
                             if df is not None:
                                 all_data[archivo] = df
-                                all_dates[archivo] = fecha
+                                # Obtener la fecha del último commit real de GitLab
+                                fecha_commit = obtener_fecha_commit_gitlab(repo_id, branch, path_real, token)
+                                all_dates[archivo] = fecha_commit
                                 logs["info"].append(f"Cargado {archivo} correctamente desde GitLab.")
                             else:
                                 logs["warnings"].append(f"Error al procesar {archivo} desde GitLab.")
@@ -410,30 +421,10 @@ def load_data_from_gitlab(repo_id, branch, token, modules):
                     except Exception as e:
                         logs["warnings"].append(f"Error al cargar {archivo} desde GitLab: {str(e)}")
                 else:
-                    # Buscar archivos con nombre similar (puede estar en otra ruta)
-                    nombre_archivo = archivo.split('/')[-1]
-                    archivos_similares = [a for a in archivos_disponibles if a.endswith('/' + nombre_archivo)]
-                    
-                    if archivos_similares:
-                        archivo_candidato = archivos_similares[0]
-                        try:
-                            contenido, logs = obtener_archivo_gitlab(repo_id, branch, archivo_candidato.replace('/', '%2F'), token, logs)
-                            if contenido:
-                                df, fecha = procesar_archivo(archivo, contenido, True, logs)
-                                if df is not None:
-                                    all_data[archivo] = df
-                                    all_dates[archivo] = fecha
-                                    logs["info"].append(f"Cargado {archivo} (desde {archivo_candidato}) correctamente.")
-                                else:
-                                    logs["warnings"].append(f"Error al procesar {archivo_candidato} desde GitLab.")
-                        except Exception as e:
-                            logs["warnings"].append(f"Error al cargar {archivo_candidato}: {str(e)}")
-                    else:
-                        logs["warnings"].append(f"Archivo {archivo} no disponible en GitLab.")
-                        
-        # Resumen final
+                    logs["warnings"].append(f"Archivo {archivo} no disponible en GitLab.")
+
         logs["info"].append(f"Total archivos cargados desde GitLab: {len(all_data)}/{len(archivos_solicitados)}")
     except Exception as e:
         logs["warnings"].append(f"Error general en carga desde GitLab: {str(e)}")
-    
+
     return all_data, all_dates, logs

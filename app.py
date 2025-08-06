@@ -92,7 +92,7 @@ modules = {
 MINIO_ENDPOINT = "5.161.118.67:7003"
 MINIO_ACCESS_KEY = "dirtecno"
 MINIO_SECRET_KEY = "dirtecnon0r3cu3rd0"
-MINIO_BUCKET = "repositorio-dashboard"  
+MINIO_BUCKET = "repositorio-reportes"  
 
 # Cliente MinIO
 minio_client = Minio(
