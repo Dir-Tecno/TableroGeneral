@@ -3,8 +3,8 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import altair as alt
-from utils.ui_components import display_kpi_row
-from utils.data_cleaning import clean_thousand_separator, convert_decimal_separator
+from utils.ui_components import display_kpi_row, show_dev_dataframe_info, show_last_update
+from utils.kpi_tooltips import TOOLTIPS_DESCRIPTIVOS
 import geopandas as gpd
 import json
 
@@ -17,46 +17,52 @@ def create_cbamecapacita_kpi(resultados):
     Returns:
         list: Lista de diccionarios con datos de KPI para CBA Me Capacita
     """
+    
     kpis = [
         {
             "title": "POSTULANTES",
             "value_form": f"{resultados.get('Postulantes', 0):,}".replace(',', '.'),
             "color_class": "kpi-primary",
             "delta": "",
-            "delta_color": "#d4f7d4"
+            "delta_color": "#d4f7d4",
+            "tooltip": TOOLTIPS_DESCRIPTIVOS["POSTULANTES"]
         },
         {
             "title": "CURSOS ACTIVOS",
             "value_form": f"{resultados.get('Cursos Activos', 0):,}".replace(',', '.'),
             "color_class": "kpi-secondary",
             "delta": "",
-            "delta_color": "#d4f7d4"
+            "delta_color": "#d4f7d4",
+            "tooltip": TOOLTIPS_DESCRIPTIVOS["CURSOS ACTIVOS"]
         },
         {
             "title": "CURSOS COMENZADOS",
             "value_form": f"{resultados.get('Cursos Comenzados', 0):,}".replace(',', '.'),
             "color_class": "kpi-accent-3",
             "delta": "",
-            "delta_color": "#d4f7d4"
+            "delta_color": "#d4f7d4",
+            "tooltip": TOOLTIPS_DESCRIPTIVOS["CURSOS COMENZADOS"]
         },
         {
             "title": "PARTICIPANTES INSCRIPTOS",
             "value_form": f"{resultados.get('Participantes inscriptos', 0):,}".replace(',', '.'),
             "color_class": "kpi-accent-1",
             "delta": "",
-            "delta_color": "#d4f7d4"
+            "delta_color": "#d4f7d4",
+            "tooltip": TOOLTIPS_DESCRIPTIVOS["PARTICIPANTES INSCRIPTOS"]
         },
         {
             "title": "CAPACITACIONES ELEGIDAS",
             "value_form": f"{resultados.get('Capacitaciones Elegidas', 0):,}".replace(',', '.'),
             "color_class": "kpi-accent-2",
             "delta": "",
-            "delta_color": "#d4f7d4"
+            "delta_color": "#d4f7d4",
+            "tooltip": TOOLTIPS_DESCRIPTIVOS["CAPACITACIONES ELEGIDAS"]
         }
     ]
     return kpis
 
-def load_and_preprocess_data(data):
+def load_and_preprocess_data(data, is_development=False):
     """
     Carga y preprocesa los datos principales del dashboard CBA ME CAPACITA.
     - Limpia separadores de miles en columnas numéricas.
@@ -157,12 +163,23 @@ def load_and_preprocess_data(data):
         else:
             print("ADVERTENCIA: La columna ALUMNOS no se agregó a df_cursos")
 
+    # Agregar columna COMENZADO a df_cursos
+    if df_cursos is not None and 'FEC_INICIO' in df_cursos.columns:
+        # Convertir FEC_INICIO a datetime
+        df_cursos['FEC_INICIO'] = pd.to_datetime(df_cursos['FEC_INICIO'], errors='coerce')
+        # Fecha actual
+        fecha_actual = pd.Timestamp.now().normalize()
+        # Marcar cursos comenzados (fecha actual >= FEC_INICIO)
+        df_cursos['COMENZADO'] = df_cursos['FEC_INICIO'].notna() & (df_cursos['FEC_INICIO'] <= fecha_actual)
+
     # Debug: Verificar columnas finales
     if df_cursos is not None:
         print(f"Columnas en df_cursos: {df_cursos.columns.tolist()}")
         if 'ALUMNOS' in df_cursos.columns:
             print(f"Estadísticas de ALUMNOS: Min={df_cursos['ALUMNOS'].min()}, Max={df_cursos['ALUMNOS'].max()}, Media={df_cursos['ALUMNOS'].mean():.2f}")
-        
+        if 'COMENZADO' in df_cursos.columns:
+            print(f"Cursos comenzados: {df_cursos['COMENZADO'].sum()} de {len(df_cursos)} ({df_cursos['COMENZADO'].mean()*100:.2f}%)")
+
         # Añadir columna "No asignados" como la diferencia entre POSTULACIONES y ALUMNOS
         if 'POSTULACIONES' in df_cursos.columns and 'ALUMNOS' in df_cursos.columns:
             df_cursos['No asignados'] = df_cursos['POSTULACIONES'] - df_cursos['ALUMNOS']
@@ -171,7 +188,31 @@ def load_and_preprocess_data(data):
             print(f"Columna 'No asignados' creada: Min={df_cursos['No asignados'].min()}, Max={df_cursos['No asignados'].max()}, Total={df_cursos['No asignados'].sum()}")
         else:
             print("ADVERTENCIA: No se pudo crear la columna 'No asignados' porque faltan las columnas POSTULACIONES o ALUMNOS")
-            
+
+    # Cruzar df_postulantes con df_alumnos para obtener el campo ALUMNO
+    if df_postulantes is not None and df_alumnos is not None and 'CUIL' in df_alumnos.columns:
+        if 'CUIL' in df_postulantes.columns and 'CUIL' in df_alumnos.columns:
+            print("Agregando columna ALUMNO a df_postulantes desde df_alumnos...")
+
+            # Crear un set con los CUILs únicos de df_alumnos para hacer la búsqueda más eficiente
+            cuils_alumnos = set(df_alumnos['CUIL'].dropna().unique())
+
+            # Crear columna ALUMNO: contiene el CUIL si está en df_alumnos, sino None/NaN
+            df_postulantes['ALUMNO'] = df_postulantes['CUIL'].apply(
+                lambda x: x if x in cuils_alumnos else None
+            )
+
+            # Verificar el resultado del cruce
+            alumnos_count = df_postulantes['ALUMNO'].notnull().sum()
+            total_postulantes = len(df_postulantes)
+            print(f"Columna ALUMNO agregada a df_postulantes. {alumnos_count} de {total_postulantes} postulantes son alumnos ({alumnos_count/total_postulantes*100:.2f}%)")
+        else:
+            print("ADVERTENCIA: No se puede realizar el cruce porque faltan columnas necesarias en los DataFrames")
+    if is_development:
+        st.write("Información de DataFrames ya cruzados")
+        show_dev_dataframe_info(df_postulantes, "df_postulantes")
+        show_dev_dataframe_info(df_alumnos, "df_alumnos")
+        show_dev_dataframe_info(df_cursos, "df_cursos")
     return df_postulantes, df_alumnos, df_cursos
 
 def show_cba_capacita_dashboard(data, dates, is_development=False):
@@ -188,14 +229,13 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
         return
 
     # Mostrar columnas en  desarrollo
-    from utils.ui_components import show_dev_dataframe_info
     if is_development:
         show_dev_dataframe_info(data, modulo_nombre="CBA Me Capacita")
 
     
 
     # --- Usar función de carga y preprocesamiento ---
-    df_postulantes, df_alumnos, df_cursos = load_and_preprocess_data(data)
+    df_postulantes, df_alumnos, df_cursos = load_and_preprocess_data(data, is_development)
 
 
 
@@ -217,17 +257,12 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
     if df_postulantes is not None and "ID_CERTIFICACION" in df_postulantes.columns:
         total_capacitaciones = df_postulantes["ID_CERTIFICACION"].dropna().nunique()
     
-    # Calcular cursos ya comenzados (fecha actual >= FEC_INICIO)
+    # Calcular cursos ya comenzados usando la columna COMENZADO
     cursos_comenzados = 0
-    if df_cursos is not None and 'FEC_INICIO' in df_cursos.columns:
-        # Convertir FEC_INICIO a datetime
-        df_cursos['FEC_INICIO'] = pd.to_datetime(df_cursos['FEC_INICIO'], errors='coerce')
-        # Fecha actual
-        fecha_actual = pd.Timestamp.now().normalize()
-        # Contar cursos con fecha de inicio menor o igual a la fecha actual
-        cursos_comenzados = df_cursos[df_cursos['FEC_INICIO'].notna() & (df_cursos['FEC_INICIO'] <= fecha_actual)]['ID_PLANIFICACION'].nunique()
+    if df_cursos is not None and 'COMENZADO' in df_cursos.columns:
+        # Usar la columna COMENZADO ya calculada en load_and_preprocess_data
+        cursos_comenzados = df_cursos[df_cursos['COMENZADO']]['ID_PLANIFICACION'].nunique()
     # Mostrar información de actualización de datos
-    from utils.ui_components import show_last_update
     show_last_update(dates, 'VT_INSCRIPCIONES_PRG129.parquet')
     
     # Crear un diccionario con los resultados para pasarlo a la función de KPIs
@@ -247,7 +282,55 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
     tab1, tab2 = st.tabs(["Alumnos", "Cursos"])
     
     with tab1:
-        st.subheader("Análisis de Postulantes")
+        st.subheader("Análisis de Postulantes y alumnos")
+      
+        # 5. Distribución de alumnos por estado (INSCRIPTO, ACTIVO, etc.)
+        st.subheader("Distribución de Alumnos por Estado")
+        
+        if df_alumnos is not None and 'N_ESTADO' in df_alumnos.columns:
+            # Contar alumnos por estado
+            alumnos_por_estado = df_alumnos['N_ESTADO'].value_counts().reset_index()
+            alumnos_por_estado.columns = ['Estado', 'Cantidad']
+            
+            # Ordenar por cantidad descendente
+            alumnos_por_estado = alumnos_por_estado.sort_values('Cantidad', ascending=False)
+            
+            # Crear paleta de colores para los estados
+            color_sequence_estados = px.colors.qualitative.Bold
+            
+            # Crear gráfico de barras para estados de alumnos
+            fig_estados = px.bar(
+                alumnos_por_estado, 
+                x='Estado', 
+                y='Cantidad',
+                text='Cantidad',
+                title='Distribución de Alumnos por Estado',
+                color='Estado',
+                color_discrete_sequence=color_sequence_estados
+            )
+            
+            # Mejorar diseño del gráfico
+            fig_estados.update_traces(texttemplate='%{text:,}', textposition='outside')
+            fig_estados.update_layout(
+                xaxis_title='Estado',
+                yaxis_title='Cantidad de Alumnos',
+                xaxis={'categoryorder':'total descending'}
+            )
+            
+            # Mostrar el gráfico
+            st.plotly_chart(fig_estados, use_container_width=True)
+            
+            # Añadir una tabla con los porcentajes
+            total_alumnos = alumnos_por_estado['Cantidad'].sum()
+            alumnos_por_estado['Porcentaje'] = (alumnos_por_estado['Cantidad'] / total_alumnos * 100).round(2)
+            alumnos_por_estado['Porcentaje'] = alumnos_por_estado['Porcentaje'].apply(lambda x: f"{x}%")
+            
+            with st.expander("Ver detalles de estados de alumnos"):
+                st.dataframe(alumnos_por_estado, hide_index=True)
+        else:
+            st.info("No se encontraron datos sobre estados de alumnos.")
+        
+        st.markdown("***") # Separador
         if df_postulantes is not None and not df_postulantes.empty:
             # Filtros interactivos
             col1, col2 = st.columns(2)
@@ -262,9 +345,13 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                 df_filtered = df_filtered[df_filtered['N_DEPARTAMENTO'] == selected_dpto]
             if selected_loc != "Todos":
                 df_filtered = df_filtered[df_filtered['N_LOCALIDAD'] == selected_loc]
-            # 1. Cantidad de Postulaciones por N_DEPARTAMENTO y N_LOCALIDAD
-            st.subheader("Cantidad de Postulaciones por Departamento y Localidad")
-            df_group = df_filtered.groupby(['N_DEPARTAMENTO','N_LOCALIDAD']).size().reset_index(name='Cantidad')
+            # 1. Cantidad de Postulaciones y Participantes por N_DEPARTAMENTO y N_LOCALIDAD
+            st.subheader("Cantidad de Postulaciones y Participantes por Departamento y Localidad")
+            # Agrupar por N_DEPARTAMENTO y N_LOCALIDAD, contando CUILs únicos y ALUMNO not null
+            df_group = df_filtered.groupby(['N_DEPARTAMENTO', 'N_LOCALIDAD']).agg(
+                POSTULACIONES=('CUIL', 'nunique'),
+                ALUMNOS=('ALUMNO', lambda x: x.notnull().sum())
+            ).reset_index()
             st.dataframe(df_group, use_container_width=True, hide_index=True)
             # 2. Distribución por rangos de edad
             st.subheader("Distribución por Rangos de Edad")
@@ -276,21 +363,134 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                 bins = [0, 17, 29, 39, 49, 59, 69, 200]
                 labels = ['<18', '18-29', '30-39', '40-49', '50-59', '60-69','70+']
                 df_filtered['RANGO_EDAD'] = pd.cut(df_filtered['EDAD'], bins=bins, labels=labels, right=True)
-                edad_group = df_filtered['RANGO_EDAD'].value_counts().sort_index().reset_index()
-                edad_group.columns = ['Rango de Edad','Cantidad']
-                fig_edad = px.bar(edad_group, x='Rango de Edad', y='Cantidad', title='Distribución por Rango de Edad', text_auto=True, color='Rango de Edad', color_discrete_sequence=px.colors.qualitative.Pastel)
+                # Crear dos series de datos: una para todos los postulantes y otra solo para alumnos
+                # Agrupar todos los postulantes por rango de edad
+                postulantes_por_edad = df_filtered['RANGO_EDAD'].value_counts().sort_index()
+                
+                # Agrupar solo los alumnos por rango de edad
+                alumnos_por_edad = df_filtered[df_filtered['ALUMNO'].notna()]['RANGO_EDAD'].value_counts().sort_index()
+                
+                # Crear un DataFrame combinado para visualización
+                edad_group = pd.DataFrame({
+                    'Rango de Edad': postulantes_por_edad.index,
+                    'POSTULANTES': postulantes_por_edad.values,
+                    'ALUMNOS': alumnos_por_edad.reindex(postulantes_por_edad.index).fillna(0).values
+                })
+                
+                # Reformatear los datos para graficar barras agrupadas
+                edad_group_melted = pd.melt(
+                    edad_group, 
+                    id_vars=['Rango de Edad'],
+                    value_vars=['POSTULANTES', 'ALUMNOS'],
+                    var_name='Categoría', 
+                    value_name='Cantidad'
+                )
+                
+                # Crear gráfico de barras agrupadas
+                fig_edad = px.bar(
+                    edad_group_melted, 
+                    x='Rango de Edad', 
+                    y='Cantidad', 
+                    color='Categoría',
+                    barmode='group',  # Barras agrupadas
+                    title='Distribución por Rango de Edad: Postulantes vs Alumnos', 
+                    text_auto=True,  # Mostrar valores en las barras
+                    color_discrete_map={
+                        'POSTULANTES': '#FFA726',  # Color naranja para postulantes
+                        'ALUMNOS': '#66BB6A'  # Color verde para alumnos (similar al usado para COMENZADO)
+                    }
+                )
+                
+                # Personalizar el gráfico
+                fig_edad.update_layout(
+                    xaxis_title='Rango de Edad',
+                    yaxis_title='Cantidad',
+                    legend_title='Categoría',
+                    legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1)
+                )
+                
                 st.plotly_chart(fig_edad, use_container_width=True)
             else:
                 st.info("No se encontró la columna FEC_NACIMIENTO para calcular edades.")
-            # 3. TOP 10 de CAPACITACION elegida
-            st.subheader("Top 10 de Capacitaciones Elegidas")
+            # 3. TOP 10 de CAPACITACIONES: Comparación entre postulaciones y capacitaciones con alumnos
+            st.subheader("Top 10 de Capacitaciones: Postulaciones vs Capacitaciones con Alumnos")
             if 'N_CERTIFICACION' in df_filtered.columns:
-                top_cap = df_filtered['N_CERTIFICACION'].value_counts().head(10).reset_index()
-                top_cap.columns = ['Capacitación','Cantidad']
-                fig_topcap = px.bar(top_cap, x='Capacitación', y='Cantidad', title='Top 10 de Capacitaciones', text_auto=True)
-                st.plotly_chart(fig_topcap, use_container_width=True)
+                # Crear dos columnas para mostrar gráficos lado a lado
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    # Top 10 de todas las postulaciones
+                    top_cap_postulaciones = df_filtered['N_CERTIFICACION'].value_counts().head(10).reset_index()
+                    top_cap_postulaciones.columns = ['Capacitación', 'Cantidad']
+                    fig_topcap_post = px.bar(
+                        top_cap_postulaciones, 
+                        x='Capacitación', 
+                        y='Cantidad', 
+                        title='Top 10 de Capacitaciones Postuladas',
+                        text_auto=True,
+                        color_discrete_sequence=['#FFA726']  # Color naranja para postulantes
+                    )
+                    fig_topcap_post.update_layout(
+                        xaxis_title='Capacitación',
+                        yaxis_title='Cantidad de Postulaciones'
+                    )
+                    st.plotly_chart(fig_topcap_post, use_container_width=True)
+                    
+                with col2:
+                    # Top 10 de capacitaciones efectivamente activas con alumnos
+                    # Filtrar solo registros que tienen ALUMNO (no nulo)
+                    alumnos_df = df_filtered[df_filtered['ALUMNO'].notna()]
+                    if len(alumnos_df) > 0:
+                        top_cap_activas = alumnos_df['N_CERTIFICACION'].value_counts().head(10).reset_index()
+                        top_cap_activas.columns = ['Capacitación', 'Cantidad']
+                        fig_topcap_activas = px.bar(
+                            top_cap_activas, 
+                            x='Capacitación', 
+                            y='Cantidad', 
+                            title='Top 10 de Capacitaciones Efectivamente Activas',
+                            text_auto=True,
+                            color_discrete_sequence=['#66BB6A']  # Color verde para alumnos
+                        )
+                        fig_topcap_activas.update_layout(
+                            xaxis_title='Capacitación',
+                            yaxis_title='Cantidad de Alumnos'
+                        )
+                        st.plotly_chart(fig_topcap_activas, use_container_width=True)
+                    else:
+                        st.info("No se encontraron capacitaciones con alumnos asignados.")
+                        
+                # Añadir un expander con la tabla comparativa detallada
+                with st.expander("Ver tabla comparativa de capacitaciones"):
+                    # Obtener todas las capacitaciones únicas de ambos top 10
+                    # Primero asegurarse de que hay alumnos antes de intentar acceder a sus capacitaciones
+                    if len(alumnos_df) > 0:
+                        # Obtener las capacitaciones de los alumnos
+                        alumnos_top_caps = alumnos_df['N_CERTIFICACION'].value_counts().head(10).reset_index()
+                        alumnos_top_caps.columns = ['Capacitación', 'Cantidad']
+                        
+                        # Concatenar capacitaciones de postulantes y alumnos
+                        all_caps = pd.concat([
+                            top_cap_postulaciones['Capacitación'], 
+                            alumnos_top_caps['Capacitación']
+                        ]).unique()
+                    else:
+                        # Si no hay alumnos, usar solo las capacitaciones de postulantes
+                        all_caps = top_cap_postulaciones['Capacitación'].unique()
+                    
+                    # Crear DataFrame comparativo
+                    comp_data = []
+                    for cap in all_caps:
+                        postulaciones = top_cap_postulaciones[top_cap_postulaciones['Capacitación'] == cap]['Cantidad'].sum() \
+                            if cap in top_cap_postulaciones['Capacitación'].values else 0
+                        alumnos = len(alumnos_df[alumnos_df['N_CERTIFICACION'] == cap])
+                        tasa = round((alumnos / postulaciones * 100), 2) if postulaciones > 0 else 0
+                        comp_data.append([cap, postulaciones, alumnos, f"{tasa}%"])
+                    
+                    df_comp = pd.DataFrame(comp_data, columns=['Capacitación', 'Postulaciones', 'Alumnos', 'Tasa de Conversión'])
+                    df_comp = df_comp.sort_values(by='Postulaciones', ascending=False)
+                    st.dataframe(df_comp)
             else:
-                st.info("No se encontró la columna CAPACITACION para el top de capacitaciones.")
+                st.info("No se encontró la columna N_CERTIFICACION para el top de capacitaciones.")
             # 4. Tres tortas: EDUCACION, TIPO_TRABAJO y SEXO
             st.subheader("Distribución por Nivel Educativo, Tipo de Trabajo y Género")
             cols = st.columns(3)
@@ -549,8 +749,8 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
             st.warning("No hay datos de postulantes disponibles para mostrar reportes de alumnos.")
     
     with tab2:
-        st.markdown("## Análisis de Cursos")
         
+
         # Gráficos de Gauge para visualizar ocupación de cursos
         if df_cursos is not None and 'ALUMNOS' in df_cursos.columns:
             st.markdown("### Porcentaje de Ocupación de Cursos")
@@ -668,7 +868,7 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
             )
             
             # Contar cursos por rango de postulantes
-            df_rangos = df_cursos.groupby('Rango_Postulantes').size().reset_index(name='Cantidad_Cursos')
+            df_rangos = df_cursos.groupby('Rango_Postulantes', observed=False).size().reset_index(name='Cantidad_Cursos')
             
             # Filtrar rangos con 0 cursos
             df_rangos = df_rangos[df_rangos['Cantidad_Cursos'] > 0]
@@ -722,7 +922,8 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                 "ALTURA",
                 "POSTULACIONES",
                 "ALUMNOS",
-                "No asignados"
+                "No asignados",
+                "COMENZADO"
             ]
             # Filtrar solo columnas existentes
             columnas_existentes = [col for col in columnas_exportar if col in df_cursos.columns]
@@ -733,19 +934,18 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
             
             # Seleccionar solo las columnas solicitadas para mostrar
             columnas_mostrar = [
-                "ID_PLANIFICACION",
                 "N_INSTITUCION",
                 "N_CURSO",
                 "FEC_INICIO",
                 "FEC_FIN",
                 "N_SECTOR_PRODUCTIVO",
                 "N_SEDE",
-                "CONVENIO_MUNICIPIO_COMUNA",
                 "N_DEPARTAMENTO",
                 "N_LOCALIDAD",
                 "POSTULACIONES",
                 "ALUMNOS",
-                "No asignados"
+                "No asignados",
+                "COMENZADO"
             ]
             
             # Filtrar solo columnas existentes para mostrar
@@ -758,6 +958,10 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                 .background_gradient(subset=["ALUMNOS"], cmap="Greens")\
                 .background_gradient(subset=["No asignados"], cmap="Oranges")\
                 .format({"POSTULACIONES": "{:,.0f}", "ALUMNOS": "{:,.0f}", "No asignados": "{:,.0f}"})
+            
+            # Resaltar visualmente los cursos comenzados con color verde
+            if "COMENZADO" in df_display.columns:
+                styled_display = styled_display.apply(lambda x: ['background-color: #a8f0a8' if x['COMENZADO'] else '' for i in range(len(x))], axis=1)
             
             # Mostrar la tabla con estilos
             st.dataframe(
@@ -792,7 +996,8 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                         geojson_departamentos = df
                         break
 
-           # Limpiar y convertir LATITUD y LONGITUD
+            # Limpiar y convertir LATITUD y LONGITUD
+            from utils.data_cleaning import convert_decimal_separator
             df_cursos = convert_decimal_separator(df_cursos, columns=["LATITUD", "LONGITUD"])
 
             # Asegúrate de que los valores sean strings antes de usar .str.extract()

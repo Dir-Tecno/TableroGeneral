@@ -1420,22 +1420,27 @@ def mostrar_global(df_filtrado_global, tooltips_categorias):
             styled_df = pivot_df_filtered.style.apply(highlight_total_rows, axis=1)
             st.dataframe(styled_df, use_container_width=True, hide_index=True)
             
-            # --- Generar DataFrame extendido para descarga (con columnas extra, pero sin renderizarlas en pantalla) ---
+            # --- Generar DataFrame extendido para descarga (con todas las categorías) ---
             columnas_extra = [
                 col for col in ['ID_GOBIERNO_LOCAL','TIPO', 'Gestion 2023-2027', 'FUERZAS', 'ESTADO', 'LEGISLADOR DEPARTAMENTAL'] if col in df_filtrado_global.columns
             ]
-            # Unir las columnas extra al DataFrame original (antes del agrupado)
-            df_descarga = df_categoria_estados[
-                ['N_DEPARTAMENTO', 'N_LOCALIDAD','N_LINEA_PRESTAMO'] + columnas_extra + ['NRO_SOLICITUD', 'N_ESTADO_PRESTAMO','MONTO_OTORGADO']
-            ].copy()
-            # Agregar columna de categoría
-            df_descarga['CATEGORIA'] = 'Otros'
+            
+            # Usar una copia del DataFrame filtrado globalmente para no estar limitado por la selección de categorías de la UI
+            df_para_descarga = df_filtrado_global.copy()
+
+            # Aplicar filtro por línea de crédito si está seleccionado
+            if selected_lineas:
+                df_para_descarga = df_para_descarga[df_para_descarga['N_LINEA_PRESTAMO'].isin(selected_lineas)]
+
+            # Asignar categorías
+            df_para_descarga['CATEGORIA'] = 'Otros'
             for categoria, estados in ESTADO_CATEGORIAS.items():
-                mask = df_descarga['N_ESTADO_PRESTAMO'].isin(estados)
-                df_descarga.loc[mask, 'CATEGORIA'] = categoria
-            # Agrupar para obtener el conteo y la suma de montos por las columnas extra y categoría
-            df_descarga_grouped = df_descarga.groupby(
-                ['N_DEPARTAMENTO', 'N_LOCALIDAD','N_LINEA_PRESTAMO'] + columnas_extra + ['CATEGORIA']
+                mask = df_para_descarga['N_ESTADO_PRESTAMO'].isin(estados)
+                df_para_descarga.loc[mask, 'CATEGORIA'] = categoria
+
+            # Agrupar para obtener el conteo y la suma de montos
+            df_descarga_grouped = df_para_descarga.groupby(
+                ['N_DEPARTAMENTO', 'N_LOCALIDAD', 'N_LINEA_PRESTAMO'] + columnas_extra + ['CATEGORIA']
             ).agg({
                 'NRO_SOLICITUD': 'count',
                 'MONTO_OTORGADO': 'sum'

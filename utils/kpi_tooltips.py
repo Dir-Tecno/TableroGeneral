@@ -33,7 +33,14 @@ TOOLTIPS_DESCRIPTIVOS = {
     "BENEFICIARIOS CTI": "Beneficiarios con Contrato de Trabajo Indeterminado",
     "EMPRESAS ADHERIDAS": "Total de empresas que se han adherido a los programas de empleo",
     "EMPRESAS CON BENEFICIARIOS": "Empresas que tienen al menos un beneficiario asignado",
-    "EMPRESAS SIN BENEFICIARIOS": "Empresas adheridas que no tienen beneficiarios asignados actualmente"
+    "EMPRESAS SIN BENEFICIARIOS": "Empresas adheridas que no tienen beneficiarios asignados actualmente",
+    
+    # Tooltips específicos para CBA Me Capacita
+    "POSTULANTES": "Total de personas que se han postulado para participar en los cursos de capacitación",
+    "CURSOS ACTIVOS": "Número de cursos que están actualmente disponibles o en ejecución aprobados con fecha de inicio disponibles para inscripción",
+    "CURSOS COMENZADOS": "Cursos que ya han iniciado sus actividades (fecha de inicio anterior o igual a la fecha actual)",
+    "PARTICIPANTES INSCRIPTOS": "Personas inscripctas en cursos de capacitación y están confirmadas como alumnos",
+    "CAPACITACIONES ELEGIDAS": "Total de opciones de capacitación seleccionadas por los postulantes"
 }
 
 # Tooltips para los estados de personas en los programas de empleo

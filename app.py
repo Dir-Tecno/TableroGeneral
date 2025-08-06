@@ -1,4 +1,4 @@
-from moduls.carga import load_data_from_minio, load_data_from_local
+from moduls.carga import load_data_from_minio, load_data_from_local, load_data_from_gitlab
 import streamlit as st
 from moduls.carga import load_data_from_minio, load_data_from_local 
 from moduls import bco_gente, cbamecapacita, empleo, emprendimientos 
@@ -11,7 +11,7 @@ from os import path
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Dashboard Integrado", 
+    page_title="Dashboard Resumen del Ministerio de Desarrollo Social y Promoción del Empleo", 
     layout="wide"
 )
 
@@ -24,21 +24,35 @@ st.markdown('<div class="main-header">Tablero General de Reportes para TEST</div
 # Mostrar campanita de novedades como elemento flotante
 show_notification_bell()
 
-# Configuración fija de GitLab
+# Configuración general
+
+# Opciones de fuente de datos: 'minio', 'gitlab', 'local'
+FUENTE_DATOS = "gitlab"  # Configurable por código: minio, gitlab o local
+
+# Configuración de GitLab
 repo_id = "Dir-Tecno/Repositorio-Reportes"
 branch = "main"
 
 # Ruta local para desarrollo
-# Determinar si estamos en producción (no en desarrollo local)
-is_production = not path.exists(path.join(path.dirname(__file__), "Repositorio-Reportes-main"))
 local_path = r"D:\DESARROLLO\REPORTES\TableroGeneral\Repositorio-Reportes-main"
 
-# Ya determinamos is_production arriba, ahora definimos is_development para mantener compatibilidad
-is_development = not is_production
+# Determinar el modo de desarrollo basado en la fuente de datos
+is_local = path.exists(local_path) and FUENTE_DATOS == "local"
+is_minio = FUENTE_DATOS == "minio" and not is_local
+is_gitlab = FUENTE_DATOS == "gitlab" and not is_local
 
-# Mostrar información sobre el modo de carga solo en desarrollo
+# Compatibilidad con código existente
+is_development = is_local
+is_production = not is_development
+
+# Mostrar información sobre el modo de carga
 if is_development:
-    st.success("Modo de desarrollo: Cargando datos desde carpeta local")
+    if is_local:
+        st.success("Modo de desarrollo: Cargando datos desde carpeta local")
+    elif is_minio:
+        st.success("Modo de producción: Cargando datos desde MinIO")
+    elif is_gitlab:
+        st.success("Modo de producción: Cargando datos desde GitLab")
 
 # Mapeo de archivos por módulo
 modules = {
@@ -63,9 +77,14 @@ minio_client = Minio(
     secure=False
 )
 
-# Listar objetos en el bucket de MinIO (nuevo código integrado)
-for obj in minio_client.list_objects(MINIO_BUCKET, recursive=True):
-    print(obj.object_name)
+# Listar objetos en el bucket de MinIO (en modo producción)
+if is_production:
+    try:
+        # Solo imprimir en consola, no en la UI de Streamlit
+        for obj in minio_client.list_objects(MINIO_BUCKET, recursive=True):
+            print(obj.object_name)
+    except Exception as e:
+        print(f"Error al listar objetos en MinIO: {str(e)}")
 
 # Crear pestañas
 tab_names = ["CBA Me Capacita", "Banco de la Gente",  "Programas de Empleo", "Emprendimientos"]
@@ -87,6 +106,16 @@ for idx, tab in enumerate(tabs):
         dates_key = f"{module_key}_dates"
         if data_key not in st.session_state or dates_key not in st.session_state:
             spinner_message = "Cargando datos desde " + ("carpeta local..." if is_development else "MinIO...")
+            # Mensaje según la fuente de datos configurada
+            if is_local:
+                spinner_message = "Cargando datos desde carpeta local..."
+            elif is_minio:
+                spinner_message = "Cargando datos desde MinIO..."
+            elif is_gitlab:
+                spinner_message = "Cargando datos desde GitLab..."
+            else:
+                spinner_message = "Cargando datos..."
+                
             with st.spinner(spinner_message):
                 def load_only_data():
                     # --- LÓGICA DE CARGA CONDICIONAL ---
@@ -100,10 +129,35 @@ for idx, tab in enumerate(tabs):
                     return data, dates
                 
                 with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future = executor.submit(load_only_data)
-                    data, dates = future.result()
+                    future = executor.submit(
+                        load_data_by_source,
+                        source_type,
+                        local_path,
+                        minio_client,
+                        MINIO_BUCKET,
+                        repo_id,
+                        branch,
+                        token,
+                        modules,
+                        module_key
+                    )
+                    data, dates, logs = future.result()
+                
+                # Actualizar session_state SOLO desde el hilo principal
                 st.session_state[data_key] = data
                 st.session_state[dates_key] = dates
+                st.session_state[f"{module_key}_logs"] = logs
+                
+                # Mostrar logs después de que el hilo haya terminado
+                logs_key = f"{module_key}_logs"
+                if logs_key in st.session_state:
+                    # Mostrar advertencias
+                    for warning in st.session_state[logs_key].get("warnings", []):
+                        st.warning(warning)
+                    
+                    # Mostrar información (opcional, puede ser comentado para reducir la salida)
+                    # for info in st.session_state[logs_key].get("info", []):
+                    #    st.info(info)
         st.markdown("***") # Separador visual
 
         # Verificar que las claves existen en session_state antes de llamar a show_func
