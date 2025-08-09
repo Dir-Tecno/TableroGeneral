@@ -112,10 +112,10 @@ def procesar_archivo(nombre, contenido, es_buffer, logs=None):
             return df, fecha
         elif nombre.endswith('.csv') or nombre.endswith('.txt'):
             if es_buffer:
-                df = pd.read_csv(io.BytesIO(contenido), sep=';')
+                df = pd.read_csv(io.BytesIO(contenido), sep=',')
                 fecha = datetime.datetime.now()
             else:
-                df = pd.read_csv(contenido, sep=';')
+                df = pd.read_csv(contenido, sep=',')
                 fecha = datetime.datetime.now()
             return df, fecha
         elif nombre.endswith('.geojson'):
