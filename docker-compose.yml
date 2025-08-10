@@ -6,7 +6,7 @@ services:
     restart: unless-stopped
     networks:
       front-net:
-        ipv4_address: 172.21.0.4
+        ipv4_address: 172.21.0.5
     ports:
       - 8501:8501
     environment:
