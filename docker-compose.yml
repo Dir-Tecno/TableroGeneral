@@ -8,7 +8,7 @@ services:
       front-net:
         ipv4_address: 172.21.0.8
     ports:
-      - 8501:8501
+      - 8504:8504
     environment:
       - GITLAB_TOKEN=glpat-jdZnZLkoh1TVj1v5YxGb
       - SLACK_WEBHOOK_URL=https://hooks.slack.com/services/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
