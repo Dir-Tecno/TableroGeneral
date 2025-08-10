@@ -18,7 +18,7 @@ show_notification_bell()
 # --- Configuración General ---
 FUENTE_DATOS = "gitlab"  # Opciones: 'minio', 'gitlab', 'local'
 REPO_ID = "Dir-Tecno/Repositorio-Reportes"
-BRANCH = "main"
+BRANCH = "test"
 LOCAL_PATH = r"D:\DESARROLLO\REPORTES\TableroGeneral\Repositorio-Reportes-main"
 MINIO_BUCKET = "repositorio-dashboard"
 
