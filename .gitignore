@@ -5,6 +5,4 @@ __pycache__/
 .env
 .streamlit/
 Repositorio-Reportes-main/
-docker-compose.yml
-Dockerfile
 .github\workflows\redeploy-portainer.yml
