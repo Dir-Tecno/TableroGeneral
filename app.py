@@ -16,7 +16,7 @@ st.markdown('<div class="main-header">Tablero General de Reportes para TEST</div
 show_notification_bell()
 
 # --- Configuración General ---
-FUENTE_DATOS = "local"  # Opciones: 'minio', 'gitlab', 'local'
+FUENTE_DATOS = "minio"  # Opciones: 'minio', 'gitlab', 'local'
 REPO_ID = "Dir-Tecno/Repositorio-Reportes"
 BRANCH = "main"
 LOCAL_PATH = r"D:\DESARROLLO\REPORTES\TableroGeneral\Repositorio-Reportes-main"
