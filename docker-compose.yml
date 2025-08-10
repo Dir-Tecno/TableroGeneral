@@ -1,8 +1,8 @@
 services:
   reportes_cba:
-    container_name: reportes_cba
+    container_name: reportes_cba_test
     build: 
-      context: https://oauth2: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@github.com/Dir-Tecno/TableroGeneral.git
+      context: https://oauth2:token@github.com/Dir-Tecno/TableroGeneral.git#test
     restart: unless-stopped
     networks:
       front-net:
