@@ -18,7 +18,7 @@ show_notification_bell()
 # --- Configuración General ---
 FUENTE_DATOS = "gitlab"  # Opciones: 'minio', 'gitlab', 'local'
 REPO_ID = "Dir-Tecno/Repositorio-Reportes"
-BRANCH = "test"
+BRANCH = "main"
 LOCAL_PATH = r"D:\DESARROLLO\REPORTES\TableroGeneral\Repositorio-Reportes-main"
 MINIO_BUCKET = "repositorio-dashboard"
 
@@ -72,11 +72,48 @@ def load_all_data():
 
     if FUENTE_DATOS == "gitlab":
         st.success("Modo de producción: Cargando datos desde GitLab.")
-        # Intenta leer el token desde la sección [gitlab] o como clave principal
-        gitlab_token = st.secrets.get("gitlab", {}).get("token") or st.secrets.get("gitlab_token")
-        if not gitlab_token or gitlab_token == "TU_TOKEN_DE_GITLAB_AQUI":
-            st.error("El token de GitLab no está configurado en los secretos. Por favor, añádelo a tu archivo .streamlit/secrets.toml")
+        
+        # Depuración: mostrar qué secretos están disponibles
+        with st.expander("🔍 Depuración de Secretos GitLab"):
+            st.write("**Secretos disponibles:**", list(st.secrets.keys()))
+            if "gitlab" in st.secrets:
+                st.write("**Sección [gitlab]:**", dict(st.secrets["gitlab"]))
+            else:
+                st.warning("No se encontró la sección [gitlab] en secrets.toml")
+        
+        # Intenta leer el token desde diferentes ubicaciones
+        gitlab_token = None
+        token_source = ""
+        
+        # Opción 1: Estructura anidada [gitlab] token = "..."
+        if "gitlab" in st.secrets and "token" in st.secrets["gitlab"]:
+            gitlab_token = st.secrets["gitlab"]["token"]
+            token_source = "gitlab.token"
+        # Opción 2: Clave directa gitlab_token = "..."
+        elif "gitlab_token" in st.secrets:
+            gitlab_token = st.secrets["gitlab_token"]
+            token_source = "gitlab_token"
+        
+        # Validar el token
+        if not gitlab_token:
+            st.error("❌ El token de GitLab no está configurado en los secretos.")
+            st.info("📝 Configura el token en tu archivo `.streamlit/secrets.toml` usando una de estas opciones:")
+            st.code("""# Opción 1 (recomendada):
+[gitlab]
+token = "tu_token_aqui"
+
+# Opción 2 (alternativa):
+gitlab_token = "tu_token_aqui" """)
             return {}, {}, {"warnings": ["Token de GitLab no configurado."], "info": []}
+        elif gitlab_token == "TU_TOKEN_DE_GITLAB_AQUI":
+            st.error("❌ El token de GitLab tiene el valor de ejemplo. Por favor, configura tu token real.")
+            return {}, {}, {"warnings": ["Token de GitLab no configurado (valor de ejemplo)."], "info": []}
+        else:
+            st.success(f"✅ Token de GitLab encontrado en: `{token_source}`")
+            # Mostrar solo los primeros y últimos caracteres del token para verificación
+            token_preview = f"{gitlab_token[:8]}...{gitlab_token[-4:]}" if len(gitlab_token) > 12 else "***"
+            st.info(f"🔑 Token: `{token_preview}`")
+        
         return load_data_from_gitlab(REPO_ID, BRANCH, gitlab_token, modules)
 
     st.error(f"Fuente de datos no reconocida: {FUENTE_DATOS}")
