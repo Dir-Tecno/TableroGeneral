@@ -215,14 +215,27 @@ def obtener_lista_archivos_gitlab(repo_id, branch, token, logs=None):
         headers = {'PRIVATE-TOKEN': token}
         params = {'ref': branch, 'recursive': True}
         
+        logs["info"].append(f"Intentando acceder a: {url} con branch: {branch}")
+        
         try:
             response = requests.get(url, headers=headers, params=params)
+            logs["info"].append(f"Respuesta HTTP: {response.status_code}")
             
             if response.status_code == 200:
                 items = response.json()
                 files = [item['path'] for item in items if item['type'] == 'blob']
                 logs["info"].append(f"Se encontraron {len(files)} archivos en GitLab.")
+                if files:
+                    logs["info"].append(f"Primeros archivos encontrados: {files[:5]}")
                 return files, logs
+            elif response.status_code == 404:
+                logs["warnings"].append(f"Repositorio no encontrado con formato {id_formato} o branch '{branch}' no existe")
+            elif response.status_code == 401:
+                logs["warnings"].append(f"Token no válido o sin permisos para acceder al repositorio {id_formato}")
+            elif response.status_code == 403:
+                logs["warnings"].append(f"Acceso denegado al repositorio {id_formato}")
+            else:
+                logs["warnings"].append(f"Error HTTP {response.status_code} para {id_formato}: {response.text[:200]}")
         except Exception as e:
             logs["warnings"].append(f"Error al obtener lista de archivos con formato {id_formato}: {str(e)}")
             continue
