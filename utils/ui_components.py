@@ -63,7 +63,13 @@ def show_last_update(dates, file_substring, mensaje="Última actualización"):
             latest_date = latest_date - pd.Timedelta(hours=3)
         st.markdown(f"""
             <div style="background-color:#e9ecef; padding:10px; border-radius:5px; margin-bottom:20px; font-size:0.9em;">
-                <i class="fas fa-sync-alt"></i> <strong>{mensaje}:</strong> {latest_date.strftime('%d/%m/%Y %H:%M')}
+                <i class="fas fa-sync-alt"></i> <strong>{mensaje} ({clave_encontrada}):</strong> {latest_date.strftime('%d/%m/%Y %H:%M')}
+            </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown(f"""
+            <div style="background-color:#ffecec; padding:10px; border-radius:5px; margin-bottom:20px; font-size:0.9em; color:#a94442;">
+                <i class="fas fa-exclamation-circle"></i> <strong>{mensaje}:</strong> No disponible
             </div>
         """, unsafe_allow_html=True)
 

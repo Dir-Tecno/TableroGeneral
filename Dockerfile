@@ -7,7 +7,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     STREAMLIT_SERVER_HEADLESS=true \
     DEBIAN_FRONTEND=noninteractive
 
-# Instalar dependencias del sistema
+# Instalar dependencias del sistema (sin libatlas-base-dev ni python3-gdal)
 RUN apt-get update && apt-get install -y \
     git \
     ca-certificates \
@@ -15,13 +15,16 @@ RUN apt-get update && apt-get install -y \
     libgeos-dev \
     libproj-dev \
     gdal-bin \
-    python3-gdal \
     gfortran \
     pkg-config \
     python3-dev \
-    libatlas-base-dev \
     libopenblas-dev \
+    liblapack-dev \
     && rm -rf /var/lib/apt/lists/*
+
+# Variables de entorno para GDAL
+ENV CPLUS_INCLUDE_PATH=/usr/include/gdal
+ENV C_INCLUDE_PATH=/usr/include/gdal
 
 # Crear directorio de la aplicación
 WORKDIR /app
