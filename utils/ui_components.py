@@ -41,15 +41,12 @@ def show_dev_dataframe_info(data, modulo_nombre="Módulo", info_caption=None):
     st.markdown("***")
     
 def show_last_update(dates, file_substring, mensaje="Última actualización"):
-    """
-    Muestra la fecha de última actualización para un archivo específico.
-    Args:
-        dates: dict con fechas de actualización.
-        file_substring: substring para buscar la clave relevante en dates.
-        mensaje: texto a mostrar antes de la fecha.
-    """
-    file_dates = [dates.get(k) for k in dates.keys() if file_substring in k]
-    latest_date = file_dates[0] if file_dates else None
+    clave_encontrada = None
+    for k in dates.keys():
+        if file_substring in k:
+            clave_encontrada = k
+            break
+    latest_date = dates.get(clave_encontrada) if clave_encontrada else None
     if latest_date:
         latest_date = pd.to_datetime(latest_date)
         try:
@@ -59,7 +56,13 @@ def show_last_update(dates, file_substring, mensaje="Última actualización"):
             latest_date = latest_date - pd.Timedelta(hours=3)
         st.markdown(f"""
             <div style="background-color:#e9ecef; padding:10px; border-radius:5px; margin-bottom:20px; font-size:0.9em;">
-                <i class="fas fa-sync-alt"></i> <strong>{mensaje}:</strong> {latest_date.strftime('%d/%m/%Y %H:%M')}
+                <i class="fas fa-sync-alt"></i> <strong>{mensaje} ({clave_encontrada}):</strong> {latest_date.strftime('%d/%m/%Y %H:%M')}
+            </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown(f"""
+            <div style="background-color:#ffecec; padding:10px; border-radius:5px; margin-bottom:20px; font-size:0.9em; color:#a94442;">
+                <i class="fas fa-exclamation-circle"></i> <strong>{mensaje}:</strong> No disponible
             </div>
         """, unsafe_allow_html=True)
 
