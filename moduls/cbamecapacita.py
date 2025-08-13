@@ -5,8 +5,10 @@ import plotly.graph_objects as go
 import altair as alt
 from utils.ui_components import display_kpi_row, show_dev_dataframe_info, show_last_update
 from utils.kpi_tooltips import TOOLTIPS_DESCRIPTIVOS
+from utils.duckdb_utils import DuckDBProcessor, create_duckdb_processor, COMMON_QUERIES
 import geopandas as gpd
 import json
+import duckdb
 
 def create_cbamecapacita_kpi(resultados):
     """
@@ -213,7 +215,132 @@ def load_and_preprocess_data(data, is_development=False):
         show_dev_dataframe_info(df_postulantes, "df_postulantes")
         show_dev_dataframe_info(df_alumnos, "df_alumnos")
         show_dev_dataframe_info(df_cursos, "df_cursos")
-    return df_postulantes, df_alumnos, df_cursos
+    return df_postulantes, df_cursos, df_alumnos
+
+def load_and_preprocess_data_duckdb(data, is_development=False):
+    """
+    Versión optimizada con DuckDB para carga y preprocesamiento de datos CBA ME CAPACITA.
+    Mejora significativa en rendimiento para JOINs y agregaciones complejas.
+    
+    Args:
+        data (dict): Diccionario con los DataFrames cargados
+        is_development (bool): Modo desarrollo para debugging
+        
+    Returns:
+        tuple: (df_postulantes, df_cursos, df_alumnos) procesados
+    """
+    with st.spinner("🚀 Procesando datos con DuckDB (optimizado)..."):
+        # Mapeo de archivos a nombres de tabla
+        table_mapping = {
+            "VT_INSCRIPCIONES_PRG129.parquet": "postulantes",
+            "VT_CURSOS_SEDES_GEO.parquet": "cursos", 
+            "VT_ALUMNOS_EN_CURSOS.parquet": "alumnos"
+        }
+        
+        # Crear procesador DuckDB y registrar tablas
+        processor = create_duckdb_processor(data, table_mapping)
+        
+        try:
+            # === PASO 1: Calcular agregaciones con DuckDB ===
+            # Conteo de postulaciones por ID_CERTIFICACION
+            postulaciones_query = """
+            SELECT 
+                CAST(ID_CERTIFICACION AS INTEGER) as ID_CERTIFICACION,
+                COUNT(CASE WHEN CUIL IS NOT NULL THEN 1 END) as POSTULACIONES
+            FROM postulantes
+            WHERE ID_CERTIFICACION IS NOT NULL
+            GROUP BY ID_CERTIFICACION
+            """
+            
+            # Conteo de alumnos por ID_PLANIFICACION
+            alumnos_count_query = """
+            SELECT 
+                ID_PLANIFICACION,
+                COUNT(CASE WHEN ID_ALUMNO IS NOT NULL THEN 1 END) as ALUMNOS
+            FROM alumnos
+            WHERE ID_PLANIFICACION IS NOT NULL
+            GROUP BY ID_PLANIFICACION
+            """
+            
+            # === PASO 2: JOIN complejo para cursos con todas las métricas ===
+            cursos_completo_query = f"""
+            WITH postulaciones_agg AS ({postulaciones_query}),
+                 alumnos_agg AS ({alumnos_count_query})
+            SELECT 
+                c.*,
+                COALESCE(p.POSTULACIONES, 0) as POSTULACIONES,
+                COALESCE(a.ALUMNOS, 0) as ALUMNOS,
+                GREATEST(0, COALESCE(p.POSTULACIONES, 0) - COALESCE(a.ALUMNOS, 0)) as "No asignados",
+                CASE 
+                    WHEN c.FEC_INICIO IS NOT NULL AND c.FEC_INICIO <= CURRENT_DATE 
+                    THEN true 
+                    ELSE false 
+                END as COMENZADO
+            FROM cursos c
+            LEFT JOIN postulaciones_agg p ON c.ID_PLANIFICACION = p.ID_CERTIFICACION
+            LEFT JOIN alumnos_agg a ON c.ID_PLANIFICACION = a.ID_PLANIFICACION
+            """
+            
+            df_cursos_processed = processor.execute_query(cursos_completo_query)
+            
+            # === PASO 3: Procesar postulantes con normalización y columna ALUMNO ===
+            postulantes_completo_query = f"""
+            SELECT 
+                p.*,
+                {COMMON_QUERIES['departamentos_validos']},
+                {COMMON_QUERIES['zonas_favorecidas']},
+                {COMMON_QUERIES['corregir_capital']},
+                CASE 
+                    WHEN a.CUIL IS NOT NULL THEN p.CUIL 
+                    ELSE NULL 
+                END as ALUMNO
+            FROM postulantes p
+            LEFT JOIN (
+                SELECT DISTINCT CUIL 
+                FROM alumnos 
+                WHERE CUIL IS NOT NULL
+            ) a ON p.CUIL = a.CUIL
+            WHERE p.CUIL IS NOT NULL
+            """
+            
+            df_postulantes_final = processor.execute_query(postulantes_completo_query)
+            
+            # === PASO 5: Obtener DataFrame de alumnos (sin cambios mayores) ===
+            df_alumnos_processed = processor.execute_query("SELECT * FROM alumnos")
+            
+            # Logging de rendimiento en modo desarrollo
+            if is_development:
+                st.success("✅ Procesamiento DuckDB completado")
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Postulantes", f"{len(df_postulantes_final):,}")
+                with col2:
+                    st.metric("Cursos", f"{len(df_cursos_processed):,}")
+                with col3:
+                    st.metric("Alumnos", f"{len(df_alumnos_processed):,}")
+                
+                # Mostrar estadísticas de las nuevas columnas
+                if 'ALUMNOS' in df_cursos_processed.columns:
+                    total_alumnos = df_cursos_processed['ALUMNOS'].sum()
+                    st.info(f"📊 Total alumnos: {total_alumnos:,}")
+                
+                if 'COMENZADO' in df_cursos_processed.columns:
+                    cursos_comenzados = df_cursos_processed['COMENZADO'].sum()
+                    total_cursos = len(df_cursos_processed)
+                    porcentaje = (cursos_comenzados/total_cursos*100) if total_cursos > 0 else 0
+                    st.info(f"🎯 Cursos comenzados: {cursos_comenzados:,} de {total_cursos:,} ({porcentaje:.1f}%)")
+            
+            return df_postulantes_final, df_cursos_processed, df_alumnos_processed
+            
+        except Exception as e:
+            st.error(f"❌ Error en procesamiento DuckDB: {str(e)}")
+            st.warning("🔄 Fallback a procesamiento pandas...")
+            # Fallback a la función original
+            return load_and_preprocess_data(data, is_development)
+        
+        finally:
+            # Limpiar recursos
+            processor.close()
 
 def show_cba_capacita_dashboard(data, dates, is_development=False):
     """
@@ -234,8 +361,14 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
 
     
 
-    # --- Usar función de carga y preprocesamiento ---
-    df_postulantes, df_alumnos, df_cursos = load_and_preprocess_data(data, is_development)
+    # --- Usar función de carga y preprocesamiento optimizada con DuckDB ---
+    # Opción para alternar entre pandas y DuckDB
+    use_duckdb = st.sidebar.checkbox("🚀 Usar DuckDB (Optimizado)", value=True, help="Usa DuckDB para mejor rendimiento en procesamiento de datos")
+    
+    if use_duckdb:
+        df_postulantes, df_cursos, df_alumnos = load_and_preprocess_data_duckdb(data, is_development)
+    else:
+        df_postulantes, df_cursos, df_alumnos = load_and_preprocess_data(data, is_development)
 
 
 
