@@ -44,7 +44,7 @@ show_notification_bell()
 # Configuración general
 
 # Opciones de fuente de datos: 'minio', 'gitlab', 'local'
-FUENTE_DATOS = "gitlab"  # Configurable por código: minio, gitlab o local
+FUENTE_DATOS = "local"  # Configurable por código: minio, gitlab o local
 
 # Configuración de GitLab
 repo_id = "Dir-Tecno/Repositorio-Reportes"
