@@ -5,7 +5,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import json
 from datetime import datetime, timedelta
-from utils.ui_components import display_kpi_row
+from utils.ui_components import display_kpi_row, show_last_update
 from utils.map_utils import create_choropleth_map, display_map
 from utils.styles import COLORES_IDENTIDAD
 from utils.data_cleaning import clean_thousand_separator, convert_decimal_separator
@@ -182,6 +182,10 @@ def show_empleo_dashboard(data, dates, is_development=False):
         dates: Diccionario con las fechas de actualización
         is_development: Booleano que indica si estamos en modo desarrollo
     """
+    # Mostrar última actualización al inicio del dashboard
+    if dates:
+        show_last_update(dates, 'VT_REPORTES_PPP_MAS26.parquet')
+    
     if data is None:
         st.error("No se pudieron cargar los datos de Programas de Empleo.")
         return
@@ -316,9 +320,7 @@ def load_and_preprocess_data(data, dates=None, is_development=False):
             df_empresas['ZONA'] = df_empresas['N_DEPARTAMENTO'].apply(
                 lambda x: 'ZONA NOC Y SUR' if x in zonas_favorecidas else 'ZONA REGULAR'
             )
-                # Mostrar la fecha de última actualización
-        from utils.ui_components import show_last_update
-        show_last_update(dates, 'VT_REPORTES_PPP_MAS26.parquet')
+
         
 
         

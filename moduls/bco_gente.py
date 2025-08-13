@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
-from utils.ui_components import display_kpi_row
+from utils.ui_components import display_kpi_row, show_last_update
 from utils.styles import COLORES_IDENTIDAD, COLOR_PRIMARY, COLOR_SECONDARY, COLOR_ACCENT_1, COLOR_ACCENT_2, COLOR_ACCENT_3, COLOR_ACCENT_4, COLOR_ACCENT_5, COLOR_TEXT_DARK
 from utils.kpi_tooltips import ESTADO_CATEGORIAS, TOOLTIPS_DESCRIPTIVOS
 
@@ -569,7 +569,10 @@ def show_bco_gente_dashboard(data, dates, is_development=False):
         dates: Diccionario con fechas de actualización.
         is_development (bool): True si se está en modo desarrollo.
     """
-   
+    # Mostrar última actualización al inicio del dashboard
+    if dates:
+        from utils.ui_components import show_last_update
+        show_last_update(dates, 'VT_NOMINA_REP_RECUPERO_X_ANIO.parquet')
     
     # Mostrar columnas en modo desarrollo
     if is_development:
@@ -579,7 +582,7 @@ def show_bco_gente_dashboard(data, dates, is_development=False):
     df_global = None
     df_global_pagados = None
     
-     # Cargar y preprocesar datos
+    # Cargar y preprocesar datos
     df_global, geojson_data, df_localidad_municipio, df_global_pagados = load_and_preprocess_data(data)
     
     if is_development:
@@ -612,9 +615,7 @@ def show_bco_gente_dashboard(data, dates, is_development=False):
     # Crear una copia del DataFrame para trabajar con él
     df_filtrado_global = df_global.copy()
     
-    # Mostrar última actualización
-    from utils.ui_components import show_last_update
-    show_last_update(dates, 'VT_NOMINA_REP_RECUPERO_X_ANIO.parquet')
+
     
     # Crear pestañas para las diferentes vistas
     tab_global, tab_recupero = st.tabs(["GLOBAL", "RECUPERO"])

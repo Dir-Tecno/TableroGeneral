@@ -48,8 +48,12 @@ def show_last_update(dates, file_substring, mensaje="Última actualización"):
         file_substring: substring para buscar la clave relevante en dates.
         mensaje: texto a mostrar antes de la fecha.
     """
+    if not dates:
+        return
+        
     file_dates = [dates.get(k) for k in dates.keys() if file_substring in k]
     latest_date = file_dates[0] if file_dates else None
+    
     if latest_date:
         latest_date = pd.to_datetime(latest_date)
         try:
