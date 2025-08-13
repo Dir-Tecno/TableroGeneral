@@ -351,20 +351,26 @@ def load_data_from_minio(minio_client, bucket, modules):
     return all_data, all_dates, logs
 
 def obtener_fecha_commit_gitlab(repo_id, branch, file_path, token):
-    url = f"https://gitlab.com/api/v4/projects/{repo_id}/repository/commits"
-    headers = {'PRIVATE-TOKEN': token}
-    params = {'ref_name': branch, 'path': file_path, 'per_page': 1}
-    response = requests.get(url, headers=headers, params=params)
-    if response.status_code == 200:
-        commits = response.json()
-        if commits:
-            return commits[0]['committed_date']
-    return None
+    try:
+        url = f"https://gitlab.com/api/v4/projects/{repo_id}/repository/commits"
+        headers = {'PRIVATE-TOKEN': token}
+        params = {'ref_name': branch, 'path': file_path, 'per_page': 1}
+        response = requests.get(url, headers=headers, params=params)
+        if response.status_code == 200:
+            commits = response.json()
+            if commits:
+                return commits[0]['committed_date']
+    except Exception as e:
+        # En caso de error, usar fecha actual como fallback
+        pass
+    
+    # Fallback: usar fecha actual si no se puede obtener la fecha del commit
+    return datetime.datetime.now().isoformat()
 
 def load_data_from_gitlab(repo_id, branch, token, modules):
     """
     Carga datos desde GitLab.
-    Args:
+{{ ... }}
         repo_id (str): ID del repositorio en formato "namespace/project".
         branch (str): Rama del repositorio.
         token (str): Token de acceso a GitLab.

@@ -1,12 +1,16 @@
 import streamlit as st
 import pandas as pd
 import os
-from utils.ui_components import display_kpi_row, show_dev_dataframe_info
+from utils.ui_components import display_kpi_row, show_dev_dataframe_info, show_last_update
 
 def show_emprendimientos_dashboard(data=None, dates=None, is_development=False):
     """
     Muestra el dashboard de Emprendimientos. Estructura compatible con app.py y los otros módulos.
     """
+    # Mostrar última actualización al inicio del dashboard
+    if dates:
+        show_last_update(dates, 'desarrollo_emprendedor.csv')
+    
     nombre_archivo = 'desarrollo_emprendedor.csv'
 
     if not data or nombre_archivo not in data:

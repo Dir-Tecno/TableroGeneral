@@ -224,6 +224,10 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
         dates: Diccionario con fechas de actualización.
         is_development (bool): True si se está en modo desarrollo.
     """
+    # Mostrar última actualización al inicio del dashboard
+    if dates:
+        show_last_update(dates, 'VT_INSCRIPCIONES_PRG129.parquet')
+    
     if data is None:
         st.error("No se pudieron cargar los datos de CBA ME CAPACITA.")
         return
@@ -262,8 +266,7 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
     if df_cursos is not None and 'COMENZADO' in df_cursos.columns:
         # Usar la columna COMENZADO ya calculada en load_and_preprocess_data
         cursos_comenzados = df_cursos[df_cursos['COMENZADO']]['ID_PLANIFICACION'].nunique()
-    # Mostrar información de actualización de datos
-    show_last_update(dates, 'VT_INSCRIPCIONES_PRG129.parquet')
+
     
     # Crear un diccionario con los resultados para pasarlo a la función de KPIs
     resultados = {
