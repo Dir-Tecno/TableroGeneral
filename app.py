@@ -1,6 +1,6 @@
 from moduls.carga import load_data_from_minio, load_data_from_local, load_data_from_gitlab
 import streamlit as st
-from moduls import bco_gente, cbamecapacita, empleo, emprendimientos
+from moduls import bco_gente, cbamecapacita, empleo
 from utils.styles import setup_page
 from utils.ui_components import render_footer, show_notification_bell
 from minio import Minio
@@ -31,8 +31,8 @@ modules = {
     'bco_gente': ['VT_CUMPLIMIENTO_FORMULARIOS.parquet', 'VT_NOMINA_REP_RECUPERO_X_ANIO.parquet', 
                    'capa_departamentos_2010.geojson', 'LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt'],
     'cba_capacita': ['VT_ALUMNOS_EN_CURSOS.parquet','VT_INSCRIPCIONES_PRG129.parquet', 'VT_CURSOS_SEDES_GEO.parquet', 'capa_departamentos_2010.geojson'],
-    'empleo': ['LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt','VT_REPORTES_PPP_MAS26.parquet', 'vt_empresas_adheridas.parquet','vt_empresas_ARCA.parquet', 'VT_PUESTOS_X_FICHAS.parquet','capa_departamentos_2010.geojson'],
-    'emprendimientos': ['desarrollo_emprendedor.csv']
+    'empleo': ['LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt','VT_REPORTES_PPP_MAS26.parquet', 'vt_empresas_adheridas.parquet','vt_empresas_ARCA.parquet', 'VT_PUESTOS_X_FICHAS.parquet','capa_departamentos_2010.geojson']
+    
 }
 
 # --- Funciones Cacheadas para Rendimiento ---
@@ -141,14 +141,13 @@ with st.expander("🔍 Estado de la Carga de Datos (Depuración)"):
             st.info(info)
 
 # --- Definición de Pestañas ---
-tab_names = ["CBA Me Capacita", "Banco de la Gente", "Programas de Empleo", "Emprendimientos"]
+tab_names = ["CBA Me Capacita", "Banco de la Gente", "Programas de Empleo"]
 tabs = st.tabs(tab_names)
-tab_keys = ['cba_capacita', 'bco_gente', 'empleo', 'emprendimientos']
+tab_keys = ['cba_capacita', 'bco_gente', 'empleo']
 tab_functions = [
     cbamecapacita.show_cba_capacita_dashboard,
     bco_gente.show_bco_gente_dashboard,
-    empleo.show_empleo_dashboard,
-    emprendimientos.show_emprendimientos_dashboard
+    empleo.show_empleo_dashboard
 ]
 
 # --- Renderizado de Pestañas ---
