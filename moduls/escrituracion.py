@@ -4,6 +4,7 @@ from datetime import datetime
 import streamlit as st
 from utils.ui_components import display_kpi_row
 from utils.styles import apply_styles
+import json
 
 # --- CONFIGURACIÓN ---
 COLUMNS = [
@@ -166,7 +167,16 @@ def show_escrituracion_dashboard(data=None, dates=None, is_development=False):
     sheet_url = 'https://docs.google.com/spreadsheets/d/1V9vXwMQJjd4kLdJZQncOSoWggQk8S7tBKxbOSEIUoQ8/edit#gid=1593263408'
     creds_json = st.secrets.get('ESCRITURACION_CREDS_JSON', 'credenciales.json')
     try:
-        df = cargar_datos(sheet_url, creds_json)
+        # Cargar credenciales desde secretos
+        creds_json = st.secrets["google_cloud"]["service_account"]
+        creds = json.loads(creds_json)
+
+        # Usar las credenciales
+        from oauth2client.service_account import ServiceAccountCredentials
+        scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds, scope)
+
+        df = cargar_datos(sheet_url, creds)
         if df is None or df.empty:
             st.warning('No hay datos para mostrar.')
             return
