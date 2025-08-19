@@ -284,12 +284,48 @@ def load_and_preprocess_data_duckdb(data, is_development=False):
             df_cursos_processed = processor.execute_query(cursos_completo_query)
             
             # === PASO 3: Procesar postulantes con normalización y columna ALUMNO ===
+            # Primero obtener las columnas disponibles
+            columns_query = "DESCRIBE postulantes"
+            columns_info = processor.execute_query(columns_query)
+            available_columns = columns_info['column_name'].tolist()
+            
+            # Construir SELECT dinámicamente basado en columnas disponibles
+            base_columns = ['CUIL', 'ID_CERTIFICACION']
+            optional_columns = ['FEC_NACIMIENTO', 'N_SEXO', 'N_NIVEL_EDUCATIVO', 'N_SITUACION_LABORAL', 'N_CERTIFICACION', 'EDUCACION', 'TIPO_TRABAJO', 'ID_SEXO']
+            
+            select_columns = []
+            for col in base_columns + optional_columns:
+                if col in available_columns:
+                    select_columns.append(f"p.{col}")
+            
+            select_clause = ", ".join(select_columns)
+            
             postulantes_completo_query = f"""
             SELECT 
-                p.*,
-                {COMMON_QUERIES['departamentos_validos']},
-                {COMMON_QUERIES['zonas_favorecidas']},
-                {COMMON_QUERIES['corregir_capital']},
+                {select_clause},
+                CASE 
+                    WHEN p.N_DEPARTAMENTO IN (
+                        'CAPITAL', 'CALAMUCHITA', 'COLON', 'CRUZ DEL EJE', 'GENERAL ROCA', 
+                        'GENERAL SAN MARTIN', 'ISCHILIN', 'JUAREZ CELMAN', 'MARCOS JUAREZ', 
+                        'MINAS', 'POCHO', 'PRESIDENTE ROQUE SAENZ PEÑA', 'PUNILLA', 
+                        'RIO CUARTO', 'RIO PRIMERO', 'RIO SECO', 'RIO SEGUNDO', 
+                        'SAN ALBERTO', 'SAN JAVIER', 'SAN JUSTO', 'SANTA MARIA', 
+                        'SOBREMONTE', 'TERCERO ARRIBA', 'TOTORAL', 'TULUMBA', 'UNION'
+                    ) THEN p.N_DEPARTAMENTO 
+                    ELSE 'OTROS' 
+                END as N_DEPARTAMENTO,
+                CASE 
+                    WHEN p.N_DEPARTAMENTO IN (
+                        'PRESIDENTE ROQUE SAENZ PEÑA', 'GENERAL ROCA', 'RIO SECO', 'TULUMBA', 
+                        'POCHO', 'SAN JAVIER', 'SAN ALBERTO', 'MINAS', 'CRUZ DEL EJE', 
+                        'TOTORAL', 'SOBREMONTE', 'ISCHILIN'
+                    ) THEN 'ZONA NOC Y SUR'
+                    ELSE 'ZONA REGULAR'
+                END as ZONA,
+                CASE 
+                    WHEN p.N_DEPARTAMENTO = 'CAPITAL' THEN 'CORDOBA'
+                    ELSE p.N_LOCALIDAD
+                END as N_LOCALIDAD,
                 CASE 
                     WHEN a.CUIL IS NOT NULL THEN p.CUIL 
                     ELSE NULL 
@@ -465,14 +501,22 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
         
         st.markdown("***") # Separador
         if df_postulantes is not None and not df_postulantes.empty:
-            # Filtros interactivos
+            # Filtros interactivos anidados
             col1, col2 = st.columns(2)
             with col1:
                 departamentos = sorted(df_postulantes['N_DEPARTAMENTO'].dropna().unique())
                 selected_dpto = st.selectbox("Departamento:", ["Todos"] + departamentos)
+            
             with col2:
-                localidades = sorted(df_postulantes['N_LOCALIDAD'].dropna().unique())
-                selected_loc = st.selectbox("Localidad:", ["Todos"] + localidades)
+                # Filtrar localidades según el departamento seleccionado
+                if selected_dpto != "Todos":
+                    localidades_filtradas = sorted(
+                        df_postulantes[df_postulantes['N_DEPARTAMENTO'] == selected_dpto]['N_LOCALIDAD'].dropna().unique()
+                    )
+                else:
+                    localidades_filtradas = sorted(df_postulantes['N_LOCALIDAD'].dropna().unique())
+                
+                selected_loc = st.selectbox("Localidad:", ["Todos"] + localidades_filtradas)
             df_filtered = df_postulantes.copy()
             if selected_dpto != "Todos":
                 df_filtered = df_filtered[df_filtered['N_DEPARTAMENTO'] == selected_dpto]

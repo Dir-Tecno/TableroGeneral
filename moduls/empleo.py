@@ -10,6 +10,7 @@ from utils.map_utils import create_choropleth_map, display_map
 from utils.styles import COLORES_IDENTIDAD
 from utils.data_cleaning import clean_thousand_separator, convert_decimal_separator
 from utils.kpi_tooltips import TOOLTIPS_DESCRIPTIVOS, ESTADO_TOOLTIPS
+from utils.duckdb_utils import DuckDBProcessor
 import folium
 from streamlit_folium import folium_static
 import geopandas as gpd
@@ -185,12 +186,25 @@ def show_empleo_dashboard(data, dates, is_development=False):
     if data is None:
         st.error("No se pudieron cargar los datos de Programas de Empleo.")
         return
+    
+    # Toggle para usar DuckDB
+    use_duckdb = st.sidebar.checkbox(
+        "🚀 Usar DuckDB (Optimizado)", 
+        value=True, 
+        help="Usa DuckDB para mejor rendimiento en procesamiento de datos",
+        key="empleo_use_duckdb"
+    )
+    
     # Mostrar info de desarrollo de los DataFrames
     if is_development:
         from utils.ui_components import show_dev_dataframe_info
         show_dev_dataframe_info(data, modulo_nombre="Empleo")
+    
     # Cargar y preprocesar los datos
-    df_inscriptos, df_empresas, geojson_data,  has_empresas, has_geojson = load_and_preprocess_data(data, dates, is_development)
+    if use_duckdb:
+        df_inscriptos, df_empresas, geojson_data, has_empresas, has_geojson = load_and_preprocess_data_duckdb(data, dates, is_development)
+    else:
+        df_inscriptos, df_empresas, geojson_data, has_empresas, has_geojson = load_and_preprocess_data(data, dates, is_development)
     
     # Renderizar el dashboard principal
     render_dashboard(df_inscriptos, df_empresas, geojson_data, has_empresas, has_geojson)
@@ -380,6 +394,237 @@ def load_and_preprocess_data(data, dates=None, is_development=False):
                     st.write(f"Filas: {df_inscriptos_cruzado.shape[0]}, Columnas: {df_inscriptos_cruzado.shape[1]}")
         # Retornar los dataframes procesados y los flags de disponibilidad
         return df_inscriptos_sin_adherido, df_empresas,  geojson_data,  has_empresas, has_geojson
+
+
+@st.cache_data(ttl=3600)
+def load_and_preprocess_data_duckdb(data, dates=None, is_development=False):
+    """
+    Versión optimizada con DuckDB para carga y preprocesamiento de datos de empleo.
+    
+    Args:
+        data: Diccionario de dataframes cargados desde GitLab
+        dates: Diccionario de fechas de actualización de los archivos
+        is_development: Booleano que indica si estamos en modo desarrollo
+        
+    Returns:
+        Tupla con los dataframes procesados y flags de disponibilidad
+    """
+    try:
+        with st.spinner("🚀 Procesando datos de empleo con DuckDB..."):
+            # Extraer los dataframes necesarios
+            df_inscriptos_raw = data.get('VT_REPORTES_PPP_MAS26.parquet')
+            geojson_data = data.get('capa_departamentos_2010.geojson')
+            df_circuitos = data.get('LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt')
+            df_empresas_raw = data.get('vt_empresas_adheridas.parquet')
+            df_arca = data.get('vt_empresas_ARCA.parquet')
+            
+            # Verificar disponibilidad de datos
+            if df_inscriptos_raw is None or df_inscriptos_raw.empty:
+                st.error("No se pudieron cargar los datos de inscripciones.")
+                return None, None, None, False, False
+            
+            has_empresas = df_empresas_raw is not None and not df_empresas_raw.empty
+            has_geojson = geojson_data is not None
+            has_circuitos = df_circuitos is not None and not df_circuitos.empty
+            
+            # Inicializar DuckDB
+            processor = DuckDBProcessor()
+            
+            # Registrar tablas principales
+            processor.register_dataframe(df_inscriptos_raw, "inscriptos_raw")
+            
+            if has_empresas:
+                processor.register_dataframe(df_empresas_raw, "empresas_raw")
+            
+            if df_arca is not None and not df_arca.empty:
+                processor.register_dataframe(df_arca, "arca")
+            
+            if has_circuitos:
+                processor.register_dataframe(df_circuitos, "circuitos")
+            
+            # Mostrar fecha de última actualización
+            from utils.ui_components import show_last_update
+            show_last_update(dates, 'VT_REPORTES_PPP_MAS26.parquet')
+            
+            # === PASO 1: Crear df_emp_ben (beneficiarios por empresa) ===
+            emp_ben_query = """
+            SELECT 
+                REPLACE(EMP_CUIT, '-', '') as CUIT,
+                COUNT(ID_FICHA) as BENEF
+            FROM inscriptos_raw
+            WHERE IDETAPA IN (51, 53, 54, 55) 
+              AND N_ESTADO_FICHA = 'BENEFICIARIO'
+            GROUP BY REPLACE(EMP_CUIT, '-', '')
+            """
+            df_emp_ben = processor.execute_query(emp_ben_query)
+            processor.register_dataframe(df_emp_ben, "emp_ben")
+            
+            # === PASO 2: Procesar empresas con JOINs ===
+            if has_empresas:
+                # Limpiar y procesar empresas con ARCA
+                empresas_query = """
+                SELECT 
+                    e.*,
+                    REPLACE(e.CUIT, '-', '') as CUIT_CLEAN,
+                    CASE 
+                        WHEN e.N_DEPARTAMENTO IN (
+                            'PRESIDENTE ROQUE SAENZ PEÑA', 'GENERAL ROCA', 'RIO SECO', 'TULUMBA', 
+                            'POCHO', 'SAN JAVIER', 'SAN ALBERTO', 'MINAS', 'CRUZ DEL EJE', 
+                            'TOTORAL', 'SOBREMONTE', 'ISCHILIN'
+                        ) THEN 'ZONA NOC Y SUR' 
+                        ELSE 'ZONA REGULAR' 
+                    END as ZONA
+                FROM empresas_raw e
+                """
+                df_empresas_processed = processor.execute_query(empresas_query)
+                processor.register_dataframe(df_empresas_processed, "empresas_processed")
+                
+                # JOIN con ARCA si está disponible
+                if df_arca is not None and not df_arca.empty:
+                    empresas_arca_query = """
+                    SELECT 
+                        e.*,
+                        a.IMP_GANANCIAS, a.IMP_IVA, a.MONOTRIBUTO, a.INTEGRANTE_SOC, 
+                        a.EMPLEADOR, a.ACTIVIDAD_MONOTRIBUTO, a.NOMBRE_TIPO_EMPRESA,
+                        a.TELEFONO, a.CELULAR, a.MAIL, a.VACANTES, a.SITIO_WEB, 
+                        a.TEL_CONTACTO, a.EMAIL_CONTACTO, a.NOMBRE_FANTASIA
+                    FROM empresas_processed e
+                    LEFT JOIN (
+                        SELECT 
+                            REPLACE(CUIT, '-', '') as CUIT,
+                            IMP_GANANCIAS, IMP_IVA, MONOTRIBUTO, INTEGRANTE_SOC, 
+                            EMPLEADOR, ACTIVIDAD_MONOTRIBUTO, NOMBRE_TIPO_EMPRESA,
+                            TELEFONO, CELULAR, MAIL, VACANTES, SITIO_WEB, 
+                            TEL_CONTACTO, EMAIL_CONTACTO, NOMBRE_FANTASIA
+                        FROM arca
+                    ) a ON e.CUIT_CLEAN = a.CUIT
+                    """
+                    df_empresas_processed = processor.execute_query(empresas_arca_query)
+                    processor.register_dataframe(df_empresas_processed, "empresas_with_arca")
+                
+                # JOIN con beneficiarios - usar la tabla correcta
+                if df_arca is not None and not df_arca.empty:
+                    empresas_final_query = """
+                    SELECT 
+                        e.*,
+                        COALESCE(b.BENEF, 0) as BENEF
+                    FROM empresas_with_arca e
+                    LEFT JOIN emp_ben b ON e.CUIT_CLEAN = b.CUIT
+                    """
+                else:
+                    empresas_final_query = """
+                    SELECT 
+                        e.*,
+                        COALESCE(b.BENEF, 0) as BENEF
+                    FROM empresas_processed e
+                    LEFT JOIN emp_ben b ON e.CUIT_CLEAN = b.CUIT
+                    """
+                df_empresas = processor.execute_query(empresas_final_query)
+            else:
+                df_empresas = None
+            
+            # === PASO 3: Procesar inscriptos ===
+            # Obtener columnas disponibles dinámicamente
+            columns_query = "DESCRIBE inscriptos_raw"
+            columns_info = processor.execute_query(columns_query)
+            available_columns = columns_info['column_name'].tolist()
+            
+            # Columnas requeridas y opcionales
+            required_columns = ['ID_FICHA', 'N_ESTADO_FICHA', 'IDETAPA', 'N_DEPARTAMENTO']
+            optional_columns = [
+                'ID_DEPARTAMENTO_GOB', 'ID_LOCALIDAD_GOB', 'CUPO', 'ID_MOD_CONT_AFIP', 
+                'EDAD', 'N_LOCALIDAD', 'BEN_N_ESTADO', 'EMP_CUIT'
+            ]
+            
+            # Construir SELECT dinámico
+            select_columns = []
+            for col in required_columns + optional_columns:
+                if col in available_columns:
+                    select_columns.append(col)
+            
+            select_clause = ", ".join(select_columns)
+            
+            # Mapeo de programas
+            programa_cases = """
+            CASE 
+                WHEN IDETAPA = 53 THEN 'Programa Primer Paso'
+                WHEN IDETAPA = 51 THEN 'Más 26'
+                WHEN IDETAPA = 54 THEN 'CBA Mejora'
+                WHEN IDETAPA = 55 THEN 'Nueva Oportunidad'
+                ELSE CONCAT('Programa ', CAST(IDETAPA AS VARCHAR))
+            END as PROGRAMA
+            """
+            
+            inscriptos_query = f"""
+            SELECT 
+                {select_clause},
+                {programa_cases},
+                CASE 
+                    WHEN N_DEPARTAMENTO IN (
+                        'PRESIDENTE ROQUE SAENZ PEÑA', 'GENERAL ROCA', 'RIO SECO', 'TULUMBA', 
+                        'POCHO', 'SAN JAVIER', 'SAN ALBERTO', 'MINAS', 'CRUZ DEL EJE', 
+                        'TOTORAL', 'SOBREMONTE', 'ISCHILIN'
+                    ) THEN 'ZONA NOC Y SUR' 
+                    ELSE 'ZONA REGULAR' 
+                END as ZONA,
+                CASE 
+                    WHEN N_DEPARTAMENTO = 'CAPITAL' THEN 'CORDOBA'
+                    ELSE N_LOCALIDAD
+                END as N_LOCALIDAD_CORREGIDA,
+                CASE 
+                    WHEN BEN_N_ESTADO = 'BAJA POR FINALIZACION DE PROGR' THEN 'BENEFICIARIO FIN PROGRAMA'
+                    ELSE N_ESTADO_FICHA
+                END as N_ESTADO_FICHA_CORREGIDO
+            FROM inscriptos_raw
+            WHERE N_ESTADO_FICHA != 'ADHERIDO'
+            """
+            
+            df_inscriptos = processor.execute_query(inscriptos_query)
+            
+            # Actualizar columnas corregidas
+            if 'N_LOCALIDAD_CORREGIDA' in df_inscriptos.columns:
+                df_inscriptos['N_LOCALIDAD'] = df_inscriptos['N_LOCALIDAD_CORREGIDA']
+                df_inscriptos = df_inscriptos.drop('N_LOCALIDAD_CORREGIDA', axis=1)
+            
+            if 'N_ESTADO_FICHA_CORREGIDO' in df_inscriptos.columns:
+                df_inscriptos['N_ESTADO_FICHA'] = df_inscriptos['N_ESTADO_FICHA_CORREGIDO']
+                df_inscriptos = df_inscriptos.drop('N_ESTADO_FICHA_CORREGIDO', axis=1)
+            
+            # === PASO 4: JOIN con circuitos si está disponible ===
+            if has_circuitos:
+                try:
+                    processor.register_dataframe(df_inscriptos, "inscriptos_processed")
+                    
+                    circuitos_join_query = """
+                    SELECT 
+                        i.*,
+                        c.* EXCLUDE (ID_LOCALIDAD)
+                    FROM inscriptos_processed i
+                    LEFT JOIN circuitos c ON i.ID_LOCALIDAD_GOB = c.ID_LOCALIDAD
+                    """
+                    df_inscriptos = processor.execute_query(circuitos_join_query)
+                    
+                except Exception as e:
+                    st.warning(f"No se pudo realizar el cruce con circuitos electorales: {str(e)}")
+                    has_circuitos = False
+            
+            # Convertir tipos numéricos
+            integer_columns = [
+                "ID_DEPARTAMENTO_GOB", "ID_LOCALIDAD_GOB", "ID_FICHA", 
+                "IDETAPA", "CUPO", "ID_MOD_CONT_AFIP", "EDAD"
+            ]
+            
+            for col in integer_columns:
+                if col in df_inscriptos.columns:
+                    df_inscriptos[col] = pd.to_numeric(df_inscriptos[col], errors='coerce').fillna(-1).astype(int)
+                    df_inscriptos.loc[df_inscriptos[col] == -1, col] = pd.NA
+            
+            return df_inscriptos, df_empresas, geojson_data, has_empresas, has_geojson
+            
+    except Exception as e:
+        st.error(f"Error en procesamiento DuckDB: {str(e)}")
+        st.info("🔄 Fallback a procesamiento pandas...")
+        return load_and_preprocess_data(data, dates, is_development)
 
 
 
