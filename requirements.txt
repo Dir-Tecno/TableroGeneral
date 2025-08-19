@@ -1,3 +1,7 @@
+# Dependencias para Google Sheets
+gspread
+oauth2client
+
 # Dependencias base
 pyarrow>=15.0.0
 pandas==2.2.2

@@ -1,6 +1,12 @@
-from moduls.carga import load_data_from_minio, load_data_from_local, load_data_from_gitlab
 import streamlit as st
-from moduls import bco_gente, cbamecapacita, empleo 
+
+st.set_page_config(
+    page_title="Dashboard Resumen del Ministerio de Desarrollo Social y Promoción del Empleo", 
+    layout="wide"
+)
+
+from moduls.carga import load_data_from_minio, load_data_from_local, load_data_from_gitlab
+from moduls import bco_gente, cbamecapacita, empleo, escrituracion
 from utils.styles import setup_page
 from utils.ui_components import render_footer, show_notification_bell
 import concurrent.futures
@@ -17,20 +23,16 @@ def load_data_by_source(source_type, local_path, minio_client, bucket, repo_id, 
     elif source_type == "gitlab":
         all_data, all_dates, logs = load_data_from_gitlab(repo_id, branch, token, modules)
     else:
-        # Default o error
-        all_data, all_dates = {}, {}
-        logs = {"warnings": ["Fuente de datos no válida"], "info": []}
+        # Cambiar el mensaje de error para archivos no disponibles en GitLab
+        if source_type == "gitlab" and module_key == "escrituracion":
+            logs = {"warnings": ["El módulo de Escrituración se carga exclusivamente desde Google Sheets."], "info": []}
+        else:
+            logs = {"warnings": ["Fuente de datos no válida"], "info": []}
         
     # Filtrar datos para el módulo específico
     data = {k: all_data.get(k) for k in modules[module_key] if k in all_data}
     dates = {k: all_dates.get(k) for k in modules[module_key] if k in all_dates}
     return data, dates, logs
-
-# Configuración de la página
-st.set_page_config(
-    page_title="Dashboard Resumen del Ministerio de Desarrollo Social y Promoción del Empleo", 
-    layout="wide"
-)
 
 # Aplicar estilos y banner desde el módulo de estilos
 setup_page()
@@ -85,7 +87,8 @@ modules = {
     'bco_gente': ['VT_CUMPLIMIENTO_FORMULARIOS.parquet', 'VT_NOMINA_REP_RECUPERO_X_ANIO.parquet', 
                    'capa_departamentos_2010.geojson', 'LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt'],
     'cba_capacita': ['VT_ALUMNOS_EN_CURSOS.parquet','VT_INSCRIPCIONES_PRG129.parquet', 'VT_CURSOS_SEDES_GEO.parquet', 'capa_departamentos_2010.geojson'],
-    'empleo': ['LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt','VT_REPORTES_PPP_MAS26.parquet', 'vt_empresas_adheridas.parquet','vt_empresas_ARCA.parquet', 'VT_PUESTOS_X_FICHAS.parquet','capa_departamentos_2010.geojson']
+    'empleo': ['LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt','VT_REPORTES_PPP_MAS26.parquet', 'vt_empresas_adheridas.parquet','vt_empresas_ARCA.parquet', 'VT_PUESTOS_X_FICHAS.parquet','capa_departamentos_2010.geojson'],
+    'escrituracion': ['https://docs.google.com/spreadsheets/d/1V9vXwMQJjd4kLdJZQncOSoWggQk8S7tBKxbOSEIUoQ8/edit#gid=1593263408']
 }
 
 # Configuración MinIO
@@ -112,13 +115,14 @@ if is_production:
         print(f"Error al listar objetos en MinIO: {str(e)}")
 
 # Crear pestañas
-tab_names = ["CBA Me Capacita", "Banco de la Gente",  "Programas de Empleo"]
+tab_names = ["CBA Me Capacita", "Banco de la Gente", "Programas de Empleo", "Escrituración"]
 tabs = st.tabs(tab_names)
-tab_keys = ['cba_capacita', 'bco_gente', 'empleo']
+tab_keys = ['cba_capacita', 'bco_gente', 'empleo', 'escrituracion']
 tab_functions = [
     cbamecapacita.show_cba_capacita_dashboard,
     bco_gente.show_bco_gente_dashboard,
     empleo.show_empleo_dashboard,
+    escrituracion.show_escrituracion_dashboard,
 ]
 
 for idx, tab in enumerate(tabs):
@@ -142,6 +146,16 @@ for idx, tab in enumerate(tabs):
             with st.spinner(spinner_message):
                 # Determinar la fuente de datos a usar
                 source_type = "local" if is_local else "minio" if is_minio else "gitlab" if is_gitlab else "unknown"
+                
+                # Ajustar lógica para evitar intentos de carga desde GitLab para Escrituración
+                if module_key == "escrituracion":
+                    source_type = "google_sheets"  # Forzar la fuente de datos como Google Sheets
+                    logs = {"warnings": ["El módulo de Escrituración se carga exclusivamente desde Google Sheets."], "info": []}
+                else:
+                    if source_type == "gitlab":
+                        logs = {"warnings": ["Fuente de datos no válida para este módulo."], "info": []}
+                    else:
+                        logs = {"warnings": ["Fuente de datos no válida"], "info": []}
                 
                 # Ejecutar la carga de datos en un hilo separado usando la función centralizada
                 with concurrent.futures.ThreadPoolExecutor() as executor:
