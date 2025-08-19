@@ -1,38 +1,3 @@
-<<<<<<< HEAD
-from moduls.carga import load_data_from_minio, load_data_from_local, load_data_from_gitlab
-import streamlit as st
-from moduls import bco_gente, cbamecapacita, empleo 
-from utils.styles import setup_page
-from utils.ui_components import render_footer, show_notification_bell
-import concurrent.futures
-from minio import Minio
-from os import path
-
-# Función centralizada para cargar datos según la fuente configurada
-def load_data_by_source(source_type, local_path, minio_client, bucket, repo_id, branch, token, modules, module_key):
-    """Función centralizada para cargar datos según la fuente configurada"""
-    if source_type == "local" and path.exists(local_path):
-        all_data, all_dates, logs = load_data_from_local(local_path, modules)
-    elif source_type == "minio":
-        all_data, all_dates, logs = load_data_from_minio(minio_client, bucket, modules)
-    elif source_type == "gitlab":
-        all_data, all_dates, logs = load_data_from_gitlab(repo_id, branch, token, modules)
-    else:
-        # Default o error
-        all_data, all_dates = {}, {}
-        logs = {"warnings": ["Fuente de datos no válida"], "info": []}
-        
-    # Filtrar datos para el módulo específico
-    data = {k: all_data.get(k) for k in modules[module_key] if k in all_data}
-    dates = {k: all_dates.get(k) for k in modules[module_key] if k in all_dates}
-    return data, dates, logs
-
-# Configuración de la página
-st.set_page_config(
-    page_title="Dashboard Resumen del Ministerio de Desarrollo Social y Promoción del Empleo", 
-    layout="wide"
-)
-=======
 import streamlit as st
 st.set_page_config(page_title="Tablero General", layout="wide")
 
@@ -68,7 +33,6 @@ def load_data_by_source(source_type, local_path, minio_client, bucket, repo_id, 
     data = {k: all_data.get(k) for k in modules[module_key] if k in all_data}
     dates = {k: all_dates.get(k) for k in modules[module_key] if k in all_dates}
     return data, dates, logs
->>>>>>> 2f557ef1b54260d59f34faf03a4ab088ec12304b
 
 # Aplicar estilos y banner desde el módulo de estilos
 setup_page()
@@ -123,12 +87,8 @@ modules = {
     'bco_gente': ['VT_CUMPLIMIENTO_FORMULARIOS.parquet', 'VT_NOMINA_REP_RECUPERO_X_ANIO.parquet', 
                    'capa_departamentos_2010.geojson', 'LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt'],
     'cba_capacita': ['VT_ALUMNOS_EN_CURSOS.parquet','VT_INSCRIPCIONES_PRG129.parquet', 'VT_CURSOS_SEDES_GEO.parquet', 'capa_departamentos_2010.geojson'],
-<<<<<<< HEAD
-    'empleo': ['LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt','VT_REPORTES_PPP_MAS26.parquet', 'vt_empresas_adheridas.parquet','vt_empresas_ARCA.parquet', 'VT_PUESTOS_X_FICHAS.parquet','capa_departamentos_2010.geojson']
-=======
     'empleo': ['LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt','VT_REPORTES_PPP_MAS26.parquet', 'vt_empresas_adheridas.parquet','vt_empresas_ARCA.parquet', 'VT_PUESTOS_X_FICHAS.parquet','capa_departamentos_2010.geojson'],
     'escrituracion': ['https://docs.google.com/spreadsheets/d/1V9vXwMQJjd4kLdJZQncOSoWggQk8S7tBKxbOSEIUoQ8/edit#gid=1593263408']
->>>>>>> 2f557ef1b54260d59f34faf03a4ab088ec12304b
 }
 
 # Configuración MinIO
@@ -153,13 +113,6 @@ if is_production:
             print(obj.object_name)
     except Exception as e:
         print(f"Error al listar objetos en MinIO: {str(e)}")
-<<<<<<< HEAD
-
-# Crear pestañas
-tab_names = ["CBA Me Capacita", "Banco de la Gente",  "Programas de Empleo"]
-tabs = st.tabs(tab_names)
-tab_keys = ['cba_capacita', 'bco_gente', 'empleo']
-=======
 
 # Inicializar variables de sesión necesarias
 if "data_key" not in st.session_state:
@@ -173,15 +126,11 @@ if "logs_key" not in st.session_state:
 tab_names = ["CBA Me Capacita", "Banco de la Gente", "Programas de Empleo", "Escrituración"]
 tabs = st.tabs(tab_names)
 tab_keys = ['cba_capacita', 'bco_gente', 'empleo', 'escrituracion']
->>>>>>> 2f557ef1b54260d59f34faf03a4ab088ec12304b
 tab_functions = [
     cbamecapacita.show_cba_capacita_dashboard,
     bco_gente.show_bco_gente_dashboard,
     empleo.show_empleo_dashboard,
-<<<<<<< HEAD
-=======
     escrituracion.show_escrituracion_dashboard,
->>>>>>> 2f557ef1b54260d59f34faf03a4ab088ec12304b
 ]
 
 for idx, tab in enumerate(tabs):
@@ -206,8 +155,6 @@ for idx, tab in enumerate(tabs):
                 # Determinar la fuente de datos a usar
                 source_type = "local" if is_local else "minio" if is_minio else "gitlab" if is_gitlab else "unknown"
                 
-<<<<<<< HEAD
-=======
                 # Ajustar lógica para evitar intentos de carga desde GitLab para Escrituración
                 if module_key == "escrituracion":
                     source_type = "google_sheets"  # Forzar la fuente de datos como Google Sheets
@@ -218,7 +165,6 @@ for idx, tab in enumerate(tabs):
                     else:
                         logs = {"warnings": ["Fuente de datos no válida"], "info": []}
                 
->>>>>>> 2f557ef1b54260d59f34faf03a4ab088ec12304b
                 # Ejecutar la carga de datos en un hilo separado usando la función centralizada
                 with concurrent.futures.ThreadPoolExecutor() as executor:
                     future = executor.submit(

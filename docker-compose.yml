@@ -12,8 +12,6 @@ services:
     environment:
       - GITLAB_TOKEN=glpat-jdZnZLkoh1TVj1v5YxGb
       - SLACK_WEBHOOK_URL=https://hooks.slack.com/services/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
-<<<<<<< HEAD
-=======
       - GOOGLE_CLOUD_TYPE=service_account
       - GOOGLE_CLOUD_PROJECT_ID=base-escrituracion-2024
       - GOOGLE_CLOUD_PRIVATE_KEY_ID=f38c80e31c086d25ac3f44ef7e20e8532d655624
@@ -24,7 +22,6 @@ services:
       - GOOGLE_CLOUD_TOKEN_URI=https://oauth2.googleapis.com/token
       - GOOGLE_CLOUD_AUTH_PROVIDER_CERT_URL=https://www.googleapis.com/oauth2/v1/certs
       - GOOGLE_CLOUD_CLIENT_CERT_URL=https://www.googleapis.com/robot/v1/metadata/x509/api-reporte%40base-escrituracion-2024.iam.gserviceaccount.com
->>>>>>> 2f557ef1b54260d59f34faf03a4ab088ec12304b
 
 networks:
   front-net:                #Gateway: 172.21.0.1
