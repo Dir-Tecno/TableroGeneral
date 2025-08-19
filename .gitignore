@@ -8,4 +8,4 @@ Repositorio-Reportes-main/
 docker-compose.yml
 Dockerfile
 .github\workflows\redeploy-portainer.yml
-credenciales.json
+[credenciales.json](http://_vscodecontentref_/6)
