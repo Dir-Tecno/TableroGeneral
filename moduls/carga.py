@@ -203,44 +203,47 @@ def obtener_lista_archivos_gitlab(repo_id, branch, token, logs=None):
         logs["warnings"].append("Token de GitLab no proporcionado")
         return [], logs
     
-    # Probar diferentes formatos de ID
-    formatos_id = [
-        repo_id,
-        requests.utils.quote(repo_id, safe=''),
-        repo_id.replace('/', '%2F')
-    ]
+    repo_id_encoded = requests.utils.quote(repo_id, safe='')
+    url = f'https://gitlab.com/api/v4/projects/{repo_id_encoded}/repository/tree'
+    headers = {'PRIVATE-TOKEN': token}
+    params = {'ref': branch, 'recursive': True}
     
-    for id_formato in formatos_id:
-        url = f'https://gitlab.com/api/v4/projects/{id_formato}/repository/tree'
-        headers = {'PRIVATE-TOKEN': token}
-        params = {'ref': branch, 'recursive': True}
+    logs["info"].append(f"Accediendo a GitLab API: {repo_id} (encoded)")
+    
+    try:
+        response = requests.get(url, headers=headers, params=params)
+        logs["info"].append(f"Respuesta HTTP: {response.status_code}")
         
-        logs["info"].append(f"Intentando acceder a: {url} con branch: {branch}")
+        if response.status_code == 200:
+            items = response.json()
+            files = [item['path'] for item in items if item['type'] == 'blob']
+            logs["info"].append(f"Se encontraron {len(files)} archivos en GitLab.")
+            if files:
+                logs["info"].append(f"Primeros archivos encontrados: {files[:5]}")
+            return files, logs
+        elif response.status_code == 404:
+            logs["warnings"].append(f"Repositorio no encontrado: {repo_id} o branch '{branch}' no existe")
+        elif response.status_code == 401:
+            logs["warnings"].append(f"Token no válido o sin permisos para acceder al repositorio {repo_id}")
+        elif response.status_code == 403:
+            logs["warnings"].append(f"Acceso denegado al repositorio {repo_id}")
+        else:
+            logs["warnings"].append(f"Error HTTP {response.status_code}: {response.text[:200]}")
+    except Exception as e:
+        logs["warnings"].append(f"Error al obtener lista de archivos: {str(e)}")
         
         try:
-            response = requests.get(url, headers=headers, params=params)
-            logs["info"].append(f"Respuesta HTTP: {response.status_code}")
-            
+            url_fallback = f'https://gitlab.com/api/v4/projects/{repo_id}/repository/tree'
+            logs["info"].append(f"Intentando fallback sin encoding...")
+            response = requests.get(url_fallback, headers=headers, params=params)
             if response.status_code == 200:
                 items = response.json()
                 files = [item['path'] for item in items if item['type'] == 'blob']
-                logs["info"].append(f"Se encontraron {len(files)} archivos en GitLab.")
-                if files:
-                    logs["info"].append(f"Primeros archivos encontrados: {files[:5]}")
+                logs["info"].append(f"Fallback exitoso: {len(files)} archivos encontrados.")
                 return files, logs
-            elif response.status_code == 404:
-                logs["warnings"].append(f"Repositorio no encontrado con formato {id_formato} o branch '{branch}' no existe")
-            elif response.status_code == 401:
-                logs["warnings"].append(f"Token no válido o sin permisos para acceder al repositorio {id_formato}")
-            elif response.status_code == 403:
-                logs["warnings"].append(f"Acceso denegado al repositorio {id_formato}")
-            else:
-                logs["warnings"].append(f"Error HTTP {response.status_code} para {id_formato}: {response.text[:200]}")
-        except Exception as e:
-            logs["warnings"].append(f"Error al obtener lista de archivos con formato {id_formato}: {str(e)}")
-            continue
+        except:
+            pass
     
-    # Intentar listar proyectos disponibles para ayudar al diagnóstico
     try:
         logs["info"].append("Verificando proyectos accesibles con el token...")
         url = 'https://gitlab.com/api/v4/projects?membership=true&per_page=5'
