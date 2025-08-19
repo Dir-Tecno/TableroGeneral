@@ -12,7 +12,7 @@ st.set_page_config(
     layout="wide"
 )
 setup_page()
-st.markdown('<div class="main-header">Tablero General de Reportes para TEST 1.2</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header">Tablero General de Reportes para TEST 1.3</div>', unsafe_allow_html=True)
 show_notification_bell()
 
 # --- Configuración General ---
