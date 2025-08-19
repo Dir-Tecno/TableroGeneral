@@ -1,10 +1,7 @@
-<<<<<<< HEAD
-=======
 # Dependencias para Google Sheets
 gspread
 oauth2client
 
->>>>>>> 2f557ef1b54260d59f34faf03a4ab088ec12304b
 # Dependencias base
 pyarrow>=15.0.0
 pandas==2.2.2

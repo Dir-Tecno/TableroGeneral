@@ -427,7 +427,8 @@ def load_data_from_gitlab(repo_id, branch, token, modules):
                     except Exception as e:
                         logs["warnings"].append(f"Error al cargar {archivo} desde GitLab: {str(e)}")
                 else:
-                    logs["warnings"].append(f"Archivo {archivo} no disponible en GitLab.")
+                    pass
+                    #logs["warnings"].append(f"Archivo {archivo} no disponible en GitLab.")
 
         logs["info"].append(f"Total archivos cargados desde GitLab: {len(all_data)}/{len(archivos_solicitados)}")
     except Exception as e:
