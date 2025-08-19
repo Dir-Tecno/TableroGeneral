@@ -3,6 +3,15 @@ import pandas as pd
 import requests
 import datetime
 
+<<<<<<< HEAD
+=======
+# Inicializar variables de sesión necesarias
+if "mostrar_form_comentario" not in st.session_state:
+    st.session_state["mostrar_form_comentario"] = False
+if "campanita_mostrada" not in st.session_state:
+    st.session_state["campanita_mostrada"] = False
+
+>>>>>>> 2f557ef1b54260d59f34faf03a4ab088ec12304b
 def show_dev_dataframe_info(data, modulo_nombre="Módulo", info_caption=None):
     """
     Muestra información útil de uno o varios DataFrames en modo desarrollo.
