@@ -1,4 +1,5 @@
 # --- IMPORTS ---
+import gspread
 import pandas as pd
 from datetime import datetime
 import streamlit as st
@@ -44,17 +45,14 @@ def generar_reporte(df):
 
 # --- DASHBOARD PRINCIPAL OPTIMIZADO ---
 @st.cache_data
-def cargar_datos(sheet_url, creds_json):
-    """
-    Conecta a Google Sheets y retorna un DataFrame con los datos, usando caché para mejorar el rendimiento.
-    """
-    import gspread
-    from oauth2client.service_account import ServiceAccountCredentials
-    scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-    creds = ServiceAccountCredentials.from_json_keyfile_name(creds_json, scope)
-    client = gspread.authorize(creds)
-    sheet = client.open_by_url(sheet_url).sheet1
-    data = sheet.get_all_records()
+def cargar_datos(sheet_url, _creds_json):
+    import json
+    if isinstance(_creds_json, str):
+        _creds_json = json.loads(_creds_json)  # Convertir cadena JSON a diccionario
+    gc = gspread.service_account_from_dict(_creds_json)
+    sh = gc.open_by_url(sheet_url)
+    worksheet = sh.get_worksheet(0)
+    data = worksheet.get_all_records()
     return pd.DataFrame(data)
 
 def mostrar_dashboard(df):
@@ -169,12 +167,12 @@ def show_escrituracion_dashboard(data=None, dates=None, is_development=False):
     try:
         # Cargar credenciales desde secretos
         creds_json = st.secrets["google_cloud"]["service_account"]
-        creds = json.loads(creds_json)
+        creds_dict = json.loads(creds_json.to_json())
 
         # Usar las credenciales
         from oauth2client.service_account import ServiceAccountCredentials
         scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds, scope)
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 
         df = cargar_datos(sheet_url, creds)
         if df is None or df.empty:

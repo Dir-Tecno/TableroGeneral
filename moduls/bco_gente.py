@@ -6,6 +6,14 @@ from utils.ui_components import display_kpi_row, show_last_update
 from utils.styles import COLORES_IDENTIDAD, COLOR_PRIMARY, COLOR_SECONDARY, COLOR_ACCENT_1, COLOR_ACCENT_2, COLOR_ACCENT_3, COLOR_ACCENT_4, COLOR_ACCENT_5, COLOR_TEXT_DARK
 from utils.kpi_tooltips import ESTADO_CATEGORIAS, TOOLTIPS_DESCRIPTIVOS
 
+# Inicializar variables de sesión necesarias
+if "debug_mode" not in st.session_state:
+    st.session_state["debug_mode"] = False
+if "selected_categorias" not in st.session_state:
+    st.session_state["selected_categorias"] = []
+if "selected_lineas_credito" not in st.session_state:
+    st.session_state["selected_lineas_credito"] = []
+
 # Crear diccionario para tooltips de categorías (técnico, lista de estados)
 tooltips_categorias = {k: ", ".join(v) for k, v in ESTADO_CATEGORIAS.items()}
 
@@ -1545,7 +1553,7 @@ def mostrar_global(df_filtrado_global, tooltips_categorias):
                         ].copy()
                         
                         # Filtrar datos de inicio de pago por rango de fechas (si existen)
-                        if tiene_datos_pago:
+                        if tiene_datos_pago_filtrados:
                             df_fechas_pago_seleccionado = df_fechas_pago[
                                 (df_fechas_pago['FEC_INICIO_PAGO'].dt.date >= start_date) &
                                 (df_fechas_pago['FEC_INICIO_PAGO'].dt.date <= end_date)
@@ -1701,7 +1709,7 @@ def mostrar_global(df_filtrado_global, tooltips_categorias):
                                     html_table += f'<td class="formularios">{datos["Formularios Presentados"]}</td>'
                                     html_table += f'<td class="pagos">{datos["Inicio de Pagos"]}</td>'
                                     html_table += f'</tr>'
-                                
+
                                 html_table += '</tbody></table>'
                                 st.markdown(html_table, unsafe_allow_html=True)
 

@@ -1,9 +1,5 @@
 import streamlit as st
-
-st.set_page_config(
-    page_title="Dashboard Resumen del Ministerio de Desarrollo Social y Promoción del Empleo", 
-    layout="wide"
-)
+st.set_page_config(page_title="Tablero General", layout="wide")
 
 from moduls.carga import load_data_from_minio, load_data_from_local, load_data_from_gitlab
 from moduls import bco_gente, cbamecapacita, empleo, escrituracion
@@ -15,7 +11,11 @@ from os import path
 
 # Función centralizada para cargar datos según la fuente configurada
 def load_data_by_source(source_type, local_path, minio_client, bucket, repo_id, branch, token, modules, module_key):
-    """Función centralizada para cargar datos según la fuente configurada"""
+    all_data = {}  # Inicialización predeterminada
+    all_dates = {}  # Inicialización predeterminada
+    logs = {"warnings": [], "info": []}
+
+    # Lógica para cargar datos según la fuente
     if source_type == "local" and path.exists(local_path):
         all_data, all_dates, logs = load_data_from_local(local_path, modules)
     elif source_type == "minio":
@@ -113,6 +113,14 @@ if is_production:
             print(obj.object_name)
     except Exception as e:
         print(f"Error al listar objetos en MinIO: {str(e)}")
+
+# Inicializar variables de sesión necesarias
+if "data_key" not in st.session_state:
+    st.session_state["data_key"] = None
+if "dates_key" not in st.session_state:
+    st.session_state["dates_key"] = None
+if "logs_key" not in st.session_state:
+    st.session_state["logs_key"] = None
 
 # Crear pestañas
 tab_names = ["CBA Me Capacita", "Banco de la Gente", "Programas de Empleo", "Escrituración"]
