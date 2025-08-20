@@ -13,7 +13,7 @@ st.set_page_config(
     layout="wide"
 )
 setup_page()
-st.markdown('<div class="main-header">Tablero General de Reportes para TEST 1.7</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header">Tablero General de Reportes para TEST 1.8</div>', unsafe_allow_html=True)
 # --- Configuración General ---
 FUENTE_DATOS = "gitlab"  # Opciones: 'minio', 'gitlab', 'local'
 REPO_ID = "Dir-Tecno/Repositorio-Reportes"
@@ -104,10 +104,7 @@ all_data, all_dates, logs = load_all_data()
 # --- Mostrar Campanita de Novedades DESPUÉS de la carga ---
 show_notification_bell()
 
-# --- Sección de Depuración (Opcional) ---
-with st.expander("🔍 Estado de la Carga de Datos (Depuración)"):
-    # Enviar logs de carga a la consola del navegador en lugar de mostrarlos en pantalla
-    log_data_loading_info(all_data, all_dates, logs)
+
 
 # --- Definición de Pestañas ---
 tab_names = ["CBA Me Capacita", "Banco de la Gente", "Programas de Empleo"]
