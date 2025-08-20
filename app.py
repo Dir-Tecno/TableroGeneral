@@ -5,125 +5,109 @@ from moduls.carga import load_data_from_minio, load_data_from_local, load_data_f
 from moduls import bco_gente, cbamecapacita, empleo, escrituracion
 from utils.styles import setup_page
 from utils.ui_components import render_footer, show_notification_bell
-import concurrent.futures
 from minio import Minio
 from os import path
 
-# Función centralizada para cargar datos según la fuente configurada
-def load_data_by_source(source_type, local_path, minio_client, bucket, repo_id, branch, token, modules, module_key):
-    all_data = {}  # Inicialización predeterminada
-    all_dates = {}  # Inicialización predeterminada
-    logs = {"warnings": [], "info": []}
-
-    # Lógica para cargar datos según la fuente
-    if source_type == "local" and path.exists(local_path):
-        all_data, all_dates, logs = load_data_from_local(local_path, modules)
-    elif source_type == "minio":
-        all_data, all_dates, logs = load_data_from_minio(minio_client, bucket, modules)
-    elif source_type == "gitlab":
-        all_data, all_dates, logs = load_data_from_gitlab(repo_id, branch, token, modules)
-    else:
-        # Cambiar el mensaje de error para archivos no disponibles en GitLab
-        if source_type == "gitlab" and module_key == "escrituracion":
-            logs = {"warnings": ["El módulo de Escrituración se carga exclusivamente desde Google Sheets."], "info": []}
-        else:
-            logs = {"warnings": ["Fuente de datos no válida"], "info": []}
-        
-    # Filtrar datos para el módulo específico
-    data = {k: all_data.get(k) for k in modules[module_key] if k in all_data}
-    dates = {k: all_dates.get(k) for k in modules[module_key] if k in all_dates}
-    return data, dates, logs
-
-# Aplicar estilos y banner desde el módulo de estilos
+# --- Configuración de la Página ---
+st.set_page_config(
+    page_title="Dashboard Resumen del Ministerio de Desarrollo Social y Promoción del Empleo",
+    layout="wide"
+)
 setup_page()
-
-# Mostrar título principal
 st.markdown('<div class="main-header">Tablero General de Reportes</div>', unsafe_allow_html=True)
+# --- Configuración General ---
+FUENTE_DATOS = "gitlab"  # Opciones: 'minio', 'gitlab', 'local'
+REPO_ID = "Dir-Tecno/Repositorio-Reportes"
+BRANCH = "main"
+LOCAL_PATH = r"D:\DESARROLLO\REPORTES\TableroGeneral\Repositorio-Reportes-main"
+MINIO_BUCKET = "repositorio-dashboard"
 
-# Mostrar campanita de novedades como elemento flotante
-show_notification_bell()
+# --- Determinación del Modo de Ejecución ---
+is_local = path.exists(LOCAL_PATH) and FUENTE_DATOS == "local"
+is_production = not is_local
 
-# Configuración general
-
-# Opciones de fuente de datos: 'minio', 'gitlab', 'local'
-FUENTE_DATOS = "gitlab"  # Configurable por código: minio, gitlab o local
-
-# Configuración de GitLab
-repo_id = "Dir-Tecno/Repositorio-Reportes"
-branch = "main"
-
-# Ruta local para desarrollo
-local_path = r"D:\DESARROLLO\REPORTES\TableroGeneral\Repositorio-Reportes-main"
-
-# Determinar el modo de desarrollo basado en la fuente de datos
-is_local = path.exists(local_path) and FUENTE_DATOS == "local"
-is_minio = FUENTE_DATOS == "minio" and not is_local
-is_gitlab = FUENTE_DATOS == "gitlab" and not is_local
-
-# Compatibilidad con código existente
-is_development = is_local
-is_production = not is_development
-
-# Mostrar información sobre el modo de carga
-if is_development:
-    if is_local:
-        st.success("Modo de desarrollo: Cargando datos desde carpeta local")
-    elif is_minio:
-        st.success("Modo de producción: Cargando datos desde MinIO")
-    elif is_gitlab:
-        st.success("Modo de producción: Cargando datos desde GitLab")
-
-# Obtener token desde secrets (solo necesario en modo producción)
-token = None
-if is_production:
-    try:
-        token = st.secrets["gitlab"]["token"]
-    except Exception as e:
-        st.error(f"Error al obtener token: {str(e)}")
-        st.stop()
-
-# Mapeo de archivos por módulo
+# --- Mapeo de Archivos por Módulo ---
 modules = {
     'bco_gente': ['VT_CUMPLIMIENTO_FORMULARIOS.parquet', 'VT_NOMINA_REP_RECUPERO_X_ANIO.parquet', 
                    'capa_departamentos_2010.geojson', 'LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt'],
     'cba_capacita': ['VT_ALUMNOS_EN_CURSOS.parquet','VT_INSCRIPCIONES_PRG129.parquet', 'VT_CURSOS_SEDES_GEO.parquet', 'capa_departamentos_2010.geojson'],
     'empleo': ['LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt','VT_REPORTES_PPP_MAS26.parquet', 'vt_empresas_adheridas.parquet','vt_empresas_ARCA.parquet', 'VT_PUESTOS_X_FICHAS.parquet','capa_departamentos_2010.geojson'],
     'escrituracion': ['https://docs.google.com/spreadsheets/d/1V9vXwMQJjd4kLdJZQncOSoWggQk8S7tBKxbOSEIUoQ8/edit#gid=1593263408']
+    
 }
 
-# Configuración MinIO
-MINIO_ENDPOINT = "5.161.118.67:7003"
-MINIO_ACCESS_KEY = "dirtecno"
-MINIO_SECRET_KEY = "dirtecnon0r3cu3rd0"
-MINIO_BUCKET = "repositorio-reportes"  
+# --- Funciones Cacheadas para Rendimiento ---
 
-# Cliente MinIO
-minio_client = Minio(
-    MINIO_ENDPOINT,
-    access_key=MINIO_ACCESS_KEY,
-    secret_key=MINIO_SECRET_KEY,
-    secure=False
-)
-
-# Listar objetos en el bucket de MinIO (en modo producción)
-if is_production:
+@st.cache_resource
+def get_minio_client():
+    """Crea y cachea el cliente de MinIO para evitar reconexiones."""
     try:
-        # Solo imprimir en consola, no en la UI de Streamlit
-        for obj in minio_client.list_objects(MINIO_BUCKET, recursive=True):
-            print(obj.object_name)
+        client = Minio(
+            st.secrets["minio_endpoint"],
+            access_key=st.secrets["minio_access_key"],
+            secret_key=st.secrets["minio_secret_key"],
+            secure=False
+        )
+        # Probar la conexión listando buckets
+        client.list_buckets()
+        return client
     except Exception as e:
-        print(f"Error al listar objetos en MinIO: {str(e)}")
+        st.error(f"Error al conectar con MinIO: {e}")
+        return None
 
-# Inicializar variables de sesión necesarias
-if "data_key" not in st.session_state:
-    st.session_state["data_key"] = None
-if "dates_key" not in st.session_state:
-    st.session_state["dates_key"] = None
-if "logs_key" not in st.session_state:
-    st.session_state["logs_key"] = None
+@st.cache_data(ttl=3600, show_spinner="Cargando datos del dashboard...")  # Cachear datos por 1 hora
+def load_all_data():
+    """Carga todos los datos necesarios para la aplicación desde la fuente configurada."""
+    if is_local:
+        st.success("Modo de desarrollo: Cargando datos desde carpeta local.")
+        return load_data_from_local(LOCAL_PATH, modules)
 
-# Crear pestañas
-tab_names = ["CBA Me Capacita", "Banco de la Gente", "Programas de Empleo", "Escrituración"]
+    if FUENTE_DATOS == "minio":
+        minio_client = get_minio_client()
+        if minio_client:
+            st.success("Modo de producción: Cargando datos desde MinIO.")
+            return load_data_from_minio(minio_client, MINIO_BUCKET, modules)
+        else:
+            st.error("No se pudo establecer la conexión con MinIO. No se pueden cargar los datos.")
+            return {}, {}, {"warnings": ["Fallo en conexión a MinIO"], "info": []}
+
+    if FUENTE_DATOS == "gitlab":
+        
+        # Intenta leer el token desde diferentes ubicaciones
+        gitlab_token = None
+        
+        # Opción 1: Estructura anidada [gitlab] token = "..."
+        if "gitlab" in st.secrets and "token" in st.secrets["gitlab"]:
+            gitlab_token = st.secrets["gitlab"]["token"]
+        
+        # Validar el token
+        if not gitlab_token:
+            st.error("❌ El token de GitLab no está configurado en los secretos.")
+            st.info("📝 Configura el token en tu archivo `.streamlit/secrets.toml` usando una de estas opciones:")
+            st.code("""# Opción 1 (recomendada):
+                        [gitlab]
+                        token = "tu_token_aqui" """)
+            return {}, {}, {"warnings": ["Token de GitLab no configurado."], "info": []}
+        elif gitlab_token == "TU_TOKEN_DE_GITLAB_AQUI":
+            st.error("❌ El token de GitLab tiene el valor de ejemplo. Por favor, configura tu token real.")
+            return {}, {}, {"warnings": ["Token de GitLab no configurado (valor de ejemplo)."], "info": []}
+        
+        
+        return load_data_from_gitlab(REPO_ID, BRANCH, gitlab_token, modules)
+
+    st.error(f"Fuente de datos no reconocida: {FUENTE_DATOS}")
+    return {}, {}, {"warnings": [f"Fuente de datos no reconocida: {FUENTE_DATOS}"], "info": []}
+
+# --- Carga de Datos ---
+all_data, all_dates, logs = load_all_data()
+
+# --- Mostrar Campanita de Novedades DESPUÉS de la carga ---
+show_notification_bell()
+
+
+
+# --- Definición de Pestañas ---
+tab_names = ["CBA Me Capacita", "Banco de la Gente", "Programas de Empleo"]
 tabs = st.tabs(tab_names)
 tab_keys = ['cba_capacita', 'bco_gente', 'empleo', 'escrituracion']
 tab_functions = [
@@ -133,80 +117,29 @@ tab_functions = [
     escrituracion.show_escrituracion_dashboard,
 ]
 
+# --- Renderizado de Pestañas ---
 for idx, tab in enumerate(tabs):
     with tab:
         module_key = tab_keys[idx]
         show_func = tab_functions[idx]
+        
         st.markdown(f'<div class="tab-subheader">{tab_names[idx]}</div>', unsafe_allow_html=True)
-        data_key = f"{module_key}_data"
-        dates_key = f"{module_key}_dates"
-        if data_key not in st.session_state or dates_key not in st.session_state:
-            # Mensaje según la fuente de datos configurada
-            if is_local:
-                spinner_message = "Cargando datos desde carpeta local..."
-            elif is_minio:
-                spinner_message = "Cargando datos desde MinIO..."
-            elif is_gitlab:
-                spinner_message = "Cargando datos desde GitLab..."
-            else:
-                spinner_message = "Cargando datos..."
-                
-            with st.spinner(spinner_message):
-                # Determinar la fuente de datos a usar
-                source_type = "local" if is_local else "minio" if is_minio else "gitlab" if is_gitlab else "unknown"
-                
-                # Ajustar lógica para evitar intentos de carga desde GitLab para Escrituración
-                if module_key == "escrituracion":
-                    source_type = "google_sheets"  # Forzar la fuente de datos como Google Sheets
-                    logs = {"warnings": ["El módulo de Escrituración se carga exclusivamente desde Google Sheets."], "info": []}
-                else:
-                    if source_type == "gitlab":
-                        logs = {"warnings": ["Fuente de datos no válida para este módulo."], "info": []}
-                    else:
-                        logs = {"warnings": ["Fuente de datos no válida"], "info": []}
-                
-                # Ejecutar la carga de datos en un hilo separado usando la función centralizada
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future = executor.submit(
-                        load_data_by_source,
-                        source_type,
-                        local_path,
-                        minio_client,
-                        MINIO_BUCKET,
-                        repo_id,
-                        branch,
-                        token,
-                        modules,
-                        module_key
-                    )
-                    data, dates, logs = future.result()
-                
-                # Actualizar session_state SOLO desde el hilo principal
-                st.session_state[data_key] = data
-                st.session_state[dates_key] = dates
-                st.session_state[f"{module_key}_logs"] = logs
-                
-                # Mostrar logs después de que el hilo haya terminado
-                logs_key = f"{module_key}_logs"
-                if logs_key in st.session_state:
-                    # Mostrar advertencias
-                    for warning in st.session_state[logs_key].get("warnings", []):
-                        st.warning(warning)
-                    
-                    # Mostrar información (opcional, puede ser comentado para reducir la salida)
-                    # for info in st.session_state[logs_key].get("info", []):
-                    #    st.info(info)
-        st.markdown("***") # Separador visual
+        
+        # Filtrar datos y fechas para el módulo actual
+        module_files = modules.get(module_key, [])
+        data_for_module = {file: all_data.get(file) for file in module_files if file in all_data}
+        dates_for_module = {file: all_dates.get(file) for file in module_files if file in all_dates}
 
-        # Verificar que las claves existen en session_state antes de llamar a show_func
-        if data_key in st.session_state and dates_key in st.session_state:
-            try:
-                show_func(st.session_state[data_key], st.session_state[dates_key], is_development)
-            except Exception as e:
-                st.error(f"Error al mostrar el dashboard: {str(e)}")
-                st.exception(e)
-        else:
-            st.error(f"Error: Faltan datos necesarios. data_key: {data_key in st.session_state}, dates_key: {dates_key in st.session_state}")
+        if not data_for_module:
+            st.warning(f"No se encontraron datos para el módulo '{tab_names[idx]}'.")
+            continue
 
-# Renderizar el footer al final de la página, fuera de las pestañas
+        try:
+            # Pasar los datos filtrados a la función del dashboard del módulo
+            show_func(data_for_module, dates_for_module, is_local)
+        except Exception as e:
+            st.error(f"Error al renderizar el dashboard '{tab_names[idx]}': {e}")
+            st.exception(e)
+
+# --- Footer ---
 render_footer()

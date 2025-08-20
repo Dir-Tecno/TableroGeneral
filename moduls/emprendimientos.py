@@ -5,37 +5,102 @@ from utils.ui_components import display_kpi_row, show_dev_dataframe_info, show_l
 
 def show_emprendimientos_dashboard(data=None, dates=None, is_development=False):
     """
-    Muestra el dashboard de Emprendimientos. Estructura compatible con app.py y los otros módulos.
-    """
-    # Mostrar última actualización al inicio del dashboard
-    if dates:
-        show_last_update(dates, 'desarrollo_emprendedor.csv')
+    Función principal que muestra el dashboard de emprendimientos.
     
-    nombre_archivo = 'desarrollo_emprendedor.csv'
-
-    if not data or nombre_archivo not in data:
-        st.error(f"No se encontró el archivo '{nombre_archivo}' en los datos cargados.")
-        st.write('Archivos disponibles:', list(data.keys()) if data else 'Sin datos')
+    Args:
+        data: Diccionario con los dataframes cargados
+        dates: Diccionario con las fechas de actualización
+        is_development: Booleano que indica si estamos en modo desarrollo
+    """
+    if data is None:
+        st.error("No se pudieron cargar los datos de Emprendimientos.")
         return
 
-    df = data[nombre_archivo]
-    df.columns = [col.strip() for col in df.columns]
+    # Mostrar info de desarrollo de los DataFrames
+    if is_development:
+        show_dev_dataframe_info(data, modulo_nombre="Emprendimientos")
 
-    columnas_clave = ['CUIL', 'DNI', 'Nombre del Emprendimiento']
-    for col in columnas_clave:
-        if col not in df.columns:
-            st.error(f"Falta la columna '{col}' en el archivo de datos.")
-            st.stop()
+    # Cargar y preprocesar los datos
+    df, has_data = load_and_preprocess_data(data, dates, is_development)
+    
+    if has_data:
+        # Renderizar el dashboard principal
+        render_dashboard(df)
 
-    # Limpieza básica de datos
-    df = df.drop_duplicates(subset=columnas_clave, keep='first')
-    df['Edad'] = pd.to_numeric(df['Edad'], errors='coerce')
-    df['año'] = pd.to_numeric(df['año'], errors='coerce')
+def load_and_preprocess_data(data, dates=None, is_development=False):
+    """
+    Carga y preprocesa los datos necesarios para el dashboard.
+    
+    Args:
+        data: Diccionario de dataframes cargados
+        dates: Diccionario de fechas de actualización de los archivos
+        is_development: Booleano que indica si estamos en modo desarrollo
+        
+    Returns:
+        Tupla con el dataframe procesado y flag de disponibilidad
+    """
+    with st.spinner("Cargando y procesando datos de emprendimientos..."):
+        nombre_archivo = 'desarrollo_emprendedor.csv'
+        
+        # Extraer el dataframe necesario
+        df = data.get(nombre_archivo)
+        has_data = df is not None and not df.empty
 
+        if not has_data:
+            st.error(f"No se encontró el archivo '{nombre_archivo}' en los datos cargados.")
+            st.write('Archivos disponibles:', list(data.keys()) if data else 'Sin datos')
+            return None, False
+
+        # Limpieza y preparación de datos
+        df.columns = [col.strip() for col in df.columns]
+
+        # Verificar columnas requeridas
+        columnas_clave = ['CUIL', 'DNI', 'Nombre del Emprendimiento']
+        for col in columnas_clave:
+            if col not in df.columns:
+                st.error(f"Falta la columna '{col}' en el archivo de datos.")
+                return None, False
+
+        # Limpieza básica de datos
+        df = df.drop_duplicates(subset=columnas_clave, keep='first')
+        df['Edad'] = pd.to_numeric(df['Edad'], errors='coerce')
+        df['año'] = pd.to_numeric(df['año'], errors='coerce')
+
+        return df, True
+
+def render_dashboard(df):
+    """
+    Renderiza el dashboard principal con los datos procesados.
+    
+    Args:
+        df: DataFrame con los datos de emprendimientos
+    """
     st.header('Dashboard de Emprendimientos')
 
     # Filtros
+    df_filtrado = apply_filters(df)
+
+    # KPIs principales
+    display_kpis(df_filtrado)
+
+    # Gráfico de rubros
+    display_rubros_chart(df_filtrado)
+
+    # Tabla resumen
+    st.markdown('### Vista previa de los datos')
+    st.dataframe(df_filtrado.head(30))
+
+def apply_filters(df):
+    """
+    Aplica los filtros seleccionados por el usuario al DataFrame.
+    
+    Args:
+        df: DataFrame original
+    Returns:
+        DataFrame filtrado
+    """
     col1, col2, col3, col4, col5 = st.columns(5)
+    
     with col1:
         anio_sel = st.selectbox('Año', options=['Todos'] + sorted(df['año'].dropna().unique().astype(int).tolist()))
     with col2:
@@ -47,7 +112,6 @@ def show_emprendimientos_dashboard(data=None, dates=None, is_development=False):
     with col5:
         genero_sel = st.selectbox('Género', options=['Todos'] + sorted(df['Genero'].dropna().unique()))
 
-    # Aplicar filtros
     df_filtrado = df.copy()
     if anio_sel != 'Todos':
         df_filtrado = df_filtrado[df_filtrado['año'] == anio_sel]
@@ -60,12 +124,20 @@ def show_emprendimientos_dashboard(data=None, dates=None, is_development=False):
     if genero_sel != 'Todos':
         df_filtrado = df_filtrado[df_filtrado['Genero'] == genero_sel]
 
-    # KPIs principales
-    total_emprendimientos = df_filtrado['Nombre del Emprendimiento'].nunique()
-    total_participantes = df_filtrado['CUIL'].nunique()
-    promedio_edad = df_filtrado['Edad'].mean()
-    total_mujeres = (df_filtrado['Genero'].str.lower() == 'femenino').sum()
-    total_hombres = (df_filtrado['Genero'].str.lower() == 'masculino').sum()
+    return df_filtrado
+
+def display_kpis(df):
+    """
+    Muestra los KPIs principales del dashboard.
+    
+    Args:
+        df: DataFrame filtrado
+    """
+    total_emprendimientos = df['Nombre del Emprendimiento'].nunique()
+    total_participantes = df['CUIL'].nunique()
+    promedio_edad = df['Edad'].mean()
+    total_mujeres = (df['Genero'].str.lower() == 'femenino').sum()
+    total_hombres = (df['Genero'].str.lower() == 'masculino').sum()
 
     kpi_data = [
         {'title': 'Emprendimientos únicos', 'value_form': total_emprendimientos, 'color_class': 'kpi-primary'},
@@ -76,19 +148,16 @@ def show_emprendimientos_dashboard(data=None, dates=None, is_development=False):
     ]
     display_kpi_row(kpi_data, num_columns=5)
 
-    # Gráfico de rubros
+def display_rubros_chart(df):
+    """
+    Muestra el gráfico de rubros.
+    
+    Args:
+        df: DataFrame filtrado
+    """
     st.markdown('#### Emprendimientos por Rubro')
-    rubros = df_filtrado['Rubro Ejecutado']
-    # Filtrar variantes de "Sin informacion"
+    rubros = df['Rubro Ejecutado']
     sin_info = ['sin informacion', 'sin información', 'sin información ']
     rubros = rubros[~rubros.str.strip().str.lower().isin(sin_info)]
     rubros = rubros.value_counts().head(10)
     st.bar_chart(rubros)
-
-    # Tabla resumen
-    st.markdown('### Vista previa de los datos')
-    st.dataframe(df_filtrado.head(30))
-
-    # Modo desarrollo
-    if is_development:
-        show_dev_dataframe_info(data, modulo_nombre='Emprendimientos')

@@ -916,7 +916,6 @@ def show_companies(df_empresas, geojson_data):
         # Extraer todos los programas únicos de la columna ADHERIDO
         todos_programas = df_display['ADHERIDO'].str.split(', ').explode().dropna().unique()
         programas_unicos = sorted(todos_programas)
-    st.markdown("<hr style='border: 1px solid #e0e0e0; margin: 20px 0;'>", unsafe_allow_html=True)
     
     # Añadir filtros en la pestaña de empresas
     st.markdown('<div class="filter-section">', unsafe_allow_html=True)
@@ -1117,6 +1116,14 @@ def show_companies(df_empresas, geojson_data):
 
             # Agrupar por categoría y contar las ocurrencias
             df_cat_count = df_perfil_demanda.groupby('N_CATEGORIA_EMPLEO')['CUIT'].nunique().reset_index(name='Empresas que Buscan')
+            
+            # Limpiar valores infinitos y NaN para evitar warnings en Vega-Lite
+            df_cat_count['Empresas que Buscan'] = df_cat_count['Empresas que Buscan'].replace([float('inf'), float('-inf')], 0)
+            df_cat_count = df_cat_count.dropna(subset=['Empresas que Buscan'])
+            df_cat_count = df_cat_count[df_cat_count['Empresas que Buscan'].notna() & 
+                                       (df_cat_count['Empresas que Buscan'] != float('inf')) & 
+                                       (df_cat_count['Empresas que Buscan'] != float('-inf'))]
+            
             df_cat_count = df_cat_count.sort_values(by='Empresas que Buscan', ascending=False)
 
             if len(df_cat_count) > 9:
