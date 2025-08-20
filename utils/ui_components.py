@@ -3,43 +3,42 @@ import pandas as pd
 import requests
 import datetime
 from utils.session_helper import safe_session_get, safe_session_set, safe_session_check
+from utils.console_logger import log_debug_info
 
 def show_dev_dataframe_info(data, modulo_nombre="Módulo", info_caption=None):
     """
-    Muestra información útil de uno o varios DataFrames en modo desarrollo.
+    Envía información útil de uno o varios DataFrames a la consola del navegador en modo desarrollo.
     Args:
         data: pd.DataFrame o dict de DataFrames
         modulo_nombre: str, nombre del módulo
         info_caption: str, texto opcional para el caption
     """
-    st.markdown("***")
-    st.caption(info_caption or f"Información de Desarrollo ({modulo_nombre})")
-    def _show_single(df, name):
+    # Enviar información a la consola del navegador en lugar de mostrarla en pantalla
+    log_debug_info(info_caption or f"Información de Desarrollo ({modulo_nombre})")
+    
+    def _log_single(df, name):
         if df is None:
-            st.warning(f"DataFrame '{name}' no cargado (es None).")
+            log_debug_info(f"DataFrame '{name}' no cargado (es None).")
         elif hasattr(df, 'empty') and df.empty:
-            st.info(f"DataFrame '{name}' está vacío.")
+            log_debug_info(f"DataFrame '{name}' está vacío.")
         elif hasattr(df, 'head') and hasattr(df, 'columns'):
-            with st.expander(f"Columnas en: `{name}`"):
-                st.write(f"Nombre del DataFrame: {name}")
-                st.write(f"Shape: {df.shape}")
-                st.write(f"Columnas: {', '.join(df.columns)}")
-                st.write(f"Tipos de datos: {df.dtypes}")
-                st.write("Primeras 5 filas:")
-                df_head_display = df.head()
-                if 'geometry' in df_head_display.columns:
-                    st.dataframe(df_head_display.drop(columns=['geometry']))
-                else:
-                    st.dataframe(df_head_display)
-                st.write(f"Total de registros: {len(df)}")
+            log_debug_info(f"DataFrame: {name}")
+            log_debug_info(f"Shape: {df.shape}")
+            log_debug_info(f"Columnas: {', '.join(df.columns)}")
+            log_debug_info(f"Tipos de datos: {dict(df.dtypes)}")
+            log_debug_info(f"Total de registros: {len(df)}")
+            # Mostrar muestra de datos (solo las primeras 3 filas para no saturar la consola)
+            if len(df) > 0:
+                sample_data = df.head(3).to_dict('records')
+                log_debug_info(f"Muestra de datos (3 primeras filas): {sample_data}")
         else:
-            st.warning(f"Objeto '{name}' no es un DataFrame válido (tipo: {type(df)})")
+            log_debug_info(f"Objeto '{name}' no es un DataFrame válido (tipo: {type(df)})")
+    
     if isinstance(data, dict):
         for name, df in data.items():
-            _show_single(df, name)
+            _log_single(df, name)
     else:
-        _show_single(data, "DataFrame")
-    st.markdown("***")
+        _log_single(data, "DataFrame")
     
 def show_last_update(dates, file_substring, mensaje="Última actualización"):
     """
