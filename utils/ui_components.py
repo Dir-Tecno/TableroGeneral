@@ -3,42 +3,41 @@ import pandas as pd
 import requests
 import datetime
 from utils.session_helper import safe_session_get, safe_session_set, safe_session_check
-from utils.console_logger import log_debug_info
 
 def show_dev_dataframe_info(data, modulo_nombre="Módulo", info_caption=None):
     """
-    Envía información útil de uno o varios DataFrames a la consola del navegador en modo desarrollo.
+    Muestra información útil de uno o varios DataFrames en modo desarrollo.
     Args:
         data: pd.DataFrame o dict de DataFrames
         modulo_nombre: str, nombre del módulo
         info_caption: str, texto opcional para el caption
     """
-    # Enviar información a la consola del navegador en lugar de mostrarla en pantalla
-    log_debug_info(info_caption or f"Información de Desarrollo ({modulo_nombre})")
-    
-    def _log_single(df, name):
-        if df is None:
-            log_debug_info(f"DataFrame '{name}' no cargado (es None).")
-        elif hasattr(df, 'empty') and df.empty:
-            log_debug_info(f"DataFrame '{name}' está vacío.")
-        elif hasattr(df, 'head') and hasattr(df, 'columns'):
-            log_debug_info(f"DataFrame: {name}")
-            log_debug_info(f"Shape: {df.shape}")
-            log_debug_info(f"Columnas: {', '.join(df.columns)}")
-            log_debug_info(f"Tipos de datos: {dict(df.dtypes)}")
-            log_debug_info(f"Total de registros: {len(df)}")
-            # Mostrar muestra de datos (solo las primeras 3 filas para no saturar la consola)
-            if len(df) > 0:
-                sample_data = df.head(3).to_dict('records')
-                log_debug_info(f"Muestra de datos (3 primeras filas): {sample_data}")
+    # Mostrar información solo si estamos en modo debug
+    if safe_session_get('debug_mode', False):
+        st.write(f"**{info_caption or f'Información de Desarrollo ({modulo_nombre})'}**")
+        
+        def _show_single(df, name):
+            if df is None:
+                st.write(f"- DataFrame '{name}' no cargado (es None).")
+            elif hasattr(df, 'empty') and df.empty:
+                st.write(f"- DataFrame '{name}' está vacío.")
+            elif hasattr(df, 'head') and hasattr(df, 'columns'):
+                st.write(f"- **DataFrame**: {name}")
+                st.write(f"- **Shape**: {df.shape}")
+                st.write(f"- **Columnas**: {', '.join(df.columns)}")
+                st.write(f"- **Total de registros**: {len(df)}")
+                # Mostrar muestra de datos
+                if len(df) > 0:
+                    st.write(f"- **Muestra de datos (3 primeras filas)**:")
+                    st.dataframe(df.head(3))
+            else:
+                st.write(f"- Objeto '{name}' no es un DataFrame válido (tipo: {type(df)})")
+        
+        if isinstance(data, dict):
+            for name, df in data.items():
+                _show_single(df, name)
         else:
-            log_debug_info(f"Objeto '{name}' no es un DataFrame válido (tipo: {type(df)})")
-    
-    if isinstance(data, dict):
-        for name, df in data.items():
-            _log_single(df, name)
-    else:
-        _log_single(data, "DataFrame")
+            _show_single(data, "DataFrame")
     
 def show_last_update(dates, file_substring, mensaje="Última actualización"):
     """
@@ -124,51 +123,42 @@ def enviar_a_slack(mensaje, valoracion):
 
 def render_footer():
     """
-    Renderiza un footer con un corazón y un icono de comentario que invita a los usuarios a dejar feedback.
-    Incluye un formulario para enviar comentarios a Slack.
+    Renderiza un footer optimizado con formulario de comentarios simplificado.
+    Mantiene integración con Slack pero con mejor rendimiento.
     """
     st.markdown("""<hr style='margin-top: 50px; margin-bottom: 20px;'>""", unsafe_allow_html=True)
     
-    # Crear columnas para el footer
-    col1, col2 = st.columns([3, 1])
-    
-    with col1:
-        st.markdown("""
-            <div style="text-align: left; color: #666; font-size: 0.9em;">
+    # Footer principal con texto y botón inline
+    st.markdown("""
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <div style="color: #666; font-size: 0.9em;">
                 Realizado con 🧡 por la Dirección de Tecnología y Análisis de Datos del Ministerio de Desarrollo Social y Promoción del Empleo.
             </div>
-        """, unsafe_allow_html=True)
+        </div>
+    """, unsafe_allow_html=True)
     
-    with col2:
-        # Botón para abrir el formulario de comentarios
-        if st.button("💬 Dejar comentario", key="btn_comentario"):
-            st.session_state["mostrar_form_comentario"] = True
-    
-    # Mostrar formulario de comentarios si se ha hecho clic en el botón
-    if "mostrar_form_comentario" in st.session_state and st.session_state["mostrar_form_comentario"]:
-        with st.form(key="form_comentario"):
-            st.markdown("### Envíanos tu comentario")
-            comentario = st.text_area("Comentario:", height=100)
-            valoracion = st.slider("Valoración:", min_value=1, max_value=5, value=3, help="1 = Muy malo, 5 = Excelente")
-            
-            # Botón para enviar el formulario
-            submit_button = st.form_submit_button(label="Enviar comentario")
-            
-            if submit_button:
-                if comentario.strip():
-                    # Enviar comentario a Slack
-                    if enviar_a_slack(comentario, valoracion):
-                        st.success("¡Gracias por tu comentario! Ha sido enviado correctamente.")
-                        # Cerrar el formulario
-                        st.session_state["mostrar_form_comentario"] = False
-                    else:
-                        st.error("No se pudo enviar el comentario. Por favor, inténtalo de nuevo más tarde.")
-                else:
-                    st.warning("Por favor, escribe un comentario antes de enviar.")
+    # Usar expander para el formulario de comentarios (más eficiente que session_state)
+    with st.expander("💬 Dejar comentario", expanded=False):
+        # Formulario simplificado en una sola columna
+        comentario = st.text_area("Tu comentario:", height=80, placeholder="Comparte tu opinión sobre este dashboard...")
         
-        # Botón para cerrar el formulario
-        if st.button("Cerrar", key="btn_cerrar_comentario"):
-            st.session_state["mostrar_form_comentario"] = False
+        col1, col2, col3 = st.columns([1, 1, 2])
+        with col1:
+            valoracion = st.selectbox("Valoración:", options=[1, 2, 3, 4, 5], index=2, format_func=lambda x: "⭐" * x)
+        
+        with col2:
+            enviar = st.button("Enviar", type="primary", use_container_width=True)
+        
+        if enviar:
+            if comentario.strip():
+                with st.spinner("Enviando..."):
+                    if enviar_a_slack(comentario, valoracion):
+                        st.success("¡Comentario enviado!")
+                        st.balloons()
+                    else:
+                        st.error("Error al enviar. Intenta de nuevo.")
+            else:
+                st.warning("Escribe un comentario.")
 
 def create_kpi_card(title, color_class="kpi-primary", delta=None, delta_color="#d4f7d4", tooltip=None, detalle_html=None, value_form=None, value_pers=None):
     """
