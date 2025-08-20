@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import requests
 import datetime
+from utils.session_helper import safe_session_get, safe_session_set, safe_session_check
 
 def show_dev_dataframe_info(data, modulo_nombre="Módulo", info_caption=None):
     """
@@ -241,12 +242,12 @@ def show_notification_bell(novedades=None):
         novedades (list): Lista de diccionarios con novedades
                          [{"titulo": "Título", "descripcion": "Descripción", "fecha": "YYYY-MM-DD", "modulo": "Nombre del módulo"}, ...]
     """
-    # Evitar duplicación usando un identificador único en session_state
-    if "campanita_mostrada" in st.session_state:
+    # Evitar duplicación usando un identificador único en session_state seguro
+    if safe_session_check("campanita_mostrada"):
         return
     
     # Marcar que ya se mostró la campanita
-    st.session_state["campanita_mostrada"] = True
+    safe_session_set("campanita_mostrada", True)
     
     if novedades is None:
         # Novedades por defecto si no se proporcionan
