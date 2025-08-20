@@ -4,6 +4,7 @@ import plotly.graph_objects as go
 from utils.ui_components import display_kpi_row, show_last_update
 from utils.styles import COLORES_IDENTIDAD, COLOR_PRIMARY, COLOR_SECONDARY, COLOR_ACCENT_1, COLOR_ACCENT_2, COLOR_ACCENT_3, COLOR_ACCENT_4, COLOR_ACCENT_5, COLOR_TEXT_DARK
 from utils.kpi_tooltips import ESTADO_CATEGORIAS, TOOLTIPS_DESCRIPTIVOS
+from utils.session_helper import safe_session_get, safe_session_set, safe_session_check
 
 # Crear diccionario para tooltips de categorías (técnico, lista de estados)
 tooltips_categorias = {k: ", ".join(v) for k, v in ESTADO_CATEGORIAS.items()}
@@ -242,7 +243,7 @@ def load_and_preprocess_data(data):
         has_cumplimiento_data = not df_cumplimiento.empty
         
         # Verificar la estructura del DataFrame para diagnóstico
-        if has_global_data and st.session_state.get('debug_mode', False):
+        if has_global_data and safe_session_get('debug_mode', False):
             st.write("Estructura de df_global al inicio:")
             st.write(f"Tipo: {type(df_global)}")
             st.write(f"Columnas: {df_global.columns.tolist()}")
@@ -421,7 +422,7 @@ def load_and_preprocess_data(data):
 
         
         # Verificar la estructura final para diagnóstico
-        if has_global_data and st.session_state.get('debug_mode', False):
+        if has_global_data and safe_session_get('debug_mode', False):
             st.write("Estructura final de df_global:")
             st.write(f"Tipo: {type(df_global)}")
             st.write(f"Columnas: {df_global.columns.tolist()}")
@@ -1263,9 +1264,9 @@ def mostrar_global(df_filtrado_global, tooltips_categorias):
             if "Rechazados - Bajas" in categorias_orden:
                 categorias_orden.remove("Rechazados - Bajas")
             
-            # Usar st.session_state para mantener las categorías seleccionadas
-            if 'selected_categorias' not in st.session_state:
-                st.session_state.selected_categorias = categorias_orden
+            # Usar session_state seguro para mantener las categorías seleccionadas
+            if not safe_session_check('selected_categorias'):
+                safe_session_set('selected_categorias', categorias_orden)
             
             # Obtener líneas de crédito disponibles
             if 'N_LINEA_PRESTAMO' in df_filtrado_global.columns:
@@ -1274,9 +1275,9 @@ def mostrar_global(df_filtrado_global, tooltips_categorias):
                 lineas_credito = []
             
             
-            # Inicializar selected_lineas en session_state si no existe
-            if 'selected_lineas_credito' not in st.session_state:
-                st.session_state.selected_lineas_credito = lineas_credito
+            # Inicializar selected_lineas en session_state seguro si no existe
+            if not safe_session_check('selected_lineas_credito'):
+                safe_session_set('selected_lineas_credito', lineas_credito)
             
             col1, col2 = st.columns([3, 1])
             
@@ -1284,7 +1285,7 @@ def mostrar_global(df_filtrado_global, tooltips_categorias):
                 selected_categorias = st.multiselect(
                     "Filtrar por categorías de estado:",
                     options=categorias_orden,
-                    default=st.session_state.selected_categorias,
+                    default=safe_session_get('selected_categorias', categorias_orden),
                     key="estado_categoria_filter"
                 )
             
@@ -1292,7 +1293,7 @@ def mostrar_global(df_filtrado_global, tooltips_categorias):
                 selected_lineas = st.multiselect(
                     "Filtrar por línea de crédito:",
                     options=lineas_credito,
-                    default=st.session_state.selected_lineas_credito,
+                    default=safe_session_get('selected_lineas_credito', lineas_credito),
                     key="linea_credito_filter"
                 )
 
@@ -1357,10 +1358,10 @@ def mostrar_global(df_filtrado_global, tooltips_categorias):
                 st.warning("No hay datos para mostrar con los filtros seleccionados.")
 
             # Actualizar session_state
-            if selected_categorias != st.session_state.selected_categorias:
-                st.session_state.selected_categorias = selected_categorias
-            if selected_lineas != st.session_state.selected_lineas_credito:
-                st.session_state.selected_lineas_credito = selected_lineas
+            if selected_categorias != safe_session_get('selected_categorias', []):
+                safe_session_set('selected_categorias', selected_categorias)
+            if selected_lineas != safe_session_get('selected_lineas_credito', []):
+                safe_session_set('selected_lineas_credito', selected_lineas)
             
             # Si no se selecciona ninguna categoría, mostrar todas
             if not selected_categorias:
