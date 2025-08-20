@@ -42,24 +42,47 @@ def show_dev_dataframe_info(data, modulo_nombre="Módulo", info_caption=None):
     
 def show_last_update(dates, file_substring, mensaje="Última actualización"):
     """
-    Muestra la fecha de última actualización para un archivo específico.
+    Muestra la fecha de última actualización para un archivo específico con zona horaria de Argentina.
     Args:
-        dates: dict con fechas de actualización.
+        dates: dict con fechas de actualización (fechas de commit de GitLab).
         file_substring: substring para buscar la clave relevante en dates.
         mensaje: texto a mostrar antes de la fecha.
     """
     file_dates = [dates.get(k) for k in dates.keys() if file_substring in k]
     latest_date = file_dates[0] if file_dates else None
+    
     if latest_date:
+        # Convertir a pandas datetime
         latest_date = pd.to_datetime(latest_date)
+        
+        # Aplicar zona horaria de Argentina (UTC-3)
         try:
+            # Intentar usar zoneinfo (Python 3.9+)
             from zoneinfo import ZoneInfo
-            latest_date = latest_date.tz_localize('UTC').tz_convert(ZoneInfo('America/Argentina/Buenos_Aires'))
-        except Exception:
-            latest_date = latest_date - pd.Timedelta(hours=3)
+            if latest_date.tz is None:
+                # Si la fecha no tiene zona horaria, asumimos que es UTC
+                latest_date = latest_date.tz_localize('UTC')
+            # Convertir a hora de Argentina
+            latest_date = latest_date.tz_convert(ZoneInfo('America/Argentina/Buenos_Aires'))
+        except ImportError:
+            # Fallback para versiones anteriores de Python
+            try:
+                import pytz
+                if latest_date.tz is None:
+                    latest_date = latest_date.tz_localize('UTC')
+                argentina_tz = pytz.timezone('America/Argentina/Buenos_Aires')
+                latest_date = latest_date.tz_convert(argentina_tz)
+            except ImportError:
+                # Fallback simple: restar 3 horas si no hay zona horaria
+                if latest_date.tz is None:
+                    latest_date = latest_date - pd.Timedelta(hours=3)
+        
+        # Formatear la fecha para mostrar
+        fecha_formateada = latest_date.strftime('%d/%m/%Y %H:%M')
+        
         st.markdown(f"""
             <div style="background-color:#e9ecef; padding:10px; border-radius:5px; margin-bottom:20px; font-size:0.9em;">
-                <i class="fas fa-sync-alt"></i> <strong>{mensaje}:</strong> {latest_date.strftime('%d/%m/%Y %H:%M')}
+                <i class="fas fa-sync-alt"></i> <strong>{mensaje}:</strong> {fecha_formateada} (Hora Argentina)
             </div>
         """, unsafe_allow_html=True)
 
