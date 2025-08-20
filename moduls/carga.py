@@ -264,6 +264,51 @@ def obtener_lista_archivos_gitlab(repo_id, branch, token, logs=None):
     
     return [], logs
 
+def obtener_fecha_commit_gitlab(repo_id, branch, file_name, token, logs=None):
+    """
+    Obtiene la fecha del último commit de un archivo específico en GitLab.
+    
+    Args:
+        repo_id (str): ID del repositorio en formato "namespace/project".
+        branch (str): Rama del repositorio.
+        file_name (str): Nombre del archivo.
+        token (str): Token de acceso a GitLab.
+        logs (dict, optional): Diccionario para registrar logs.
+    
+    Returns:
+        datetime: Fecha del último commit o None si no se puede obtener.
+    """
+    if logs is None:
+        logs = {"warnings": [], "info": []}
+        
+    if not token:
+        return None
+        
+    try:
+        # Asegurar que el repo_id esté correctamente formateado
+        repo_id_encoded = requests.utils.quote(str(repo_id), safe='')
+        
+        # Obtener commits para el archivo específico
+        url = f'https://gitlab.com/api/v4/projects/{repo_id_encoded}/repository/commits'
+        headers = {'PRIVATE-TOKEN': token}
+        params = {'ref': branch, 'path': file_name, 'per_page': 1}
+        
+        response = requests.get(url, headers=headers, params=params)
+        if response.status_code == 200:
+            commits = response.json()
+            if commits:
+                commit_date = commits[0]['committed_date']
+                # Convertir la fecha ISO a datetime
+                fecha_commit = datetime.datetime.fromisoformat(commit_date.replace('Z', '+00:00'))
+                logs["info"].append(f"Fecha de commit obtenida para {file_name}: {fecha_commit}")
+                return fecha_commit
+        else:
+            logs["warnings"].append(f"No se pudo obtener fecha de commit para {file_name}: {response.status_code}")
+            return None
+    except Exception as e:
+        logs["warnings"].append(f"Error al obtener fecha de commit para {file_name}: {str(e)}")
+        return None
+
 def obtener_archivo_gitlab(repo_id, branch, file_name, token, logs=None):
     """
     Obtiene un archivo desde un repositorio GitLab.
@@ -444,10 +489,12 @@ def load_data_from_gitlab(repo_id, branch, token, modules):
                         # Obtener y procesar archivo
                         contenido, logs = obtener_archivo_gitlab(repo_id, branch, archivo_gitlab.replace('/', '%2F'), token, logs)
                         if contenido:
-                            df, fecha = procesar_archivo(archivo, contenido, True, logs)
+                            # Obtener fecha real del commit
+                            fecha_commit = obtener_fecha_commit_gitlab(repo_id, branch, archivo_gitlab, token, logs)
+                            df, _ = procesar_archivo(archivo, contenido, True, logs)
                             if df is not None:
                                 all_data[archivo] = df
-                                all_dates[archivo] = fecha
+                                all_dates[archivo] = fecha_commit or datetime.datetime.now()
                                 logs["info"].append(f"Cargado {archivo} correctamente desde GitLab.")
                             else:
                                 logs["warnings"].append(f"Error al procesar {archivo} desde GitLab.")
@@ -465,10 +512,12 @@ def load_data_from_gitlab(repo_id, branch, token, modules):
                         try:
                             contenido, logs = obtener_archivo_gitlab(repo_id, branch, archivo_candidato.replace('/', '%2F'), token, logs)
                             if contenido:
-                                df, fecha = procesar_archivo(archivo, contenido, True, logs)
+                                # Obtener fecha real del commit
+                                fecha_commit = obtener_fecha_commit_gitlab(repo_id, branch, archivo_candidato, token, logs)
+                                df, _ = procesar_archivo(archivo, contenido, True, logs)
                                 if df is not None:
                                     all_data[archivo] = df
-                                    all_dates[archivo] = fecha
+                                    all_dates[archivo] = fecha_commit or datetime.datetime.now()
                                     logs["info"].append(f"Cargado {archivo} (desde {archivo_candidato}) correctamente.")
                                 else:
                                     logs["warnings"].append(f"Error al procesar {archivo_candidato} desde GitLab.")
