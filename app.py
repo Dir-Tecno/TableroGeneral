@@ -12,7 +12,7 @@ st.set_page_config(
     layout="wide"
 )
 setup_page()
-st.markdown('<div class="main-header">Tablero General de Reportes para TEST 1.4</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header">Tablero General de Reportes para TEST 1.5</div>', unsafe_allow_html=True)
 
 # --- Configuración General ---
 FUENTE_DATOS = "gitlab"  # Opciones: 'minio', 'gitlab', 'local'

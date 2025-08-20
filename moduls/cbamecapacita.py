@@ -901,8 +901,13 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
             # Contar cursos por rango de postulantes
             df_rangos = df_cursos.groupby('Rango_Postulantes', observed=False).size().reset_index(name='Cantidad_Cursos')
             
-            # Filtrar rangos con 0 cursos
+            # Filtrar rangos con 0 cursos y limpiar datos infinitos/NaN para evitar warnings en Vega-Lite
             df_rangos = df_rangos[df_rangos['Cantidad_Cursos'] > 0]
+            df_rangos['Cantidad_Cursos'] = df_rangos['Cantidad_Cursos'].replace([float('inf'), float('-inf')], 0)
+            df_rangos = df_rangos.dropna(subset=['Cantidad_Cursos'])
+            df_rangos = df_rangos[df_rangos['Cantidad_Cursos'].notna() & 
+                                 (df_rangos['Cantidad_Cursos'] != float('inf')) & 
+                                 (df_rangos['Cantidad_Cursos'] != float('-inf'))]
             
             # Crear gráfico de mosaico con Altair
             chart = alt.Chart(df_rangos).mark_bar().encode(
