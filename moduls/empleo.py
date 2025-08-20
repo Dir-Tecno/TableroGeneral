@@ -916,7 +916,6 @@ def show_companies(df_empresas, geojson_data):
         # Extraer todos los programas únicos de la columna ADHERIDO
         todos_programas = df_display['ADHERIDO'].str.split(', ').explode().dropna().unique()
         programas_unicos = sorted(todos_programas)
-    st.markdown("<hr style='border: 1px solid #e0e0e0; margin: 20px 0;'>", unsafe_allow_html=True)
     
     # Añadir filtros en la pestaña de empresas
     st.markdown('<div class="filter-section">', unsafe_allow_html=True)

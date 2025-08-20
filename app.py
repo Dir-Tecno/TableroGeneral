@@ -3,7 +3,6 @@ import streamlit as st
 from moduls import bco_gente, cbamecapacita, empleo
 from utils.styles import setup_page
 from utils.ui_components import render_footer, show_notification_bell
-from utils.console_logger import log_data_loading_info, log_debug_info
 from minio import Minio
 from os import path
 
@@ -13,7 +12,7 @@ st.set_page_config(
     layout="wide"
 )
 setup_page()
-st.markdown('<div class="main-header">Tablero General de Reportes para TEST 1.8</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header">Tablero General de Reportes</div>', unsafe_allow_html=True)
 # --- Configuración General ---
 FUENTE_DATOS = "gitlab"  # Opciones: 'minio', 'gitlab', 'local'
 REPO_ID = "Dir-Tecno/Repositorio-Reportes"
@@ -53,7 +52,7 @@ def get_minio_client():
         st.error(f"Error al conectar con MinIO: {e}")
         return None
 
-@st.cache_data(ttl=3600)  # Cachear datos por 1 hora
+@st.cache_data(ttl=3600, show_spinner="Cargando datos del dashboard...")  # Cachear datos por 1 hora
 def load_all_data():
     """Carga todos los datos necesarios para la aplicación desde la fuente configurada."""
     if is_local:
@@ -73,12 +72,10 @@ def load_all_data():
         
         # Intenta leer el token desde diferentes ubicaciones
         gitlab_token = None
-        token_source = ""
         
         # Opción 1: Estructura anidada [gitlab] token = "..."
         if "gitlab" in st.secrets and "token" in st.secrets["gitlab"]:
             gitlab_token = st.secrets["gitlab"]["token"]
-            token_source = "gitlab.token"
         
         # Validar el token
         if not gitlab_token:
