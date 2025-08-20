@@ -12,8 +12,7 @@ st.set_page_config(
     layout="wide"
 )
 setup_page()
-st.markdown('<div class="main-header">Tablero General de Reportes para TEST 1.3</div>', unsafe_allow_html=True)
-show_notification_bell()
+st.markdown('<div class="main-header">Tablero General de Reportes para TEST 1.4</div>', unsafe_allow_html=True)
 
 # --- Configuración General ---
 FUENTE_DATOS = "gitlab"  # Opciones: 'minio', 'gitlab', 'local'
@@ -73,13 +72,7 @@ def load_all_data():
     if FUENTE_DATOS == "gitlab":
         st.success("Modo de producción: Cargando datos desde GitLab.")
         
-        # Depuración: mostrar qué secretos están disponibles
-        with st.expander("🔍 Depuración de Secretos GitLab"):
-            st.write("**Secretos disponibles:**", list(st.secrets.keys()))
-            if "gitlab" in st.secrets:
-                st.write("**Sección [gitlab]:**", dict(st.secrets["gitlab"]))
-            else:
-                st.warning("No se encontró la sección [gitlab] en secrets.toml")
+       
         
         # Intenta leer el token desde diferentes ubicaciones
         gitlab_token = None
@@ -89,10 +82,7 @@ def load_all_data():
         if "gitlab" in st.secrets and "token" in st.secrets["gitlab"]:
             gitlab_token = st.secrets["gitlab"]["token"]
             token_source = "gitlab.token"
-        # Opción 2: Clave directa gitlab_token = "..."
-        elif "gitlab_token" in st.secrets:
-            gitlab_token = st.secrets["gitlab_token"]
-            token_source = "gitlab_token"
+
         
         # Validar el token
         if not gitlab_token:
@@ -121,6 +111,9 @@ gitlab_token = "tu_token_aqui" """)
 
 # --- Carga de Datos ---
 all_data, all_dates, logs = load_all_data()
+
+# --- Mostrar Campanita de Novedades DESPUÉS de la carga ---
+show_notification_bell()
 
 # --- Sección de Depuración (Opcional) ---
 with st.expander("🔍 Estado de la Carga de Datos (Depuración)"):
