@@ -3,6 +3,7 @@ import streamlit as st
 from moduls import bco_gente, cbamecapacita, empleo
 from utils.styles import setup_page
 from utils.ui_components import render_footer, show_notification_bell
+from utils.console_logger import log_data_loading_info, log_debug_info
 from minio import Minio
 from os import path
 
@@ -12,8 +13,7 @@ st.set_page_config(
     layout="wide"
 )
 setup_page()
-st.markdown('<div class="main-header">Tablero General de Reportes para TEST 1.5</div>', unsafe_allow_html=True)
-
+st.markdown('<div class="main-header">Tablero General de Reportes para TEST 1.7</div>', unsafe_allow_html=True)
 # --- Configuración General ---
 FUENTE_DATOS = "gitlab"  # Opciones: 'minio', 'gitlab', 'local'
 REPO_ID = "Dir-Tecno/Repositorio-Reportes"
@@ -70,9 +70,6 @@ def load_all_data():
             return {}, {}, {"warnings": ["Fallo en conexión a MinIO"], "info": []}
 
     if FUENTE_DATOS == "gitlab":
-        st.success("Modo de producción: Cargando datos desde GitLab.")
-        
-       
         
         # Intenta leer el token desde diferentes ubicaciones
         gitlab_token = None
@@ -82,27 +79,19 @@ def load_all_data():
         if "gitlab" in st.secrets and "token" in st.secrets["gitlab"]:
             gitlab_token = st.secrets["gitlab"]["token"]
             token_source = "gitlab.token"
-
         
         # Validar el token
         if not gitlab_token:
             st.error("❌ El token de GitLab no está configurado en los secretos.")
             st.info("📝 Configura el token en tu archivo `.streamlit/secrets.toml` usando una de estas opciones:")
             st.code("""# Opción 1 (recomendada):
-[gitlab]
-token = "tu_token_aqui"
-
-# Opción 2 (alternativa):
-gitlab_token = "tu_token_aqui" """)
+                        [gitlab]
+                        token = "tu_token_aqui" """)
             return {}, {}, {"warnings": ["Token de GitLab no configurado."], "info": []}
         elif gitlab_token == "TU_TOKEN_DE_GITLAB_AQUI":
             st.error("❌ El token de GitLab tiene el valor de ejemplo. Por favor, configura tu token real.")
             return {}, {}, {"warnings": ["Token de GitLab no configurado (valor de ejemplo)."], "info": []}
-        else:
-            st.success(f"✅ Token de GitLab encontrado en: `{token_source}`")
-            # Mostrar solo los primeros y últimos caracteres del token para verificación
-            token_preview = f"{gitlab_token[:8]}...{gitlab_token[-4:]}" if len(gitlab_token) > 12 else "***"
-            st.info(f"🔑 Token: `{token_preview}`")
+        
         
         return load_data_from_gitlab(REPO_ID, BRANCH, gitlab_token, modules)
 
@@ -117,21 +106,8 @@ show_notification_bell()
 
 # --- Sección de Depuración (Opcional) ---
 with st.expander("🔍 Estado de la Carga de Datos (Depuración)"):
-    st.write("**Archivos Cargados Exitosamente:**", list(all_data.keys()))
-    st.write("**Fechas de Modificación:**", {k: v.strftime('%Y-%m-%d %H:%M:%S') if v else None for k, v in all_dates.items()})
-    if not all_data:
-        st.error("El diccionario 'all_data' está vacío. La carga de datos falló.")
-    
-    st.write("---")
-    st.write("### Logs de Carga:")
-    if logs and logs.get("warnings"):
-        st.write("#### ⚠️ Advertencias:")
-        for warning in logs["warnings"]:
-            st.warning(warning)
-    if logs and logs.get("info"):
-        st.write("#### ℹ️ Información:")
-        for info in logs["info"]:
-            st.info(info)
+    # Enviar logs de carga a la consola del navegador en lugar de mostrarlos en pantalla
+    log_data_loading_info(all_data, all_dates, logs)
 
 # --- Definición de Pestañas ---
 tab_names = ["CBA Me Capacita", "Banco de la Gente", "Programas de Empleo"]
