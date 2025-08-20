@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import requests
 import datetime
+from utils.session_helper import safe_session_get, safe_session_set, safe_session_check
 
 # Inicializar variables de sesión necesarias
 if "mostrar_form_comentario" not in st.session_state:
@@ -17,40 +18,38 @@ def show_dev_dataframe_info(data, modulo_nombre="Módulo", info_caption=None):
         modulo_nombre: str, nombre del módulo
         info_caption: str, texto opcional para el caption
     """
-    st.markdown("***")
-    st.caption(info_caption or f"Información de Desarrollo ({modulo_nombre})")
-    def _show_single(df, name):
-        if df is None:
-            st.warning(f"DataFrame '{name}' no cargado (es None).")
-        elif hasattr(df, 'empty') and df.empty:
-            st.info(f"DataFrame '{name}' está vacío.")
-        elif hasattr(df, 'head') and hasattr(df, 'columns'):
-            with st.expander(f"Columnas en: `{name}`"):
-                st.write(f"Nombre del DataFrame: {name}")
-                st.write(f"Shape: {df.shape}")
-                st.write(f"Columnas: {', '.join(df.columns)}")
-                st.write(f"Tipos de datos: {df.dtypes}")
-                st.write("Primeras 5 filas:")
-                df_head_display = df.head()
-                if 'geometry' in df_head_display.columns:
-                    st.dataframe(df_head_display.drop(columns=['geometry']))
-                else:
-                    st.dataframe(df_head_display)
-                st.write(f"Total de registros: {len(df)}")
+    # Mostrar información solo si estamos en modo debug
+    if safe_session_get('debug_mode', False):
+        st.write(f"**{info_caption or f'Información de Desarrollo ({modulo_nombre})'}**")
+        
+        def _show_single(df, name):
+            if df is None:
+                st.write(f"- DataFrame '{name}' no cargado (es None).")
+            elif hasattr(df, 'empty') and df.empty:
+                st.write(f"- DataFrame '{name}' está vacío.")
+            elif hasattr(df, 'head') and hasattr(df, 'columns'):
+                st.write(f"- **DataFrame**: {name}")
+                st.write(f"- **Shape**: {df.shape}")
+                st.write(f"- **Columnas**: {', '.join(df.columns)}")
+                st.write(f"- **Total de registros**: {len(df)}")
+                # Mostrar muestra de datos
+                if len(df) > 0:
+                    st.write(f"- **Muestra de datos (3 primeras filas)**:")
+                    st.dataframe(df.head(3))
+            else:
+                st.write(f"- Objeto '{name}' no es un DataFrame válido (tipo: {type(df)})")
+        
+        if isinstance(data, dict):
+            for name, df in data.items():
+                _show_single(df, name)
         else:
-            st.warning(f"Objeto '{name}' no es un DataFrame válido (tipo: {type(df)})")
-    if isinstance(data, dict):
-        for name, df in data.items():
-            _show_single(df, name)
-    else:
-        _show_single(data, "DataFrame")
-    st.markdown("***")
+            _show_single(data, "DataFrame")
     
 def show_last_update(dates, file_substring, mensaje="Última actualización"):
     """
-    Muestra la fecha de última actualización para un archivo específico.
+    Muestra la fecha de última actualización para un archivo específico con zona horaria de Argentina.
     Args:
-        dates: dict con fechas de actualización.
+        dates: dict con fechas de actualización (fechas de commit de GitLab).
         file_substring: substring para buscar la clave relevante en dates.
         mensaje: texto a mostrar antes de la fecha.
     """
@@ -61,15 +60,37 @@ def show_last_update(dates, file_substring, mensaje="Última actualización"):
     latest_date = file_dates[0] if file_dates else None
     
     if latest_date:
+        # Convertir a pandas datetime
         latest_date = pd.to_datetime(latest_date)
+        
+        # Aplicar zona horaria de Argentina (UTC-3)
         try:
+            # Intentar usar zoneinfo (Python 3.9+)
             from zoneinfo import ZoneInfo
-            latest_date = latest_date.tz_localize('UTC').tz_convert(ZoneInfo('America/Argentina/Buenos_Aires'))
-        except Exception:
-            latest_date = latest_date - pd.Timedelta(hours=3)
+            if latest_date.tz is None:
+                # Si la fecha no tiene zona horaria, asumimos que es UTC
+                latest_date = latest_date.tz_localize('UTC')
+            # Convertir a hora de Argentina
+            latest_date = latest_date.tz_convert(ZoneInfo('America/Argentina/Buenos_Aires'))
+        except ImportError:
+            # Fallback para versiones anteriores de Python
+            try:
+                import pytz
+                if latest_date.tz is None:
+                    latest_date = latest_date.tz_localize('UTC')
+                argentina_tz = pytz.timezone('America/Argentina/Buenos_Aires')
+                latest_date = latest_date.tz_convert(argentina_tz)
+            except ImportError:
+                # Fallback simple: restar 3 horas si no hay zona horaria
+                if latest_date.tz is None:
+                    latest_date = latest_date - pd.Timedelta(hours=3)
+        
+        # Formatear la fecha para mostrar
+        fecha_formateada = latest_date.strftime('%d/%m/%Y %H:%M')
+        
         st.markdown(f"""
             <div style="background-color:#e9ecef; padding:10px; border-radius:5px; margin-bottom:20px; font-size:0.9em;">
-                <i class="fas fa-sync-alt"></i> <strong>{mensaje}:</strong> {latest_date.strftime('%d/%m/%Y %H:%M')}
+                <i class="fas fa-sync-alt"></i> <strong>{mensaje}:</strong> {fecha_formateada} (Hora Argentina)
             </div>
         """, unsafe_allow_html=True)
     else:
@@ -117,51 +138,42 @@ def enviar_a_slack(mensaje, valoracion):
 
 def render_footer():
     """
-    Renderiza un footer con un corazón y un icono de comentario que invita a los usuarios a dejar feedback.
-    Incluye un formulario para enviar comentarios a Slack.
+    Renderiza un footer optimizado con formulario de comentarios simplificado.
+    Mantiene integración con Slack pero con mejor rendimiento.
     """
     st.markdown("""<hr style='margin-top: 50px; margin-bottom: 20px;'>""", unsafe_allow_html=True)
     
-    # Crear columnas para el footer
-    col1, col2 = st.columns([3, 1])
-    
-    with col1:
-        st.markdown("""
-            <div style="text-align: left; color: #666; font-size: 0.9em;">
+    # Footer principal con texto y botón inline
+    st.markdown("""
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <div style="color: #666; font-size: 0.9em;">
                 Realizado con 🧡 por la Dirección de Tecnología y Análisis de Datos del Ministerio de Desarrollo Social y Promoción del Empleo.
             </div>
-        """, unsafe_allow_html=True)
+        </div>
+    """, unsafe_allow_html=True)
     
-    with col2:
-        # Botón para abrir el formulario de comentarios
-        if st.button("💬 Dejar comentario", key="btn_comentario"):
-            st.session_state["mostrar_form_comentario"] = True
-    
-    # Mostrar formulario de comentarios si se ha hecho clic en el botón
-    if "mostrar_form_comentario" in st.session_state and st.session_state["mostrar_form_comentario"]:
-        with st.form(key="form_comentario"):
-            st.markdown("### Envíanos tu comentario")
-            comentario = st.text_area("Comentario:", height=100)
-            valoracion = st.slider("Valoración:", min_value=1, max_value=5, value=3, help="1 = Muy malo, 5 = Excelente")
-            
-            # Botón para enviar el formulario
-            submit_button = st.form_submit_button(label="Enviar comentario")
-            
-            if submit_button:
-                if comentario.strip():
-                    # Enviar comentario a Slack
-                    if enviar_a_slack(comentario, valoracion):
-                        st.success("¡Gracias por tu comentario! Ha sido enviado correctamente.")
-                        # Cerrar el formulario
-                        st.session_state["mostrar_form_comentario"] = False
-                    else:
-                        st.error("No se pudo enviar el comentario. Por favor, inténtalo de nuevo más tarde.")
-                else:
-                    st.warning("Por favor, escribe un comentario antes de enviar.")
+    # Usar expander para el formulario de comentarios (más eficiente que session_state)
+    with st.expander("💬 Dejar comentario", expanded=False):
+        # Formulario simplificado en una sola columna
+        comentario = st.text_area("Tu comentario:", height=80, placeholder="Comparte tu opinión sobre este dashboard...")
         
-        # Botón para cerrar el formulario
-        if st.button("Cerrar", key="btn_cerrar_comentario"):
-            st.session_state["mostrar_form_comentario"] = False
+        col1, col2, col3 = st.columns([1, 1, 2])
+        with col1:
+            valoracion = st.selectbox("Valoración:", options=[1, 2, 3, 4, 5], index=2, format_func=lambda x: "⭐" * x)
+        
+        with col2:
+            enviar = st.button("Enviar", type="primary", use_container_width=True)
+        
+        if enviar:
+            if comentario.strip():
+                with st.spinner("Enviando..."):
+                    if enviar_a_slack(comentario, valoracion):
+                        st.success("¡Comentario enviado!")
+                        st.balloons()
+                    else:
+                        st.error("Error al enviar. Intenta de nuevo.")
+            else:
+                st.warning("Escribe un comentario.")
 
 def create_kpi_card(title, color_class="kpi-primary", delta=None, delta_color="#d4f7d4", tooltip=None, detalle_html=None, value_form=None, value_pers=None):
     """
@@ -257,12 +269,12 @@ def show_notification_bell(novedades=None):
         novedades (list): Lista de diccionarios con novedades
                          [{"titulo": "Título", "descripcion": "Descripción", "fecha": "YYYY-MM-DD", "modulo": "Nombre del módulo"}, ...]
     """
-    # Evitar duplicación usando un identificador único en session_state
-    if "campanita_mostrada" in st.session_state:
+    # Evitar duplicación usando un identificador único en session_state seguro
+    if safe_session_check("campanita_mostrada"):
         return
     
     # Marcar que ya se mostró la campanita
-    st.session_state["campanita_mostrada"] = True
+    safe_session_set("campanita_mostrada", True)
     
     if novedades is None:
         # Novedades por defecto si no se proporcionan
