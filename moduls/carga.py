@@ -1,15 +1,15 @@
 import pandas as pd
 import geopandas as gpd
 import streamlit as st
-import pandas as pd
+import io
+import datetime
+import numpy as np
 import requests
-import json
-from io import StringIO
+import sys
 import os
-from datetime import datetime
+import glob
 from minio import Minio
-from minio.error import S3Error
-from utils.console_logger import log_loading_info, log_loading_warning, log_loading_error, log_debug 
+import os 
 
 def convert_numpy_types(df):
     if df is None or df.empty:
@@ -209,37 +209,28 @@ def obtener_lista_archivos_gitlab(repo_id, branch, token, logs=None):
     params = {'ref': branch, 'recursive': True}
     
     logs["info"].append(f"Accediendo a GitLab API: {repo_id} (encoded)")
-    log_loading_info(f"Accediendo a GitLab API: {repo_id}")
     
     try:
         response = requests.get(url, headers=headers, params=params)
         logs["info"].append(f"Respuesta HTTP: {response.status_code}")
-        log_loading_info(f"GitLab API respuesta: {response.status_code}")
         
         if response.status_code == 200:
             items = response.json()
             files = [item['path'] for item in items if item['type'] == 'blob']
             logs["info"].append(f"Se encontraron {len(files)} archivos en GitLab.")
-            log_loading_info(f"Archivos encontrados en GitLab: {len(files)}")
             if files:
                 logs["info"].append(f"Primeros archivos encontrados: {files[:5]}")
-                log_debug("Primeros archivos encontrados", files[:5])
             return files, logs
         elif response.status_code == 404:
             logs["warnings"].append(f"Repositorio no encontrado: {repo_id} o branch '{branch}' no existe")
-            log_loading_warning(f"Repositorio no encontrado: {repo_id}")
         elif response.status_code == 401:
             logs["warnings"].append(f"Token no válido o sin permisos para acceder al repositorio {repo_id}")
-            log_loading_warning(f"Token no válido para repositorio {repo_id}")
         elif response.status_code == 403:
             logs["warnings"].append(f"Acceso denegado al repositorio {repo_id}")
-            log_loading_warning(f"Acceso denegado al repositorio {repo_id}")
         else:
             logs["warnings"].append(f"Error HTTP {response.status_code}: {response.text[:200]}")
-            log_loading_error(f"Error HTTP {response.status_code}", response.text[:200])
     except Exception as e:
         logs["warnings"].append(f"Error al obtener lista de archivos: {str(e)}")
-        log_loading_error(f"Error al obtener lista de archivos: {str(e)}")
         
         try:
             url_fallback = f'https://gitlab.com/api/v4/projects/{repo_id}/repository/tree'

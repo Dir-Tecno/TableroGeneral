@@ -2,8 +2,7 @@ from moduls.carga import load_data_from_minio, load_data_from_local, load_data_f
 import streamlit as st
 from moduls import bco_gente, cbamecapacita, empleo
 from utils.styles import setup_page
-from utils.ui_components import show_notification_bell
-from utils.console_logger import log_batch_to_console, log_data_summary, log_loading_info
+from utils.ui_components import render_footer, show_notification_bell
 from minio import Minio
 from os import path
 
@@ -122,12 +121,6 @@ with st.expander("🔍 Estado de la Carga de Datos (Depuración)"):
     st.write("**Fechas de Modificación:**", {k: v.strftime('%Y-%m-%d %H:%M:%S') if v else None for k, v in all_dates.items()})
     if not all_data:
         st.error("El diccionario 'all_data' está vacío. La carga de datos falló.")
-    
-    # Enviar logs a la consola del navegador
-    log_loading_info("Iniciando carga de datos del Tablero General")
-    log_data_summary(all_data, all_dates)
-    if logs:
-        log_batch_to_console(logs)
     
     st.write("---")
     st.write("### Logs de Carga:")
