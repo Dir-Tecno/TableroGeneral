@@ -25,6 +25,7 @@ textblob==0.17.1
 openpyxl==3.1.2
 scipy==1.15.3
 statsmodels==0.14.4
+duckdb==1.1.3
 
 # Integraciones de API
 supabase==2.10.0
