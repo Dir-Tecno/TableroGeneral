@@ -191,13 +191,8 @@ def show_empleo_dashboard(data, dates, is_development=False):
         st.error("No se pudieron cargar los datos de Programas de Empleo.")
         return
     
-    # Toggle para usar DuckDB
-    use_duckdb = st.sidebar.checkbox(
-        "🚀 Usar DuckDB (Optimizado)", 
-        value=True, 
-        help="Usa DuckDB para mejor rendimiento en procesamiento de datos",
-        key="empleo_use_duckdb"
-    )
+    # Usar DuckDB por defecto (optimizado)
+    use_duckdb = True
     
     # Mostrar info de desarrollo de los DataFrames
     if is_development:
@@ -234,7 +229,7 @@ def load_and_preprocess_data(data, dates=None, is_development=False):
         
         # Cargar datos de circuitos electorales
         df_circuitos = data.get('LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt')
-        has_circuitos = df_circuitos is not None and not df_circuitos.empty
+        has_circuitos = df_circuitos is not None and hasattr(df_circuitos, 'empty') and not df_circuitos.empty
 
         # Crear df_emp_ben: cantidad de beneficiarios por empresa (CUIT)
         df_emp_ben = (
@@ -249,7 +244,7 @@ def load_and_preprocess_data(data, dates=None, is_development=False):
         
         # Cargar el dataset de empresas
         df_empresas = data.get('vt_empresas_adheridas.parquet')
-        has_empresas = df_empresas is not None and not df_empresas.empty
+        has_empresas = df_empresas is not None and hasattr(df_empresas, 'empty') and not df_empresas.empty
 
 
 
@@ -391,7 +386,7 @@ def load_and_preprocess_data(data, dates=None, is_development=False):
         # Mostrar df_inscriptos cruzado solo en modo desarrollo
         if is_development:
             if df_inscriptos_cruzado is not None:
-                with st.expander('🔍 Visualización DEBUG: df_inscriptos cruzado (post-merge) NO RETORNA DE LA FUNCION DE CARGA', expanded=False):
+                with st.expander('Visualización: df_inscriptos cruzado (post-merge)', expanded=False):
                     st.dataframe(df_inscriptos_cruzado.head(50))
                     st.write(f"Filas: {df_inscriptos_cruzado.shape[0]}, Columnas: {df_inscriptos_cruzado.shape[1]}")
         # Retornar los dataframes procesados y los flags de disponibilidad
@@ -399,7 +394,7 @@ def load_and_preprocess_data(data, dates=None, is_development=False):
 
 
 @st.cache_data(ttl=3600)
-def load_and_preprocess_data_duckdb(data, dates=None, is_development=False):
+def load_and_preprocess_data_duckdb(_data, dates=None, is_development=False):
     """
     Versión optimizada con DuckDB para carga y preprocesamiento de datos de empleo.
     
@@ -414,39 +409,55 @@ def load_and_preprocess_data_duckdb(data, dates=None, is_development=False):
     try:
         with st.spinner("🚀 Procesando datos de empleo con DuckDB..."):
             # Extraer los dataframes necesarios
-            df_inscriptos_raw = data.get('VT_REPORTES_PPP_MAS26.parquet')
-            geojson_data = data.get('capa_departamentos_2010.geojson')
-            df_circuitos = data.get('LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt')
-            df_empresas_raw = data.get('vt_empresas_adheridas.parquet')
-            df_arca = data.get('vt_empresas_ARCA.parquet')
+            df_inscriptos_raw = _data.get('VT_REPORTES_PPP_MAS26.parquet')
+            geojson_data = _data.get('capa_departamentos_2010.geojson')
+            df_circuitos = _data.get('LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt')
+            df_empresas_raw = _data.get('vt_empresas_adheridas.parquet')
+            df_arca = _data.get('vt_empresas_ARCA.parquet')
             
             # Verificar disponibilidad de datos
-            if df_inscriptos_raw is None or df_inscriptos_raw.empty:
+            if df_inscriptos_raw is None:
+                st.error("No se pudieron cargar los datos de inscripciones.")
+                return None, None, None, False, False
+            elif hasattr(df_inscriptos_raw, 'empty') and df_inscriptos_raw.empty:
                 st.error("No se pudieron cargar los datos de inscripciones.")
                 return None, None, None, False, False
             
-            has_empresas = df_empresas_raw is not None and not df_empresas_raw.empty
+            if df_empresas_raw is None:
+                has_empresas = False
+            elif not hasattr(df_empresas_raw, 'empty'):
+                has_empresas = False
+            elif df_empresas_raw.empty:
+                has_empresas = False
+            else:
+                has_empresas = True
+            
             has_geojson = geojson_data is not None
-            has_circuitos = df_circuitos is not None and not df_circuitos.empty
+            
+            if df_circuitos is None:
+                has_circuitos = False
+            elif not hasattr(df_circuitos, 'empty'):
+                has_circuitos = False
+            elif df_circuitos.empty:
+                has_circuitos = False
+            else:
+                has_circuitos = True
             
             # Inicializar DuckDB
             processor = DuckDBProcessor()
             
             # Registrar tablas principales
-            processor.register_dataframe(df_inscriptos_raw, "inscriptos_raw")
+            processor.register_dataframe("inscriptos_raw", df_inscriptos_raw)
             
             if has_empresas:
-                processor.register_dataframe(df_empresas_raw, "empresas_raw")
+                processor.register_dataframe("empresas_raw", df_empresas_raw)
             
-            if df_arca is not None and not df_arca.empty:
-                processor.register_dataframe(df_arca, "arca")
+            if df_arca is not None and hasattr(df_arca, 'empty') and not df_arca.empty:
+                processor.register_dataframe("arca", df_arca)
             
             if has_circuitos:
-                processor.register_dataframe(df_circuitos, "circuitos")
+                processor.register_dataframe("circuitos", df_circuitos)
             
-            # Mostrar fecha de última actualización
-            from utils.ui_components import show_last_update
-            show_last_update(dates, 'VT_REPORTES_PPP_MAS26.parquet')
             
             # === PASO 1: Crear df_emp_ben (beneficiarios por empresa) ===
             emp_ben_query = """
@@ -459,7 +470,7 @@ def load_and_preprocess_data_duckdb(data, dates=None, is_development=False):
             GROUP BY REPLACE(EMP_CUIT, '-', '')
             """
             df_emp_ben = processor.execute_query(emp_ben_query)
-            processor.register_dataframe(df_emp_ben, "emp_ben")
+            processor.register_dataframe("emp_ben", df_emp_ben)
             
             # === PASO 2: Procesar empresas con JOINs ===
             if has_empresas:
@@ -479,10 +490,11 @@ def load_and_preprocess_data_duckdb(data, dates=None, is_development=False):
                 FROM empresas_raw e
                 """
                 df_empresas_processed = processor.execute_query(empresas_query)
-                processor.register_dataframe(df_empresas_processed, "empresas_processed")
+                processor.register_dataframe("empresas_processed", df_empresas_processed)
                 
                 # JOIN con ARCA si está disponible
-                if df_arca is not None and not df_arca.empty:
+                
+                if df_arca is not None and (hasattr(df_arca, 'empty') and not df_arca.empty):
                     empresas_arca_query = """
                     SELECT 
                         e.*,
@@ -502,10 +514,11 @@ def load_and_preprocess_data_duckdb(data, dates=None, is_development=False):
                     ) a ON e.CUIT_CLEAN = a.CUIT
                     """
                     df_empresas_processed = processor.execute_query(empresas_arca_query)
-                    processor.register_dataframe(df_empresas_processed, "empresas_with_arca")
+                    processor.register_dataframe("empresas_with_arca", df_empresas_processed)
                 
                 # JOIN con beneficiarios - usar la tabla correcta
-                if df_arca is not None and not df_arca.empty:
+                
+                if df_arca is not None and (hasattr(df_arca, 'empty') and not df_arca.empty):
                     empresas_final_query = """
                     SELECT 
                         e.*,
@@ -595,7 +608,7 @@ def load_and_preprocess_data_duckdb(data, dates=None, is_development=False):
             # === PASO 4: JOIN con circuitos si está disponible ===
             if has_circuitos:
                 try:
-                    processor.register_dataframe(df_inscriptos, "inscriptos_processed")
+                    processor.register_dataframe("inscriptos_processed", df_inscriptos)
                     
                     circuitos_join_query = """
                     SELECT 
@@ -626,7 +639,7 @@ def load_and_preprocess_data_duckdb(data, dates=None, is_development=False):
     except Exception as e:
         st.error(f"Error en procesamiento DuckDB: {str(e)}")
         st.info("🔄 Fallback a procesamiento pandas...")
-        return load_and_preprocess_data(data, dates, is_development)
+        return load_and_preprocess_data(_data, dates, is_development)
 
 
 
@@ -1218,7 +1231,7 @@ def show_companies(df_empresas, geojson_data):
     
     # Calcular empresas con y sin beneficiarios
     empresas_con_benef = df_filtered[df_filtered['BENEF'] > 0]['CUIT'].nunique()
-    empresas_sin_benef = df_filtered[df_filtered['BENEF'].isna()]['CUIT'].nunique()
+    empresas_sin_benef = df_filtered[df_filtered['BENEF'] == 0]['CUIT'].nunique()
     
     # Calcular empresas por programa para mostrar en los KPIs usando los datos originales
     programas_conteo = {}
@@ -1247,7 +1260,7 @@ def show_companies(df_empresas, geojson_data):
                 programas_con_benef[programa] = len(cuits_con_benef)
                 
                 # Empresas sin beneficiarios por programa
-                cuits_sin_benef = empresas_programa[empresas_programa['BENEF'].isna()]['CUIT'].unique()
+                cuits_sin_benef = empresas_programa[empresas_programa['BENEF'] == 0]['CUIT'].unique()
                 programas_sin_benef[programa] = len(cuits_sin_benef)
     
     # Obtener los dos programas principales para mostrar en cada KPI

@@ -130,27 +130,28 @@ for idx, tab in enumerate(tabs):
         dates_for_module = {file: all_dates.get(file) for file in module_files if file in all_dates}
 
         if not data_for_module:
-            st.warning(f"No se encontraron datos para el módulo '{tab_names[idx]}'.")
-            with st.expander("🔍 Debug: Ver archivos esperados vs cargados"):
-                st.write(f"**Archivos esperados para {module_key}:**")
-                st.write(module_files)
-                st.write(f"**Archivos cargados desde GitLab:**")
-                st.write(list(all_data.keys()))
-                st.write(f"**Archivos coincidentes:**")
-                coincidentes = [f for f in module_files if f in all_data]
-                st.write(coincidentes if coincidentes else "Ninguno")
-                
-                # Mostrar logs de carga
-                if logs:
-                    st.write("**Logs de carga:**")
-                    if logs.get("warnings"):
-                        st.error("Warnings:")
-                        for warning in logs["warnings"]:
-                            st.write(f"⚠️ {warning}")
-                    if logs.get("info"):
-                        st.info("Info:")
-                        for info in logs["info"]:
-                            st.write(f"ℹ️ {info}")
+            st.warning(f"No se encontraron datos para el módulo '{tab_names[idx]}'. Ver detalles en consola del navegador (F12).")
+            
+            # Enviar información de debug a la consola del navegador
+            coincidentes = [f for f in module_files if f in all_data]
+            debug_info = {
+                "module": module_key,
+                "expected_files": module_files,
+                "loaded_files": list(all_data.keys()),
+                "matching_files": coincidentes if coincidentes else "Ninguno",
+                "logs": logs
+            }
+            
+            st.html(f"""
+            <script>
+                console.group('🔍 DEBUG: Módulo {module_key} - Archivos no encontrados');
+                console.log('Archivos esperados:', {module_files});
+                console.log('Archivos cargados:', {list(all_data.keys())});
+                console.log('Archivos coincidentes:', {coincidentes if coincidentes else "[]"});
+                console.log('Logs completos:', {logs});
+                console.groupEnd();
+            </script>
+            """)
             continue
 
         try:

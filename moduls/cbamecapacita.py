@@ -161,26 +161,32 @@ def load_and_preprocess_data(data, is_development=False):
         if 'ALUMNOS' in df_cursos.columns:
             df_cursos['ALUMNOS'] = pd.to_numeric(df_cursos['ALUMNOS'], errors='coerce').fillna(0).astype(int)
             # Debug: Confirmar que ALUMNOS está en df_cursos
-            print(f"Columna ALUMNOS en df_cursos: {df_cursos['ALUMNOS'].sum()} alumnos en total")
         else:
             print("ADVERTENCIA: La columna ALUMNOS no se agregó a df_cursos")
 
         # Agregar conteo de alumnos egresados a df_cursos
         if df_alumnos is not None and 'N_ESTADO' in df_alumnos.columns:
-            # Debug: Ver valores únicos en N_ESTADO
-            print(f"Estados únicos en df_alumnos: {df_alumnos['N_ESTADO'].unique()}")
+            print(f"DEBUG: Estados únicos en df_alumnos: {df_alumnos['N_ESTADO'].unique()}")
+            print(f"DEBUG: Total registros en df_alumnos: {len(df_alumnos)}")
             
             # Contar alumnos egresados por ID_PLANIFICACION
-            egresados_count = (
-                df_alumnos[df_alumnos['N_ESTADO'] == 'EGRESADO']
-                .groupby('ID_PLANIFICACION')['ID_ALUMNO']
-                .apply(lambda x: x.notnull().sum())
-                .reset_index()
-                .rename(columns={'ID_ALUMNO': 'EGRESADOS'})
-            )
-            # Debug: Ver el resultado del conteo de egresados
-            print(f"Total de grupos con egresados: {len(egresados_count)}")
-            print(f"Total de egresados: {egresados_count['EGRESADOS'].sum()}")
+            egresados_filtrados = df_alumnos[df_alumnos['N_ESTADO'] == 'EGRESADO']
+            print(f"DEBUG: Registros con estado EGRESADO: {len(egresados_filtrados)}")
+            
+            if len(egresados_filtrados) > 0:
+                egresados_count = (
+                    egresados_filtrados
+                    .groupby('ID_PLANIFICACION')['ID_ALUMNO']
+                    .apply(lambda x: x.notnull().sum())
+                    .reset_index()
+                    .rename(columns={'ID_ALUMNO': 'EGRESADOS'})
+                )
+                print(f"DEBUG: Grupos con egresados: {len(egresados_count)}")
+                print(f"DEBUG: Total egresados: {egresados_count['EGRESADOS'].sum()}")
+            else:
+                # Crear DataFrame vacío con estructura correcta
+                egresados_count = pd.DataFrame(columns=['ID_PLANIFICACION', 'EGRESADOS'])
+                print("DEBUG: No hay registros con estado EGRESADO, creando DataFrame vacío")
 
             df_cursos = df_cursos.merge(
                 egresados_count,
@@ -188,13 +194,18 @@ def load_and_preprocess_data(data, is_development=False):
                 left_on='ID_PLANIFICACION',
                 right_on='ID_PLANIFICACION'
             )
+        else:
+            print("DEBUG: df_alumnos es None o no tiene columna N_ESTADO")
+            # Crear columna EGRESADOS con valores 0
+            df_cursos['EGRESADOS'] = 0
 
         if 'EGRESADOS' in df_cursos.columns:
             df_cursos['EGRESADOS'] = pd.to_numeric(df_cursos['EGRESADOS'], errors='coerce').fillna(0).astype(int)
-            # Debug: Confirmar que EGRESADOS está en df_cursos
-            print(f"Columna EGRESADOS en df_cursos: {df_cursos['EGRESADOS'].sum()} egresados en total")
+            print(f"DEBUG: Columna EGRESADOS creada. Total: {df_cursos['EGRESADOS'].sum()}")
+            # Agregar columna PORCENTAJE_EGRESADOS
+            df_cursos['PORCENTAJE_EGRESADOS'] = (df_cursos['EGRESADOS'] / df_cursos['ALUMNOS']) * 100
         else:
-            print("ADVERTENCIA: La columna EGRESADOS no se agregó a df_cursos")
+            print("DEBUG: ADVERTENCIA - Columna EGRESADOS no se creó")
 
     # Agregar columna COMENZADO a df_cursos
     if df_cursos is not None and 'FEC_INICIO' in df_cursos.columns:
@@ -293,14 +304,26 @@ def load_and_preprocess_data_duckdb(data, is_development=False):
             GROUP BY ID_PLANIFICACION
             """
             
+            # Conteo de egresados por ID_PLANIFICACION
+            egresados_count_query = """
+            SELECT 
+                ID_PLANIFICACION,
+                COUNT(CASE WHEN ID_ALUMNO IS NOT NULL AND N_ESTADO = 'EGRESADO' THEN 1 END) as EGRESADOS
+            FROM alumnos
+            WHERE ID_PLANIFICACION IS NOT NULL
+            GROUP BY ID_PLANIFICACION
+            """
+            
             # === PASO 2: JOIN complejo para cursos con todas las métricas ===
             cursos_completo_query = f"""
             WITH postulaciones_agg AS ({postulaciones_query}),
-                 alumnos_agg AS ({alumnos_count_query})
+                 alumnos_agg AS ({alumnos_count_query}),
+                 egresados_agg AS ({egresados_count_query})
             SELECT 
                 c.*,
                 COALESCE(p.POSTULACIONES, 0) as POSTULACIONES,
                 COALESCE(a.ALUMNOS, 0) as ALUMNOS,
+                COALESCE(e.EGRESADOS, 0) as EGRESADOS,
                 GREATEST(0, COALESCE(p.POSTULACIONES, 0) - COALESCE(a.ALUMNOS, 0)) as "No asignados",
                 CASE 
                     WHEN c.FEC_INICIO IS NOT NULL AND c.FEC_INICIO <= CURRENT_DATE 
@@ -310,6 +333,7 @@ def load_and_preprocess_data_duckdb(data, is_development=False):
             FROM cursos c
             LEFT JOIN postulaciones_agg p ON c.ID_PLANIFICACION = p.ID_CERTIFICACION
             LEFT JOIN alumnos_agg a ON c.ID_PLANIFICACION = a.ID_PLANIFICACION
+            LEFT JOIN egresados_agg e ON c.ID_PLANIFICACION = e.ID_PLANIFICACION
             """
             
             df_cursos_processed = processor.execute_query(cursos_completo_query)
@@ -433,8 +457,8 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
     
 
     # --- Usar función de carga y preprocesamiento optimizada con DuckDB ---
-    # Opción para alternar entre pandas y DuckDB
-    use_duckdb = st.sidebar.checkbox("🚀 Usar DuckDB (Optimizado)", value=True, help="Usa DuckDB para mejor rendimiento en procesamiento de datos")
+    # Usar DuckDB por defecto (optimizado)
+    use_duckdb = True
     
     if use_duckdb:
         df_postulantes, df_cursos, df_alumnos = load_and_preprocess_data_duckdb(data, is_development)
@@ -1070,55 +1094,85 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
         if df_cursos is not None and 'POSTULACIONES' in df_cursos.columns:
             st.markdown("### Distribución de Cursos por Cantidad de Postulantes")
             
-            # Crear rangos de postulantes (de 20 en 20)
-            df_cursos['Rango_Postulantes'] = pd.cut(
-                df_cursos['POSTULACIONES'], 
-                bins=range(0, max(df_cursos['POSTULACIONES']) + 21, 20),
-                labels=[f'{i}-{i+19}' for i in range(0, max(df_cursos['POSTULACIONES']), 20)],
-                right=False
-            )
-            
-            # Contar cursos por rango de postulantes
-            df_rangos = df_cursos.groupby('Rango_Postulantes', observed=False).size().reset_index(name='Cantidad_Cursos')
-            
-            # Filtrar rangos con 0 cursos y limpiar datos infinitos/NaN para evitar warnings en Vega-Lite
-            df_rangos = df_rangos[df_rangos['Cantidad_Cursos'] > 0]
-            df_rangos['Cantidad_Cursos'] = df_rangos['Cantidad_Cursos'].replace([float('inf'), float('-inf')], 0)
-            df_rangos = df_rangos.dropna(subset=['Cantidad_Cursos'])
-            df_rangos = df_rangos[df_rangos['Cantidad_Cursos'].notna() & 
-                                 (df_rangos['Cantidad_Cursos'] != float('inf')) & 
-                                 (df_rangos['Cantidad_Cursos'] != float('-inf'))]
-            
-            # Crear gráfico de mosaico con Altair
-            chart = alt.Chart(df_rangos).mark_bar().encode(
-                x=alt.X('Rango_Postulantes:N', title='Rango de Postulantes por Curso', sort=None),
-                y=alt.Y('Cantidad_Cursos:Q', title='Cantidad de Cursos'),
-                color=alt.Color('Rango_Postulantes:N', 
-                               legend=None,
-                               scale=alt.Scale(scheme='viridis')),
-                tooltip=['Rango_Postulantes', 'Cantidad_Cursos']
-            ).properties(
-                title='Distribución de Cursos por Cantidad de Postulantes',
-                width=600,
-                height=400
-            )
-            
-            # Añadir etiquetas de texto
-            text = chart.mark_text(
-                align='center',
-                baseline='middle',
-                dy=-10,
-                color='white',
-                fontWeight='bold'
-            ).encode(
-                text='Cantidad_Cursos:Q'
-            )
-            
-            # Combinar gráfico y etiquetas
-            final_chart = (chart + text)
-            
-            # Mostrar el gráfico
-            st.altair_chart(final_chart, use_container_width=True)
+            # Verificar que hay datos válidos
+            postulaciones_validas = df_cursos['POSTULACIONES'].dropna()
+            if len(postulaciones_validas) == 0:
+                st.info("No hay datos de postulaciones disponibles para mostrar el gráfico.")
+            else:
+                max_postulaciones = int(postulaciones_validas.max())
+                
+                # Si el máximo es muy pequeño, usar rangos más pequeños
+                if max_postulaciones <= 20:
+                    bin_size = 5
+                    bins = list(range(0, max_postulaciones + bin_size + 1, bin_size))
+                    labels = [f'{i}-{min(i+bin_size-1, max_postulaciones)}' for i in range(0, max_postulaciones + 1, bin_size)]
+                else:
+                    bin_size = 20
+                    bins = list(range(0, max_postulaciones + bin_size + 1, bin_size))
+                    labels = [f'{i}-{i+bin_size-1}' for i in range(0, max_postulaciones + 1, bin_size)]
+                
+                # Asegurar que tenemos al menos 2 bins
+                if len(bins) < 2:
+                    bins = [0, max_postulaciones + 1]
+                    labels = [f'0-{max_postulaciones}']
+                
+                # Crear rangos de postulantes
+                try:
+                    df_cursos_copy = df_cursos.copy()
+                    df_cursos_copy['Rango_Postulantes'] = pd.cut(
+                        df_cursos_copy['POSTULACIONES'], 
+                        bins=bins,
+                        labels=labels[:len(bins)-1],  # Asegurar que labels tenga la longitud correcta
+                        right=False,
+                        include_lowest=True
+                    )
+                    
+                    # Contar cursos por rango de postulantes
+                    df_rangos = df_cursos_copy.groupby('Rango_Postulantes', observed=True).size().reset_index(name='Cantidad_Cursos')
+                    
+                    # Filtrar solo rangos con cursos
+                    df_rangos = df_rangos[df_rangos['Cantidad_Cursos'] > 0]
+                    
+                    if len(df_rangos) == 0:
+                        st.info("No hay datos suficientes para mostrar la distribución por rangos.")
+                    else:
+                        # Crear gráfico de mosaico con Altair
+                        chart = alt.Chart(df_rangos).mark_bar().encode(
+                            x=alt.X('Rango_Postulantes:N', title='Rango de Postulantes por Curso', sort=None),
+                            y=alt.Y('Cantidad_Cursos:Q', title='Cantidad de Cursos'),
+                            color=alt.Color('Rango_Postulantes:N', 
+                                           legend=None,
+                                           scale=alt.Scale(scheme='viridis')),
+                            tooltip=['Rango_Postulantes', 'Cantidad_Cursos']
+                        ).properties(
+                            title='Distribución de Cursos por Cantidad de Postulantes',
+                            width=600,
+                            height=400
+                        )
+                        
+                        # Añadir etiquetas de texto
+                        text = chart.mark_text(
+                            align='center',
+                            baseline='middle',
+                            dy=-10,
+                            color='white',
+                            fontWeight='bold'
+                        ).encode(
+                            text='Cantidad_Cursos:Q'
+                        )
+                        
+                        # Combinar gráfico y etiquetas
+                        final_chart = (chart + text)
+                        
+                        # Mostrar el gráfico
+                        st.altair_chart(final_chart, use_container_width=True)
+                except Exception as e:
+                    st.error(f"Error al crear el gráfico de distribución: {str(e)}")
+                    st.info("Mostrando datos básicos de postulaciones:")
+                    st.write(f"Total de cursos: {len(df_cursos)}")
+                    st.write(f"Rango de postulaciones: {postulaciones_validas.min():.0f} - {postulaciones_validas.max():.0f}")
+        else:
+            st.info("No se encontró la columna POSTULACIONES en los datos de cursos.")
         
         st.markdown("## Sector Productivos por Departamento")
         # Mostrar DataFrame solo si existe
@@ -1171,11 +1225,26 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
             df_display = df_export[columnas_mostrar_existentes].copy()
             
             # Aplicar estilos al DataFrame
-            styled_display = df_display.style\
-                .background_gradient(subset=["POSTULACIONES"], cmap="Blues")\
-                .background_gradient(subset=["ALUMNOS"], cmap="Greens")\
-                .background_gradient(subset=["No asignados"], cmap="Oranges")\
-                .format({"POSTULACIONES": "{:,.0f}", "ALUMNOS": "{:,.0f}", "No asignados": "{:,.0f}"})
+            styled_display = df_display.style
+            
+            # Aplicar gradientes solo para columnas que existen
+            if "POSTULACIONES" in df_display.columns:
+                styled_display = styled_display.background_gradient(subset=["POSTULACIONES"], cmap="Blues")
+            if "ALUMNOS" in df_display.columns:
+                styled_display = styled_display.background_gradient(subset=["ALUMNOS"], cmap="Greens")
+            if "EGRESADOS" in df_display.columns:
+                styled_display = styled_display.background_gradient(subset=["EGRESADOS"], cmap="Purples")
+            if "No asignados" in df_display.columns:
+                styled_display = styled_display.background_gradient(subset=["No asignados"], cmap="Oranges")
+            
+            # Aplicar formato numérico solo para columnas que existen
+            format_dict = {}
+            for col in ["POSTULACIONES", "ALUMNOS", "EGRESADOS", "No asignados"]:
+                if col in df_display.columns:
+                    format_dict[col] = "{:,.0f}"
+            
+            if format_dict:
+                styled_display = styled_display.format(format_dict)
             
             # Resaltar visualmente los cursos comenzados con color verde
             if "COMENZADO" in df_display.columns:
