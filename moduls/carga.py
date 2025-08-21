@@ -113,10 +113,10 @@ def procesar_archivo(nombre, contenido, es_buffer, logs=None):
         elif nombre.endswith('.csv') or nombre.endswith('.txt'):
             if es_buffer:
                 # Para archivos .txt, usar encoding adecuado y separador de coma
-                df = pd.read_csv(io.BytesIO(contenido), sep=',', encoding='utf-8', on_bad_lines='skip')
+                df = pd.read_csv(io.BytesIO(contenido))
                 fecha = datetime.datetime.now()
             else:
-                df = pd.read_csv(contenido, sep=',', encoding='utf-8', on_bad_lines='skip')
+                df = pd.read_csv(contenido)
                 fecha = datetime.datetime.now()
             return df, fecha
         elif nombre.endswith('.geojson'):

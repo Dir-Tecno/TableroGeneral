@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
+from datetime import datetime, timedelta
 from utils.ui_components import display_kpi_row, show_last_update
 from utils.styles import COLORES_IDENTIDAD, COLOR_PRIMARY, COLOR_SECONDARY, COLOR_ACCENT_1, COLOR_ACCENT_2, COLOR_ACCENT_3, COLOR_ACCENT_4, COLOR_ACCENT_5, COLOR_TEXT_DARK
 from utils.kpi_tooltips import ESTADO_CATEGORIAS, TOOLTIPS_DESCRIPTIVOS
@@ -1552,6 +1553,7 @@ def mostrar_global(df_filtrado_global, tooltips_categorias):
                         ].copy()
                         
                         # Filtrar datos de inicio de pago por rango de fechas (si existen)
+                        tiene_datos_pago_filtrados = tiene_datos_pago
                         if tiene_datos_pago_filtrados:
                             df_fechas_pago_seleccionado = df_fechas_pago[
                                 (df_fechas_pago['FEC_INICIO_PAGO'].dt.date >= start_date) &
