@@ -1,6 +1,9 @@
 import streamlit as st
-st.set_page_config(page_title="Tablero General", layout="wide")
-
+# --- Configuración de la Página ---
+st.set_page_config(
+    page_title="Dashboard Resumen del Ministerio de Desarrollo Social y Promoción del Empleo",
+    layout="wide"
+)
 from moduls.carga import load_data_from_minio, load_data_from_local, load_data_from_gitlab
 from moduls import bco_gente, cbamecapacita, empleo, escrituracion
 from utils.styles import setup_page
@@ -8,11 +11,7 @@ from utils.ui_components import render_footer, show_notification_bell
 from minio import Minio
 from os import path
 
-# --- Configuración de la Página ---
-st.set_page_config(
-    page_title="Dashboard Resumen del Ministerio de Desarrollo Social y Promoción del Empleo",
-    layout="wide"
-)
+
 setup_page()
 st.markdown('<div class="main-header">Tablero General de Reportes</div>', unsafe_allow_html=True)
 # --- Configuración General ---
