@@ -8,10 +8,20 @@ services:
       front-net:
         ipv4_address: 172.21.0.8
     ports:
-      - 8504:8504
+      - 8504:8501
     environment:
       - GITLAB_TOKEN=glpat-jdZnZLkoh1TVj1v5YxGb
       - SLACK_WEBHOOK_URL=https://hooks.slack.com/services/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
+      - GOOGLE_CLOUD_TYPE=service_account
+      - GOOGLE_CLOUD_PROJECT_ID=base-escrituracion-2024
+      - GOOGLE_CLOUD_PRIVATE_KEY_ID=f38c80e31c086d25ac3f44ef7e20e8532d655624
+      - GOOGLE_CLOUD_PRIVATE_KEY=-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQDLJFJL+8zpV7aD\nnftv7BwRuNMF7Tu/L490OattTzCXbQQRYvocb9poGa7oHLc4bGcnLAFsX5fOtbi6\nYucjf34aZx8AkGn4rV6qywE3YD6sqb1DoYm7ve0gJhy628pLsuWvkNpDqZIgkuc/\nJ7RVk2eiGxEcqKD7o/x/sxs3dfDzB6QvVuzYBGR2UoH6ILvnQJkKE5OgwrZvN53N\nCWkCPiUTPKgI4UiCcxH5cMTQBg9HUIf+iicFz90xzk/eURgCSfYhTycbaQJFCjzW\nUKhr6iGtOUmOXTZDIZdmJNpATCorJ//iYPTjX8aoC2hcj3PgeRH0f4BLZoyzEu4t\nfh7VG0tzAgMBAAECggEAIv3xsyb/qB400T0wZ5obR643o2i3BvrRUirw7ZZbf2oG\n7lvHS4i07YOnDlKL+QsrRaMd56Ybxz6kQG7y87ltZmzm+TjnGC/9A5yObBSHF0Tx\n1imISS+xHf2Sq1la4mlBiVmBT3BxPG0xqj5ToP4QNutEqlQdztrzjqeyg34scCBN\nKbYD17HO6r3QwP5v3gA3UqrwWoAnrqcHgW0Djnq17vhKwOqSKf3wJm4dGDUQSCjy\nVDr6g7hikWHGeTUKkb+rAWYb4LUQHA7kswMvY46TjW9UKUBWm4Z656ARJmTCrfsD\n96vsQ+bHdfmxeZnib6QzAcZq7g7+IMAUD7R7gIF4+QKBgQDwjmSPDr2mtKhAGjpf\nXc3shOIIUzV64h6ayfni6v+/keqZ6KQ4WL5JLHOuddIniTivKCzBZsxpgV5Eg5vX\noSYx+++U9K5/fkDdYILvm+Hwji0fmt7P+kff69A4c/xMoOG7MZ8pkhbmJbcRcVTP\nK5JE/2KCEinYkJmSEPEqRtlSdQKBgQDYLwOFLsN5JXMeUkz6UCoCd/G7EsLzPR9n\nMDipAIm+HHiW7mMiymSHB305CnHBwOwuzTgTlTJXXvlsryUwn61l6/mzJoDNW7S+\nDD68FX4Ez250dFUy4QiOuZmTNNUAA9RuZoPjORZeAkTuge6Pt/LTznZNMlKJjZ4x\nAfAvVagZRwKBgEEDOsovAbJ8QLySWhRMFctGXpBBbMK5Oew7if155YSwuua9qSRR\nV5wPF3SfAx0MSPWNtgrO7Y/WFtQNfaDZPKllnWp0dnSeeolZ/Akl5/pLcoaIJI+w\n5Jvv72ZScm2DTX55+roRcX7h0og0SOd0ryNWohjlL8oHynlfes4iN7nBAoGAf9N0\nsmhPPq/NHM2vJIcIAAOqFGJokWi/y8Twi8V8rMOq7huw1J51yH2+Jl8tmlIXlSjV\nEocyiATpWMFLLTANWGmqcKrAmCy0d3dIFPBkXjXE6ujqg7YZ2EKYMzmXBHY/QrQt\nIcrcleOjnJ+JTsOGuoSm4Mhzk1AAjJvHyEVOqvsCgYABnQMNrH8ruY/16u1ewCRi\n7CtGGVgipOacPnEAszVnsbPHRkxBft5zN2xHLn6sN1Jw9epxx+pgKNT2KCkOJk7q\nc6YKr5lKOG1QSPdRt3YNnkg3+pmEhDPkluW2lxhPe0IBeEo2gCdMt5zwBOro/xO6\na3L67zThkw3ZwKgHX/PAVQ==\n-----END PRIVATE KEY-----\n
+      - GOOGLE_CLOUD_CLIENT_EMAIL=api-reporte@base-escrituracion-2024.iam.gserviceaccount.com
+      - GOOGLE_CLOUD_CLIENT_ID=116938564038966260525
+      - GOOGLE_CLOUD_AUTH_URI=https://accounts.google.com/o/oauth2/auth
+      - GOOGLE_CLOUD_TOKEN_URI=https://oauth2.googleapis.com/token
+      - GOOGLE_CLOUD_AUTH_PROVIDER_CERT_URL=https://www.googleapis.com/oauth2/v1/certs
+      - GOOGLE_CLOUD_CLIENT_CERT_URL=https://www.googleapis.com/robot/v1/metadata/x509/api-reporte%40base-escrituracion-2024.iam.gserviceaccount.com
 
 networks:
   front-net:                #Gateway: 172.21.0.1

@@ -5,7 +5,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import json
 from datetime import datetime, timedelta
-from utils.ui_components import display_kpi_row
+from utils.ui_components import display_kpi_row, show_last_update
 from utils.map_utils import create_choropleth_map, display_map
 from utils.styles import COLORES_IDENTIDAD
 from utils.data_cleaning import clean_thousand_separator, convert_decimal_separator
@@ -183,6 +183,10 @@ def show_empleo_dashboard(data, dates, is_development=False):
         dates: Diccionario con las fechas de actualización
         is_development: Booleano que indica si estamos en modo desarrollo
     """
+    # Mostrar última actualización al inicio del dashboard
+    if dates:
+        show_last_update(dates, 'VT_REPORTES_PPP_MAS26.parquet')
+    
     if data is None:
         st.error("No se pudieron cargar los datos de Programas de Empleo.")
         return
@@ -330,9 +334,7 @@ def load_and_preprocess_data(data, dates=None, is_development=False):
             df_empresas['ZONA'] = df_empresas['N_DEPARTAMENTO'].apply(
                 lambda x: 'ZONA NOC Y SUR' if x in zonas_favorecidas else 'ZONA REGULAR'
             )
-                # Mostrar la fecha de última actualización
-        from utils.ui_components import show_last_update
-        show_last_update(dates, 'VT_REPORTES_PPP_MAS26.parquet')
+
         
 
         
@@ -1159,7 +1161,6 @@ def show_companies(df_empresas, geojson_data):
         # Extraer todos los programas únicos de la columna ADHERIDO
         todos_programas = df_display['ADHERIDO'].str.split(', ').explode().dropna().unique()
         programas_unicos = sorted(todos_programas)
-    st.markdown("<hr style='border: 1px solid #e0e0e0; margin: 20px 0;'>", unsafe_allow_html=True)
     
     # Añadir filtros en la pestaña de empresas
     st.markdown('<div class="filter-section">', unsafe_allow_html=True)
@@ -1360,6 +1361,14 @@ def show_companies(df_empresas, geojson_data):
 
             # Agrupar por categoría y contar las ocurrencias
             df_cat_count = df_perfil_demanda.groupby('N_CATEGORIA_EMPLEO')['CUIT'].nunique().reset_index(name='Empresas que Buscan')
+            
+            # Limpiar valores infinitos y NaN para evitar warnings en Vega-Lite
+            df_cat_count['Empresas que Buscan'] = df_cat_count['Empresas que Buscan'].replace([float('inf'), float('-inf')], 0)
+            df_cat_count = df_cat_count.dropna(subset=['Empresas que Buscan'])
+            df_cat_count = df_cat_count[df_cat_count['Empresas que Buscan'].notna() & 
+                                       (df_cat_count['Empresas que Buscan'] != float('inf')) & 
+                                       (df_cat_count['Empresas que Buscan'] != float('-inf'))]
+            
             df_cat_count = df_cat_count.sort_values(by='Empresas que Buscan', ascending=False)
 
             if len(df_cat_count) > 9:

@@ -165,6 +165,37 @@ def load_and_preprocess_data(data, is_development=False):
         else:
             print("ADVERTENCIA: La columna ALUMNOS no se agregó a df_cursos")
 
+        # Agregar conteo de alumnos egresados a df_cursos
+        if df_alumnos is not None and 'N_ESTADO' in df_alumnos.columns:
+            # Debug: Ver valores únicos en N_ESTADO
+            print(f"Estados únicos en df_alumnos: {df_alumnos['N_ESTADO'].unique()}")
+            
+            # Contar alumnos egresados por ID_PLANIFICACION
+            egresados_count = (
+                df_alumnos[df_alumnos['N_ESTADO'] == 'EGRESADO']
+                .groupby('ID_PLANIFICACION')['ID_ALUMNO']
+                .apply(lambda x: x.notnull().sum())
+                .reset_index()
+                .rename(columns={'ID_ALUMNO': 'EGRESADOS'})
+            )
+            # Debug: Ver el resultado del conteo de egresados
+            print(f"Total de grupos con egresados: {len(egresados_count)}")
+            print(f"Total de egresados: {egresados_count['EGRESADOS'].sum()}")
+
+            df_cursos = df_cursos.merge(
+                egresados_count,
+                how='left',
+                left_on='ID_PLANIFICACION',
+                right_on='ID_PLANIFICACION'
+            )
+
+        if 'EGRESADOS' in df_cursos.columns:
+            df_cursos['EGRESADOS'] = pd.to_numeric(df_cursos['EGRESADOS'], errors='coerce').fillna(0).astype(int)
+            # Debug: Confirmar que EGRESADOS está en df_cursos
+            print(f"Columna EGRESADOS en df_cursos: {df_cursos['EGRESADOS'].sum()} egresados en total")
+        else:
+            print("ADVERTENCIA: La columna EGRESADOS no se agregó a df_cursos")
+
     # Agregar columna COMENZADO a df_cursos
     if df_cursos is not None and 'FEC_INICIO' in df_cursos.columns:
         # Convertir FEC_INICIO a datetime
@@ -387,6 +418,10 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
         dates: Diccionario con fechas de actualización.
         is_development (bool): True si se está en modo desarrollo.
     """
+    # Mostrar última actualización al inicio del dashboard
+    if dates:
+        show_last_update(dates, 'VT_INSCRIPCIONES_PRG129.parquet')
+    
     if data is None:
         st.error("No se pudieron cargar los datos de CBA ME CAPACITA.")
         return
@@ -431,8 +466,7 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
     if df_cursos is not None and 'COMENZADO' in df_cursos.columns:
         # Usar la columna COMENZADO ya calculada en load_and_preprocess_data
         cursos_comenzados = df_cursos[df_cursos['COMENZADO']]['ID_PLANIFICACION'].nunique()
-    # Mostrar información de actualización de datos
-    show_last_update(dates, 'VT_INSCRIPCIONES_PRG129.parquet')
+
     
     # Crear un diccionario con los resultados para pasarlo a la función de KPIs
     resultados = {
@@ -1047,8 +1081,13 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
             # Contar cursos por rango de postulantes
             df_rangos = df_cursos.groupby('Rango_Postulantes', observed=False).size().reset_index(name='Cantidad_Cursos')
             
-            # Filtrar rangos con 0 cursos
+            # Filtrar rangos con 0 cursos y limpiar datos infinitos/NaN para evitar warnings en Vega-Lite
             df_rangos = df_rangos[df_rangos['Cantidad_Cursos'] > 0]
+            df_rangos['Cantidad_Cursos'] = df_rangos['Cantidad_Cursos'].replace([float('inf'), float('-inf')], 0)
+            df_rangos = df_rangos.dropna(subset=['Cantidad_Cursos'])
+            df_rangos = df_rangos[df_rangos['Cantidad_Cursos'].notna() & 
+                                 (df_rangos['Cantidad_Cursos'] != float('inf')) & 
+                                 (df_rangos['Cantidad_Cursos'] != float('-inf'))]
             
             # Crear gráfico de mosaico con Altair
             chart = alt.Chart(df_rangos).mark_bar().encode(
@@ -1099,6 +1138,7 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                 "ALTURA",
                 "POSTULACIONES",
                 "ALUMNOS",
+                "EGRESADOS",
                 "No asignados",
                 "COMENZADO"
             ]
@@ -1121,6 +1161,7 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                 "N_LOCALIDAD",
                 "POSTULACIONES",
                 "ALUMNOS",
+                "EGRESADOS",
                 "No asignados",
                 "COMENZADO"
             ]

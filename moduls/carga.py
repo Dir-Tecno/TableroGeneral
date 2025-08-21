@@ -112,10 +112,11 @@ def procesar_archivo(nombre, contenido, es_buffer, logs=None):
             return df, fecha
         elif nombre.endswith('.csv') or nombre.endswith('.txt'):
             if es_buffer:
-                df = pd.read_csv(io.BytesIO(contenido), sep=',')
+                # Para archivos .txt, usar encoding adecuado y separador de coma
+                df = pd.read_csv(io.BytesIO(contenido))
                 fecha = datetime.datetime.now()
             else:
-                df = pd.read_csv(contenido, sep=',')
+                df = pd.read_csv(contenido)
                 fecha = datetime.datetime.now()
             return df, fecha
         elif nombre.endswith('.geojson'):
@@ -203,44 +204,47 @@ def obtener_lista_archivos_gitlab(repo_id, branch, token, logs=None):
         logs["warnings"].append("Token de GitLab no proporcionado")
         return [], logs
     
-    # Probar diferentes formatos de ID
-    formatos_id = [
-        repo_id,
-        requests.utils.quote(repo_id, safe=''),
-        repo_id.replace('/', '%2F')
-    ]
+    repo_id_encoded = requests.utils.quote(repo_id, safe='')
+    url = f'https://gitlab.com/api/v4/projects/{repo_id_encoded}/repository/tree'
+    headers = {'PRIVATE-TOKEN': token}
+    params = {'ref': branch, 'recursive': True}
     
-    for id_formato in formatos_id:
-        url = f'https://gitlab.com/api/v4/projects/{id_formato}/repository/tree'
-        headers = {'PRIVATE-TOKEN': token}
-        params = {'ref': branch, 'recursive': True}
+    logs["info"].append(f"Accediendo a GitLab API: {repo_id} (encoded)")
+    
+    try:
+        response = requests.get(url, headers=headers, params=params)
+        logs["info"].append(f"Respuesta HTTP: {response.status_code}")
         
-        logs["info"].append(f"Intentando acceder a: {url} con branch: {branch}")
+        if response.status_code == 200:
+            items = response.json()
+            files = [item['path'] for item in items if item['type'] == 'blob']
+            logs["info"].append(f"Se encontraron {len(files)} archivos en GitLab.")
+            if files:
+                logs["info"].append(f"Primeros archivos encontrados: {files[:5]}")
+            return files, logs
+        elif response.status_code == 404:
+            logs["warnings"].append(f"Repositorio no encontrado: {repo_id} o branch '{branch}' no existe")
+        elif response.status_code == 401:
+            logs["warnings"].append(f"Token no válido o sin permisos para acceder al repositorio {repo_id}")
+        elif response.status_code == 403:
+            logs["warnings"].append(f"Acceso denegado al repositorio {repo_id}")
+        else:
+            logs["warnings"].append(f"Error HTTP {response.status_code}: {response.text[:200]}")
+    except Exception as e:
+        logs["warnings"].append(f"Error al obtener lista de archivos: {str(e)}")
         
         try:
-            response = requests.get(url, headers=headers, params=params)
-            logs["info"].append(f"Respuesta HTTP: {response.status_code}")
-            
+            url_fallback = f'https://gitlab.com/api/v4/projects/{repo_id}/repository/tree'
+            logs["info"].append(f"Intentando fallback sin encoding...")
+            response = requests.get(url_fallback, headers=headers, params=params)
             if response.status_code == 200:
                 items = response.json()
                 files = [item['path'] for item in items if item['type'] == 'blob']
-                logs["info"].append(f"Se encontraron {len(files)} archivos en GitLab.")
-                if files:
-                    logs["info"].append(f"Primeros archivos encontrados: {files[:5]}")
+                logs["info"].append(f"Fallback exitoso: {len(files)} archivos encontrados.")
                 return files, logs
-            elif response.status_code == 404:
-                logs["warnings"].append(f"Repositorio no encontrado con formato {id_formato} o branch '{branch}' no existe")
-            elif response.status_code == 401:
-                logs["warnings"].append(f"Token no válido o sin permisos para acceder al repositorio {id_formato}")
-            elif response.status_code == 403:
-                logs["warnings"].append(f"Acceso denegado al repositorio {id_formato}")
-            else:
-                logs["warnings"].append(f"Error HTTP {response.status_code} para {id_formato}: {response.text[:200]}")
-        except Exception as e:
-            logs["warnings"].append(f"Error al obtener lista de archivos con formato {id_formato}: {str(e)}")
-            continue
+        except:
+            pass
     
-    # Intentar listar proyectos disponibles para ayudar al diagnóstico
     try:
         logs["info"].append("Verificando proyectos accesibles con el token...")
         url = 'https://gitlab.com/api/v4/projects?membership=true&per_page=5'
@@ -260,6 +264,51 @@ def obtener_lista_archivos_gitlab(repo_id, branch, token, logs=None):
         logs["warnings"].append(f"Error al listar proyectos: {str(e)}")
     
     return [], logs
+
+def obtener_fecha_commit_gitlab(repo_id, branch, file_name, token, logs=None):
+    """
+    Obtiene la fecha del último commit de un archivo específico en GitLab.
+    
+    Args:
+        repo_id (str): ID del repositorio en formato "namespace/project".
+        branch (str): Rama del repositorio.
+        file_name (str): Nombre del archivo.
+        token (str): Token de acceso a GitLab.
+        logs (dict, optional): Diccionario para registrar logs.
+    
+    Returns:
+        datetime: Fecha del último commit o None si no se puede obtener.
+    """
+    if logs is None:
+        logs = {"warnings": [], "info": []}
+        
+    if not token:
+        return None
+        
+    try:
+        # Asegurar que el repo_id esté correctamente formateado
+        repo_id_encoded = requests.utils.quote(str(repo_id), safe='')
+        
+        # Obtener commits para el archivo específico
+        url = f'https://gitlab.com/api/v4/projects/{repo_id_encoded}/repository/commits'
+        headers = {'PRIVATE-TOKEN': token}
+        params = {'ref': branch, 'path': file_name, 'per_page': 1}
+        
+        response = requests.get(url, headers=headers, params=params)
+        if response.status_code == 200:
+            commits = response.json()
+            if commits:
+                commit_date = commits[0]['committed_date']
+                # Convertir la fecha ISO a datetime
+                fecha_commit = datetime.datetime.fromisoformat(commit_date.replace('Z', '+00:00'))
+                logs["info"].append(f"Fecha de commit obtenida para {file_name}: {fecha_commit}")
+                return fecha_commit
+        else:
+            logs["warnings"].append(f"No se pudo obtener fecha de commit para {file_name}: {response.status_code}")
+            return None
+    except Exception as e:
+        logs["warnings"].append(f"Error al obtener fecha de commit para {file_name}: {str(e)}")
+        return None
 
 def obtener_archivo_gitlab(repo_id, branch, file_name, token, logs=None):
     """
@@ -292,17 +341,41 @@ def obtener_archivo_gitlab(repo_id, branch, file_name, token, logs=None):
     headers = {'PRIVATE-TOKEN': token}
     params = {'ref': branch}
     
-    try:
-        response = requests.get(url, headers=headers, params=params)
-        if response.status_code == 200:
-            logs["info"].append(f"Se obtuvo el archivo {file_name} de GitLab.")
-            return response.content, logs
-        else:
-            logs["warnings"].append(f"Error al obtener archivo {file_name}: {response.status_code} - {response.text}")
+    # Configurar timeout y reintentos para archivos grandes
+    max_retries = 3
+    timeout = 60  # 60 segundos de timeout
+    
+    for intento in range(max_retries):
+        try:
+            response = requests.get(url, headers=headers, params=params, timeout=timeout, stream=True)
+            if response.status_code == 200:
+                # Leer el contenido en chunks para archivos grandes
+                content = b''
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        content += chunk
+                logs["info"].append(f"Se obtuvo el archivo {file_name} de GitLab (intento {intento + 1}).")
+                return content, logs
+            else:
+                logs["warnings"].append(f"Error al obtener archivo {file_name}: {response.status_code} - {response.text[:200]}")
+                return None, logs
+        except requests.exceptions.Timeout:
+            logs["warnings"].append(f"Timeout al obtener {file_name} (intento {intento + 1}/{max_retries})")
+            if intento == max_retries - 1:
+                return None, logs
+        except requests.exceptions.ConnectionError as e:
+            if "Response ended prematurely" in str(e) or "Connection broken" in str(e):
+                logs["warnings"].append(f"Conexión interrumpida al obtener {file_name} (intento {intento + 1}/{max_retries})")
+                if intento == max_retries - 1:
+                    return None, logs
+            else:
+                logs["warnings"].append(f"Error de conexión al obtener {file_name}: {str(e)}")
+                return None, logs
+        except Exception as e:
+            logs["warnings"].append(f"Error inesperado al obtener {file_name}: {str(e)}")
             return None, logs
-    except Exception as e:
-        logs["warnings"].append(f"Error de conexión al obtener {file_name}: {str(e)}")
-        return None, logs
+    
+    return None, logs
 
 def load_data_from_local(local_path, modules):
     """
@@ -393,6 +466,7 @@ def load_data_from_minio(minio_client, bucket, modules):
     logs["info"].append(f"Archivos cargados: {list(all_data.keys())}")
     return all_data, all_dates, logs
 
+
 def load_data_from_gitlab(repo_id, branch, token, modules):
     """
     Carga datos desde GitLab.
@@ -441,10 +515,12 @@ def load_data_from_gitlab(repo_id, branch, token, modules):
                         # Obtener y procesar archivo
                         contenido, logs = obtener_archivo_gitlab(repo_id, branch, archivo_gitlab.replace('/', '%2F'), token, logs)
                         if contenido:
-                            df, fecha = procesar_archivo(archivo, contenido, True, logs)
+                            # Obtener fecha real del commit
+                            fecha_commit = obtener_fecha_commit_gitlab(repo_id, branch, archivo_gitlab, token, logs)
+                            df, _ = procesar_archivo(archivo, contenido, True, logs)
                             if df is not None:
                                 all_data[archivo] = df
-                                all_dates[archivo] = fecha
+                                all_dates[archivo] = fecha_commit or datetime.datetime.now()
                                 logs["info"].append(f"Cargado {archivo} correctamente desde GitLab.")
                             else:
                                 logs["warnings"].append(f"Error al procesar {archivo} desde GitLab.")
@@ -462,10 +538,12 @@ def load_data_from_gitlab(repo_id, branch, token, modules):
                         try:
                             contenido, logs = obtener_archivo_gitlab(repo_id, branch, archivo_candidato.replace('/', '%2F'), token, logs)
                             if contenido:
-                                df, fecha = procesar_archivo(archivo, contenido, True, logs)
+                                # Obtener fecha real del commit
+                                fecha_commit = obtener_fecha_commit_gitlab(repo_id, branch, archivo_candidato, token, logs)
+                                df, _ = procesar_archivo(archivo, contenido, True, logs)
                                 if df is not None:
                                     all_data[archivo] = df
-                                    all_dates[archivo] = fecha
+                                    all_dates[archivo] = fecha_commit or datetime.datetime.now()
                                     logs["info"].append(f"Cargado {archivo} (desde {archivo_candidato}) correctamente.")
                                 else:
                                     logs["warnings"].append(f"Error al procesar {archivo_candidato} desde GitLab.")

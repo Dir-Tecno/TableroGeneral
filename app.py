@@ -1,20 +1,19 @@
-from moduls.carga import load_data_from_minio, load_data_from_local, load_data_from_gitlab
 import streamlit as st
-from moduls import bco_gente, cbamecapacita, empleo, emprendimientos
-from utils.styles import setup_page
-from utils.ui_components import render_footer, show_notification_bell
-from minio import Minio
-from os import path
-
 # --- Configuración de la Página ---
 st.set_page_config(
     page_title="Dashboard Resumen del Ministerio de Desarrollo Social y Promoción del Empleo",
     layout="wide"
 )
-setup_page()
-st.markdown('<div class="main-header">Tablero General de Reportes para TEST</div>', unsafe_allow_html=True)
-show_notification_bell()
+from moduls.carga import load_data_from_minio, load_data_from_local, load_data_from_gitlab
+from moduls import bco_gente, cbamecapacita, empleo, escrituracion
+from utils.styles import setup_page
+from utils.ui_components import render_footer, show_notification_bell
+from minio import Minio
+from os import path
 
+
+setup_page()
+st.markdown('<div class="main-header">Tablero General de Reportes</div>', unsafe_allow_html=True)
 # --- Configuración General ---
 FUENTE_DATOS = "gitlab"  # Opciones: 'minio', 'gitlab', 'local'
 REPO_ID = "Dir-Tecno/Repositorio-Reportes"
@@ -32,7 +31,8 @@ modules = {
                    'capa_departamentos_2010.geojson', 'LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt'],
     'cba_capacita': ['VT_ALUMNOS_EN_CURSOS.parquet','VT_INSCRIPCIONES_PRG129.parquet', 'VT_CURSOS_SEDES_GEO.parquet', 'capa_departamentos_2010.geojson'],
     'empleo': ['LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt','VT_REPORTES_PPP_MAS26.parquet', 'vt_empresas_adheridas.parquet','vt_empresas_ARCA.parquet', 'VT_PUESTOS_X_FICHAS.parquet','capa_departamentos_2010.geojson'],
-    'emprendimientos': ['desarrollo_emprendedor.csv']
+    'escrituracion': ['https://docs.google.com/spreadsheets/d/1V9vXwMQJjd4kLdJZQncOSoWggQk8S7tBKxbOSEIUoQ8/edit#gid=1593263408']
+    
 }
 
 # --- Funciones Cacheadas para Rendimiento ---
@@ -54,7 +54,7 @@ def get_minio_client():
         st.error(f"Error al conectar con MinIO: {e}")
         return None
 
-@st.cache_data(ttl=3600)  # Cachear datos por 1 hora
+@st.cache_data(ttl=3600, show_spinner="Cargando datos del dashboard...")  # Cachear datos por 1 hora
 def load_all_data():
     """Carga todos los datos necesarios para la aplicación desde la fuente configurada."""
     if is_local:
@@ -71,48 +71,26 @@ def load_all_data():
             return {}, {}, {"warnings": ["Fallo en conexión a MinIO"], "info": []}
 
     if FUENTE_DATOS == "gitlab":
-        st.success("Modo de producción: Cargando datos desde GitLab.")
-        
-        # Depuración: mostrar qué secretos están disponibles
-        with st.expander("🔍 Depuración de Secretos GitLab"):
-            st.write("**Secretos disponibles:**", list(st.secrets.keys()))
-            if "gitlab" in st.secrets:
-                st.write("**Sección [gitlab]:**", dict(st.secrets["gitlab"]))
-            else:
-                st.warning("No se encontró la sección [gitlab] en secrets.toml")
         
         # Intenta leer el token desde diferentes ubicaciones
         gitlab_token = None
-        token_source = ""
         
         # Opción 1: Estructura anidada [gitlab] token = "..."
         if "gitlab" in st.secrets and "token" in st.secrets["gitlab"]:
             gitlab_token = st.secrets["gitlab"]["token"]
-            token_source = "gitlab.token"
-        # Opción 2: Clave directa gitlab_token = "..."
-        elif "gitlab_token" in st.secrets:
-            gitlab_token = st.secrets["gitlab_token"]
-            token_source = "gitlab_token"
         
         # Validar el token
         if not gitlab_token:
             st.error("❌ El token de GitLab no está configurado en los secretos.")
             st.info("📝 Configura el token en tu archivo `.streamlit/secrets.toml` usando una de estas opciones:")
             st.code("""# Opción 1 (recomendada):
-[gitlab]
-token = "tu_token_aqui"
-
-# Opción 2 (alternativa):
-gitlab_token = "tu_token_aqui" """)
+                        [gitlab]
+                        token = "tu_token_aqui" """)
             return {}, {}, {"warnings": ["Token de GitLab no configurado."], "info": []}
         elif gitlab_token == "TU_TOKEN_DE_GITLAB_AQUI":
             st.error("❌ El token de GitLab tiene el valor de ejemplo. Por favor, configura tu token real.")
             return {}, {}, {"warnings": ["Token de GitLab no configurado (valor de ejemplo)."], "info": []}
-        else:
-            st.success(f"✅ Token de GitLab encontrado en: `{token_source}`")
-            # Mostrar solo los primeros y últimos caracteres del token para verificación
-            token_preview = f"{gitlab_token[:8]}...{gitlab_token[-4:]}" if len(gitlab_token) > 12 else "***"
-            st.info(f"🔑 Token: `{token_preview}`")
+        
         
         return load_data_from_gitlab(REPO_ID, BRANCH, gitlab_token, modules)
 
@@ -122,33 +100,20 @@ gitlab_token = "tu_token_aqui" """)
 # --- Carga de Datos ---
 all_data, all_dates, logs = load_all_data()
 
-# --- Sección de Depuración (Opcional) ---
-with st.expander("🔍 Estado de la Carga de Datos (Depuración)"):
-    st.write("**Archivos Cargados Exitosamente:**", list(all_data.keys()))
-    st.write("**Fechas de Modificación:**", {k: v.strftime('%Y-%m-%d %H:%M:%S') if v else None for k, v in all_dates.items()})
-    if not all_data:
-        st.error("El diccionario 'all_data' está vacío. La carga de datos falló.")
-    
-    st.write("---")
-    st.write("### Logs de Carga:")
-    if logs and logs.get("warnings"):
-        st.write("#### ⚠️ Advertencias:")
-        for warning in logs["warnings"]:
-            st.warning(warning)
-    if logs and logs.get("info"):
-        st.write("#### ℹ️ Información:")
-        for info in logs["info"]:
-            st.info(info)
+# --- Mostrar Campanita de Novedades DESPUÉS de la carga ---
+show_notification_bell()
+
+
 
 # --- Definición de Pestañas ---
-tab_names = ["CBA Me Capacita", "Banco de la Gente", "Programas de Empleo", "Emprendimientos"]
+tab_names = ["CBA Me Capacita", "Banco de la Gente", "Programas de Empleo", "Escrituración"]
 tabs = st.tabs(tab_names)
-tab_keys = ['cba_capacita', 'bco_gente', 'empleo', 'emprendimientos']
+tab_keys = ['cba_capacita', 'bco_gente', 'empleo', 'escrituracion']
 tab_functions = [
     cbamecapacita.show_cba_capacita_dashboard,
     bco_gente.show_bco_gente_dashboard,
     empleo.show_empleo_dashboard,
-    emprendimientos.show_emprendimientos_dashboard
+    escrituracion.show_escrituracion_dashboard,
 ]
 
 # --- Renderizado de Pestañas ---
@@ -166,6 +131,26 @@ for idx, tab in enumerate(tabs):
 
         if not data_for_module:
             st.warning(f"No se encontraron datos para el módulo '{tab_names[idx]}'.")
+            with st.expander("🔍 Debug: Ver archivos esperados vs cargados"):
+                st.write(f"**Archivos esperados para {module_key}:**")
+                st.write(module_files)
+                st.write(f"**Archivos cargados desde GitLab:**")
+                st.write(list(all_data.keys()))
+                st.write(f"**Archivos coincidentes:**")
+                coincidentes = [f for f in module_files if f in all_data]
+                st.write(coincidentes if coincidentes else "Ninguno")
+                
+                # Mostrar logs de carga
+                if logs:
+                    st.write("**Logs de carga:**")
+                    if logs.get("warnings"):
+                        st.error("Warnings:")
+                        for warning in logs["warnings"]:
+                            st.write(f"⚠️ {warning}")
+                    if logs.get("info"):
+                        st.info("Info:")
+                        for info in logs["info"]:
+                            st.write(f"ℹ️ {info}")
             continue
 
         try:

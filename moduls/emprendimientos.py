@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import os
-from utils.ui_components import display_kpi_row, show_dev_dataframe_info
+from utils.ui_components import display_kpi_row, show_dev_dataframe_info, show_last_update
 
 def show_emprendimientos_dashboard(data=None, dates=None, is_development=False):
     """

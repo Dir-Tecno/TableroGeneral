@@ -2,9 +2,18 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
-from utils.ui_components import display_kpi_row
+from utils.ui_components import display_kpi_row, show_last_update
 from utils.styles import COLORES_IDENTIDAD, COLOR_PRIMARY, COLOR_SECONDARY, COLOR_ACCENT_1, COLOR_ACCENT_2, COLOR_ACCENT_3, COLOR_ACCENT_4, COLOR_ACCENT_5, COLOR_TEXT_DARK
 from utils.kpi_tooltips import ESTADO_CATEGORIAS, TOOLTIPS_DESCRIPTIVOS
+from utils.session_helper import safe_session_get, safe_session_set, safe_session_check
+
+# Inicializar variables de sesión necesarias
+if "debug_mode" not in st.session_state:
+    st.session_state["debug_mode"] = False
+if "selected_categorias" not in st.session_state:
+    st.session_state["selected_categorias"] = []
+if "selected_lineas_credito" not in st.session_state:
+    st.session_state["selected_lineas_credito"] = []
 
 # Crear diccionario para tooltips de categorías (técnico, lista de estados)
 tooltips_categorias = {k: ", ".join(v) for k, v in ESTADO_CATEGORIAS.items()}
@@ -243,7 +252,7 @@ def load_and_preprocess_data(data):
         has_cumplimiento_data = not df_cumplimiento.empty
         
         # Verificar la estructura del DataFrame para diagnóstico
-        if has_global_data and st.session_state.get('debug_mode', False):
+        if has_global_data and safe_session_get('debug_mode', False):
             st.write("Estructura de df_global al inicio:")
             st.write(f"Tipo: {type(df_global)}")
             st.write(f"Columnas: {df_global.columns.tolist()}")
@@ -422,7 +431,7 @@ def load_and_preprocess_data(data):
 
         
         # Verificar la estructura final para diagnóstico
-        if has_global_data and st.session_state.get('debug_mode', False):
+        if has_global_data and safe_session_get('debug_mode', False):
             st.write("Estructura final de df_global:")
             st.write(f"Tipo: {type(df_global)}")
             st.write(f"Columnas: {df_global.columns.tolist()}")
@@ -569,7 +578,9 @@ def show_bco_gente_dashboard(data, dates, is_development=False):
         dates: Diccionario con fechas de actualización.
         is_development (bool): True si se está en modo desarrollo.
     """
-   
+    # Mostrar última actualización al inicio del dashboard
+    if dates:
+        show_last_update(dates, 'VT_NOMINA_REP_RECUPERO_X_ANIO.parquet')
     
     # Mostrar columnas en modo desarrollo
     if is_development:
@@ -579,7 +590,7 @@ def show_bco_gente_dashboard(data, dates, is_development=False):
     df_global = None
     df_global_pagados = None
     
-     # Cargar y preprocesar datos
+    # Cargar y preprocesar datos
     df_global, geojson_data, df_localidad_municipio, df_global_pagados = load_and_preprocess_data(data)
     
     if is_development:
@@ -612,9 +623,7 @@ def show_bco_gente_dashboard(data, dates, is_development=False):
     # Crear una copia del DataFrame para trabajar con él
     df_filtrado_global = df_global.copy()
     
-    # Mostrar última actualización
-    from utils.ui_components import show_last_update
-    show_last_update(dates, 'VT_NOMINA_REP_RECUPERO_X_ANIO.parquet')
+
     
     # Crear pestañas para las diferentes vistas
     tab_global, tab_recupero = st.tabs(["GLOBAL", "RECUPERO"])
@@ -1264,9 +1273,9 @@ def mostrar_global(df_filtrado_global, tooltips_categorias):
             if "Rechazados - Bajas" in categorias_orden:
                 categorias_orden.remove("Rechazados - Bajas")
             
-            # Usar st.session_state para mantener las categorías seleccionadas
-            if 'selected_categorias' not in st.session_state:
-                st.session_state.selected_categorias = categorias_orden
+            # Usar session_state seguro para mantener las categorías seleccionadas
+            if not safe_session_check('selected_categorias'):
+                safe_session_set('selected_categorias', categorias_orden)
             
             # Obtener líneas de crédito disponibles
             if 'N_LINEA_PRESTAMO' in df_filtrado_global.columns:
@@ -1275,9 +1284,9 @@ def mostrar_global(df_filtrado_global, tooltips_categorias):
                 lineas_credito = []
             
             
-            # Inicializar selected_lineas en session_state si no existe
-            if 'selected_lineas_credito' not in st.session_state:
-                st.session_state.selected_lineas_credito = lineas_credito
+            # Inicializar selected_lineas en session_state seguro si no existe
+            if not safe_session_check('selected_lineas_credito'):
+                safe_session_set('selected_lineas_credito', lineas_credito)
             
             col1, col2 = st.columns([3, 1])
             
@@ -1285,7 +1294,7 @@ def mostrar_global(df_filtrado_global, tooltips_categorias):
                 selected_categorias = st.multiselect(
                     "Filtrar por categorías de estado:",
                     options=categorias_orden,
-                    default=st.session_state.selected_categorias,
+                    default=safe_session_get('selected_categorias', categorias_orden),
                     key="estado_categoria_filter"
                 )
             
@@ -1293,7 +1302,7 @@ def mostrar_global(df_filtrado_global, tooltips_categorias):
                 selected_lineas = st.multiselect(
                     "Filtrar por línea de crédito:",
                     options=lineas_credito,
-                    default=st.session_state.selected_lineas_credito,
+                    default=safe_session_get('selected_lineas_credito', lineas_credito),
                     key="linea_credito_filter"
                 )
 
@@ -1358,10 +1367,10 @@ def mostrar_global(df_filtrado_global, tooltips_categorias):
                 st.warning("No hay datos para mostrar con los filtros seleccionados.")
 
             # Actualizar session_state
-            if selected_categorias != st.session_state.selected_categorias:
-                st.session_state.selected_categorias = selected_categorias
-            if selected_lineas != st.session_state.selected_lineas_credito:
-                st.session_state.selected_lineas_credito = selected_lineas
+            if selected_categorias != safe_session_get('selected_categorias', []):
+                safe_session_set('selected_categorias', selected_categorias)
+            if selected_lineas != safe_session_get('selected_lineas_credito', []):
+                safe_session_set('selected_lineas_credito', selected_lineas)
             
             # Si no se selecciona ninguna categoría, mostrar todas
             if not selected_categorias:
@@ -1544,7 +1553,8 @@ def mostrar_global(df_filtrado_global, tooltips_categorias):
                         ].copy()
                         
                         # Filtrar datos de inicio de pago por rango de fechas (si existen)
-                        if tiene_datos_pago:
+                        tiene_datos_pago_filtrados = tiene_datos_pago
+                        if tiene_datos_pago_filtrados:
                             df_fechas_pago_seleccionado = df_fechas_pago[
                                 (df_fechas_pago['FEC_INICIO_PAGO'].dt.date >= start_date) &
                                 (df_fechas_pago['FEC_INICIO_PAGO'].dt.date <= end_date)
@@ -1700,7 +1710,7 @@ def mostrar_global(df_filtrado_global, tooltips_categorias):
                                     html_table += f'<td class="formularios">{datos["Formularios Presentados"]}</td>'
                                     html_table += f'<td class="pagos">{datos["Inicio de Pagos"]}</td>'
                                     html_table += f'</tr>'
-                                
+
                                 html_table += '</tbody></table>'
                                 st.markdown(html_table, unsafe_allow_html=True)
 

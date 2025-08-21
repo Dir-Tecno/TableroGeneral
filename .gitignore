@@ -6,4 +6,4 @@ __pycache__/
 .streamlit/
 Repositorio-Reportes-main/
 .github\workflows\redeploy-portainer.yml
-docker-compose.yml
+credenciales.json
