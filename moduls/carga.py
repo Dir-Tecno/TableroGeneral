@@ -112,10 +112,11 @@ def procesar_archivo(nombre, contenido, es_buffer, logs=None):
             return df, fecha
         elif nombre.endswith('.csv') or nombre.endswith('.txt'):
             if es_buffer:
-                df = pd.read_csv(io.BytesIO(contenido), sep=',')
+                # Para archivos .txt, usar encoding adecuado y separador de coma
+                df = pd.read_csv(io.BytesIO(contenido), sep=',', encoding='utf-8', on_bad_lines='skip')
                 fecha = datetime.datetime.now()
             else:
-                df = pd.read_csv(contenido, sep=',')
+                df = pd.read_csv(contenido, sep=',', encoding='utf-8', on_bad_lines='skip')
                 fecha = datetime.datetime.now()
             return df, fecha
         elif nombre.endswith('.geojson'):
@@ -340,17 +341,41 @@ def obtener_archivo_gitlab(repo_id, branch, file_name, token, logs=None):
     headers = {'PRIVATE-TOKEN': token}
     params = {'ref': branch}
     
-    try:
-        response = requests.get(url, headers=headers, params=params)
-        if response.status_code == 200:
-            logs["info"].append(f"Se obtuvo el archivo {file_name} de GitLab.")
-            return response.content, logs
-        else:
-            logs["warnings"].append(f"Error al obtener archivo {file_name}: {response.status_code} - {response.text}")
+    # Configurar timeout y reintentos para archivos grandes
+    max_retries = 3
+    timeout = 60  # 60 segundos de timeout
+    
+    for intento in range(max_retries):
+        try:
+            response = requests.get(url, headers=headers, params=params, timeout=timeout, stream=True)
+            if response.status_code == 200:
+                # Leer el contenido en chunks para archivos grandes
+                content = b''
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        content += chunk
+                logs["info"].append(f"Se obtuvo el archivo {file_name} de GitLab (intento {intento + 1}).")
+                return content, logs
+            else:
+                logs["warnings"].append(f"Error al obtener archivo {file_name}: {response.status_code} - {response.text[:200]}")
+                return None, logs
+        except requests.exceptions.Timeout:
+            logs["warnings"].append(f"Timeout al obtener {file_name} (intento {intento + 1}/{max_retries})")
+            if intento == max_retries - 1:
+                return None, logs
+        except requests.exceptions.ConnectionError as e:
+            if "Response ended prematurely" in str(e) or "Connection broken" in str(e):
+                logs["warnings"].append(f"Conexión interrumpida al obtener {file_name} (intento {intento + 1}/{max_retries})")
+                if intento == max_retries - 1:
+                    return None, logs
+            else:
+                logs["warnings"].append(f"Error de conexión al obtener {file_name}: {str(e)}")
+                return None, logs
+        except Exception as e:
+            logs["warnings"].append(f"Error inesperado al obtener {file_name}: {str(e)}")
             return None, logs
-    except Exception as e:
-        logs["warnings"].append(f"Error de conexión al obtener {file_name}: {str(e)}")
-        return None, logs
+    
+    return None, logs
 
 def load_data_from_local(local_path, modules):
     """
@@ -441,22 +466,6 @@ def load_data_from_minio(minio_client, bucket, modules):
     logs["info"].append(f"Archivos cargados: {list(all_data.keys())}")
     return all_data, all_dates, logs
 
-def obtener_fecha_commit_gitlab(repo_id, branch, file_path, token):
-    try:
-        url = f"https://gitlab.com/api/v4/projects/{repo_id}/repository/commits"
-        headers = {'PRIVATE-TOKEN': token}
-        params = {'ref_name': branch, 'path': file_path, 'per_page': 1}
-        response = requests.get(url, headers=headers, params=params)
-        if response.status_code == 200:
-            commits = response.json()
-            if commits:
-                return commits[0]['committed_date']
-    except Exception as e:
-        # En caso de error, usar fecha actual como fallback
-        pass
-    
-    # Fallback: usar fecha actual si no se puede obtener la fecha del commit
-    return datetime.datetime.now().isoformat()
 
 def load_data_from_gitlab(repo_id, branch, token, modules):
     """

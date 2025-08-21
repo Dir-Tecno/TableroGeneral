@@ -106,7 +106,7 @@ show_notification_bell()
 
 
 # --- Definición de Pestañas ---
-tab_names = ["CBA Me Capacita", "Banco de la Gente", "Programas de Empleo"]
+tab_names = ["CBA Me Capacita", "Banco de la Gente", "Programas de Empleo", "Escrituración"]
 tabs = st.tabs(tab_names)
 tab_keys = ['cba_capacita', 'bco_gente', 'empleo', 'escrituracion']
 tab_functions = [
@@ -131,6 +131,26 @@ for idx, tab in enumerate(tabs):
 
         if not data_for_module:
             st.warning(f"No se encontraron datos para el módulo '{tab_names[idx]}'.")
+            with st.expander("🔍 Debug: Ver archivos esperados vs cargados"):
+                st.write(f"**Archivos esperados para {module_key}:**")
+                st.write(module_files)
+                st.write(f"**Archivos cargados desde GitLab:**")
+                st.write(list(all_data.keys()))
+                st.write(f"**Archivos coincidentes:**")
+                coincidentes = [f for f in module_files if f in all_data]
+                st.write(coincidentes if coincidentes else "Ninguno")
+                
+                # Mostrar logs de carga
+                if logs:
+                    st.write("**Logs de carga:**")
+                    if logs.get("warnings"):
+                        st.error("Warnings:")
+                        for warning in logs["warnings"]:
+                            st.write(f"⚠️ {warning}")
+                    if logs.get("info"):
+                        st.info("Info:")
+                        for info in logs["info"]:
+                            st.write(f"ℹ️ {info}")
             continue
 
         try:
