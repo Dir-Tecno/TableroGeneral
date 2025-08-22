@@ -216,14 +216,6 @@ def load_and_preprocess_data(data, is_development=False):
         # Marcar cursos comenzados (fecha actual >= FEC_INICIO)
         df_cursos['COMENZADO'] = df_cursos['FEC_INICIO'].notna() & (df_cursos['FEC_INICIO'] <= fecha_actual)
 
-    # Debug: Verificar columnas finales
-    if df_cursos is not None:
-        print(f"Columnas en df_cursos: {df_cursos.columns.tolist()}")
-        if 'ALUMNOS' in df_cursos.columns:
-            print(f"Estadísticas de ALUMNOS: Min={df_cursos['ALUMNOS'].min()}, Max={df_cursos['ALUMNOS'].max()}, Media={df_cursos['ALUMNOS'].mean():.2f}")
-        if 'COMENZADO' in df_cursos.columns:
-            print(f"Cursos comenzados: {df_cursos['COMENZADO'].sum()} de {len(df_cursos)} ({df_cursos['COMENZADO'].mean()*100:.2f}%)")
-
         # Añadir columna "No asignados" como la diferencia entre POSTULACIONES y ALUMNOS
         if 'POSTULACIONES' in df_cursos.columns and 'ALUMNOS' in df_cursos.columns:
             df_cursos['No asignados'] = df_cursos['POSTULACIONES'] - df_cursos['ALUMNOS']
@@ -259,13 +251,13 @@ def load_and_preprocess_data(data, is_development=False):
         show_dev_dataframe_info(df_cursos, "df_cursos")
     return df_postulantes, df_cursos, df_alumnos
 
-def load_and_preprocess_data_duckdb(data, is_development=False):
+def load_and_preprocess_data_duckdb(_data, is_development=False):
     """
     Versión optimizada con DuckDB para carga y preprocesamiento de datos CBA ME CAPACITA.
     Mejora significativa en rendimiento para JOINs y agregaciones complejas.
     
     Args:
-        data (dict): Diccionario con los DataFrames cargados
+        _data (dict): Diccionario con los DataFrames cargados. El guion bajo evita que Streamlit intente hashear este parámetro.
         is_development (bool): Modo desarrollo para debugging
         
     Returns:
@@ -280,7 +272,7 @@ def load_and_preprocess_data_duckdb(data, is_development=False):
         }
         
         # Crear procesador DuckDB y registrar tablas
-        processor = create_duckdb_processor(data, table_mapping)
+        processor = create_duckdb_processor(_data, table_mapping)
         
         try:
             # === PASO 1: Calcular agregaciones con DuckDB ===
@@ -401,25 +393,22 @@ def load_and_preprocess_data_duckdb(data, is_development=False):
             
             # Logging de rendimiento en modo desarrollo
             if is_development:
-                st.success("✅ Procesamiento DuckDB completado")
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.metric("Postulantes", f"{len(df_postulantes_final):,}")
-                with col2:
-                    st.metric("Cursos", f"{len(df_cursos_processed):,}")
-                with col3:
-                    st.metric("Alumnos", f"{len(df_alumnos_processed):,}")
+                # Importar módulos necesarios
+                from utils.ui_components import show_dev_dataframe_info
+                from utils.session_helper import safe_session_set
                 
-                # Mostrar estadísticas de las nuevas columnas
-                if 'ALUMNOS' in df_cursos_processed.columns:
-                    total_alumnos = df_cursos_processed['ALUMNOS'].sum()
-                    st.info(f"📊 Total alumnos: {total_alumnos:,}")
+                # Asegurar que debug_mode esté activado para show_dev_dataframe_info
+                safe_session_set('debug_mode', True)
                 
-                if 'COMENZADO' in df_cursos_processed.columns:
-                    cursos_comenzados = df_cursos_processed['COMENZADO'].sum()
-                    total_cursos = len(df_cursos_processed)
-                    porcentaje = (cursos_comenzados/total_cursos*100) if total_cursos > 0 else 0
-                    st.info(f"🎯 Cursos comenzados: {cursos_comenzados:,} de {total_cursos:,} ({porcentaje:.1f}%)")
+                # Mostrar información detallada de DataFrames en modo desarrollo
+                st.write("Información de DataFrames procesados con DuckDB")
+                show_dev_dataframe_info(df_postulantes_final, "df_postulantes")
+                show_dev_dataframe_info(df_alumnos_processed, "df_alumnos")
+                show_dev_dataframe_info(df_cursos_processed, "df_cursos")
+                
+                # Restaurar estado anterior de debug_mode si no se quiere mantener
+                if not is_development:
+                    safe_session_set('debug_mode', False)
             
             return df_postulantes_final, df_cursos_processed, df_alumnos_processed
             
@@ -450,9 +439,26 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
         st.error("No se pudieron cargar los datos de CBA ME CAPACITA.")
         return
 
-    # Mostrar columnas en  desarrollo
+    # Mostrar columnas en desarrollo
     if is_development:
-        show_dev_dataframe_info(data, modulo_nombre="CBA Me Capacita")
+        from utils.ui_components import show_dev_dataframe_info
+        from utils.session_helper import safe_session_set
+        
+        # Activar el modo debug para mostrar información detallada
+        safe_session_set('debug_mode', True)
+        
+        # Filtrar el diccionario de datos para evitar objetos de geometría
+        filtered_data = {}
+        for key, value in data.items():
+            # Excluir archivos GeoJSON que causan problemas de representación
+            if not key.endswith('.geojson'):
+                filtered_data[key] = value
+            else:
+                # Informar que se ha excluido un archivo GeoJSON
+                st.info(f"Archivo GeoJSON excluido de la vista de desarrollo: {key}")
+        
+        # Mostrar información de los datos filtrados
+        show_dev_dataframe_info(filtered_data, modulo_nombre="CBA Me Capacita")
 
     
 
@@ -461,7 +467,8 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
     use_duckdb = True
     
     if use_duckdb:
-        df_postulantes, df_cursos, df_alumnos = load_and_preprocess_data_duckdb(data, is_development)
+        # Pasando data como _data para evitar problemas de caché en Streamlit
+        df_postulantes, df_cursos, df_alumnos = load_and_preprocess_data_duckdb(_data=data, is_development=is_development)
     else:
         df_postulantes, df_cursos, df_alumnos = load_and_preprocess_data(data, is_development)
 

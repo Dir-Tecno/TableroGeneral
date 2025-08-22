@@ -197,11 +197,28 @@ def show_empleo_dashboard(data, dates, is_development=False):
     # Mostrar info de desarrollo de los DataFrames
     if is_development:
         from utils.ui_components import show_dev_dataframe_info
-        show_dev_dataframe_info(data, modulo_nombre="Empleo")
+        from utils.session_helper import safe_session_set
+        
+        # Activar el modo debug para mostrar información detallada
+        safe_session_set('debug_mode', True)
+        
+        # Filtrar el diccionario de datos para evitar objetos de geometría
+        filtered_data = {}
+        for key, value in data.items():
+            # Excluir archivos GeoJSON que causan problemas de representación
+            if not key.endswith('.geojson'):
+                filtered_data[key] = value
+            else:
+                # Informar que se ha excluido un archivo GeoJSON
+                st.info(f"Archivo GeoJSON excluido de la vista de desarrollo: {key}")
+        
+        # Mostrar información de los datos filtrados
+        show_dev_dataframe_info(filtered_data, modulo_nombre="Empleo")
     
     # Cargar y preprocesar los datos
     if use_duckdb:
-        df_inscriptos, df_empresas, geojson_data, has_empresas, has_geojson = load_and_preprocess_data_duckdb(data, dates, is_development)
+        # Pasando data como _data para evitar problemas de caché en Streamlit
+        df_inscriptos, df_empresas, geojson_data, has_empresas, has_geojson = load_and_preprocess_data_duckdb(_data=data, dates=dates, is_development=is_development)
     else:
         df_inscriptos, df_empresas, geojson_data, has_empresas, has_geojson = load_and_preprocess_data(data, dates, is_development)
     
@@ -633,6 +650,24 @@ def load_and_preprocess_data_duckdb(_data, dates=None, is_development=False):
                 if col in df_inscriptos.columns:
                     df_inscriptos[col] = pd.to_numeric(df_inscriptos[col], errors='coerce').fillna(-1).astype(int)
                     df_inscriptos.loc[df_inscriptos[col] == -1, col] = pd.NA
+            
+            # Mostrar información detallada de DataFrames en modo desarrollo
+            if is_development:
+                # Importar módulos necesarios
+                from utils.ui_components import show_dev_dataframe_info
+                from utils.session_helper import safe_session_set
+                
+                # Asegurar que debug_mode esté activado para show_dev_dataframe_info
+                safe_session_set('debug_mode', True)
+                
+                st.write("Información de DataFrames procesados con DuckDB - Empleo")
+                show_dev_dataframe_info(df_inscriptos, "df_inscriptos")
+                if has_empresas and df_empresas is not None:
+                    show_dev_dataframe_info(df_empresas, "df_empresas")
+                
+                # Restaurar estado anterior de debug_mode si no se quiere mantener
+                if not is_development:
+                    safe_session_set('debug_mode', False)
             
             return df_inscriptos, df_empresas, geojson_data, has_empresas, has_geojson
             
