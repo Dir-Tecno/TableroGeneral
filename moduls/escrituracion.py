@@ -46,6 +46,17 @@ def generar_reporte(df):
 # --- DASHBOARD PRINCIPAL OPTIMIZADO ---
 @st.cache_data
 def cargar_datos(sheet_url, _creds_json):
+    """
+    Carga datos desde una hoja de Google Sheets usando gspread.
+    
+    Args:
+        sheet_url: URL de la hoja de Google Sheets a cargar.
+        _creds_json: Credenciales en formato JSON para acceso a Google Sheets.
+                    El prefijo _ evita que Streamlit intente hashear este parámetro.
+    
+    Returns:
+        DataFrame con los datos cargados.
+    """
     import json
     if isinstance(_creds_json, str):
         _creds_json = json.loads(_creds_json)  # Convertir cadena JSON a diccionario

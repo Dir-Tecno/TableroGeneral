@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import os
 from utils.ui_components import display_kpi_row, show_dev_dataframe_info, show_last_update
+from utils.session_helper import safe_session_set
 
 def show_emprendimientos_dashboard(data=None, dates=None, is_development=False):
     """
@@ -18,7 +19,21 @@ def show_emprendimientos_dashboard(data=None, dates=None, is_development=False):
 
     # Mostrar info de desarrollo de los DataFrames
     if is_development:
-        show_dev_dataframe_info(data, modulo_nombre="Emprendimientos")
+        # Activar el modo debug para mostrar información detallada
+        safe_session_set('debug_mode', True)
+        
+        # Filtrar el diccionario de datos para evitar objetos de geometría
+        filtered_data = {}
+        for key, value in data.items():
+            # Excluir archivos GeoJSON que causan problemas de representación
+            if not key.endswith('.geojson'):
+                filtered_data[key] = value
+            else:
+                # Informar que se ha excluido un archivo GeoJSON
+                st.info(f"Archivo GeoJSON excluido de la vista de desarrollo: {key}")
+        
+        # Mostrar información de los datos filtrados
+        show_dev_dataframe_info(filtered_data, modulo_nombre="Emprendimientos")
 
     # Cargar y preprocesar los datos
     df, has_data = load_and_preprocess_data(data, dates, is_development)

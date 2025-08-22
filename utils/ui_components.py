@@ -32,10 +32,44 @@ def show_dev_dataframe_info(data, modulo_nombre="Módulo", info_caption=None):
                 st.write(f"- **Shape**: {df.shape}")
                 st.write(f"- **Columnas**: {', '.join(df.columns)}")
                 st.write(f"- **Total de registros**: {len(df)}")
+                
                 # Mostrar muestra de datos
                 if len(df) > 0:
                     st.write(f"- **Muestra de datos (3 primeras filas)**:")
-                    st.dataframe(df.head(3))
+                    try:
+                        # Manejar columnas de geometría convirtiéndolas a texto
+                        sample_df = df.head(3).copy()
+                        
+                        # Detectar columnas de geometría (GeoJSON)
+                        for col in sample_df.columns:
+                            if sample_df[col].dtype == 'object':
+                                # Verificar si la columna contiene objetos de geometría
+                                if sample_df[col].apply(lambda x: hasattr(x, 'wkt') if x is not None else False).any():
+                                    # Convertir geometrías a representación de texto WKT (Well-Known Text)
+                                    sample_df[col] = sample_df[col].apply(lambda x: str(x) if x is not None else None)
+                                elif 'geometry' in col.lower() or col == 'geometry':
+                                    # Si la columna tiene 'geometry' en su nombre, convierta a string
+                                    sample_df[col] = sample_df[col].astype(str)
+                        
+                        st.dataframe(sample_df)
+                    except Exception as e:
+                        st.error(f"Error al mostrar el DataFrame: {str(e)}")
+                        st.write("Mostrando información básica como texto:")
+                        st.text(str(df.head(3).to_dict()))
+                        
+                        # Informar al desarrollador sobre las columnas y tipos
+                        st.write("Tipos de datos de columnas:")
+                        for col, dtype in zip(df.columns, df.dtypes):
+                            st.write(f"  - {col}: {dtype}")
+                            # Intenta mostrar una muestra del primer valor no nulo
+                            if len(df) > 0:
+                                sample_val = df[col].dropna().iloc[0] if not df[col].isna().all() else None
+                                st.write(f"    Ejemplo: {type(sample_val).__name__}")
+                                
+                                # Si es un objeto complejo, mostrar sus atributos
+                                if hasattr(sample_val, '__dict__'):
+                                    st.write(f"    Atributos: {dir(sample_val)[:10]}...")
+                        
             else:
                 st.write(f"- Objeto '{name}' no es un DataFrame válido (tipo: {type(df)})")
         

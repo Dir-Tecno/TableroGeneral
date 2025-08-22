@@ -6,6 +6,7 @@ from utils.ui_components import display_kpi_row, show_last_update
 from utils.styles import COLORES_IDENTIDAD, COLOR_PRIMARY, COLOR_SECONDARY, COLOR_ACCENT_1, COLOR_ACCENT_2, COLOR_ACCENT_3, COLOR_ACCENT_4, COLOR_ACCENT_5, COLOR_TEXT_DARK
 from utils.kpi_tooltips import ESTADO_CATEGORIAS, TOOLTIPS_DESCRIPTIVOS
 from utils.session_helper import safe_session_get, safe_session_set, safe_session_check
+from utils.duckdb_utils import DuckDBProcessor
 
 # Inicializar variables de sesión necesarias
 if "debug_mode" not in st.session_state:
@@ -219,12 +220,13 @@ def mostrar_resumen_creditos(df_global):
 
 # mostrar_resumen_creditos(df_global)
 
-def load_and_preprocess_data(data):
+def load_and_preprocess_data(data, is_development=False):
     """
     Carga y preprocesa los datos para el dashboard.
     
     Args:
         data (dict): Diccionario con los datos cargados.
+        is_development (bool): True si se está en modo desarrollo.
         
     Returns:
         tuple: (df_global, geojson_data, df_localidad_municipio, df_global_pagados)
@@ -252,7 +254,13 @@ def load_and_preprocess_data(data):
         has_cumplimiento_data = not df_cumplimiento.empty
         
         # Verificar la estructura del DataFrame para diagnóstico
-        if has_global_data and safe_session_get('debug_mode', False):
+        if has_global_data and is_development:
+            # Importar session_helper para gestionar el modo de depuración
+            from utils.session_helper import safe_session_set
+            
+            # Activar modo debug para mostrar información detallada
+            safe_session_set('debug_mode', True)
+            
             st.write("Estructura de df_global al inicio:")
             st.write(f"Tipo: {type(df_global)}")
             st.write(f"Columnas: {df_global.columns.tolist()}")
@@ -431,11 +439,20 @@ def load_and_preprocess_data(data):
 
         
         # Verificar la estructura final para diagnóstico
-        if has_global_data and safe_session_get('debug_mode', False):
+        if has_global_data and is_development:
             st.write("Estructura final de df_global:")
             st.write(f"Tipo: {type(df_global)}")
             st.write(f"Columnas: {df_global.columns.tolist()}")
             st.write(f"Tipos de datos: {df_global.dtypes}")
+            
+            # Mostrar información detallada de DataFrames en modo desarrollo
+            from utils.ui_components import show_dev_dataframe_info
+            show_dev_dataframe_info(df_global, "df_global")
+            
+            # Restaurar estado anterior de debug_mode si no se quiere mantener
+            if not is_development:
+                from utils.session_helper import safe_session_set
+                safe_session_set('debug_mode', False)
         
         # Convertir cualquier columna que sea Series a valores nativos
         if has_global_data and not df_global.empty:
@@ -456,6 +473,10 @@ def load_and_preprocess_data(data):
             # para operaciones específicas que requieren solo estos datos
         categorias_validas = ['Pagados', 'Pagados-Finalizados']
         df_global_pagados = df_global[df_global['CATEGORIA'].isin(categorias_validas)].copy()
+
+        # Display df_global_pagados info after it's assigned
+        if is_development:
+            show_dev_dataframe_info(df_global_pagados, "df_global_pagados")
         # Realizar el merge con df_cumplimiento directamente en df_global si está disponible
         if has_cumplimiento_data and 'NRO_FORMULARIO' in df_cumplimiento.columns:
             try:
@@ -508,6 +529,223 @@ def load_and_preprocess_data(data):
             df_global_pagados['RECUPERADO'] = df_global_pagados['MONTO_OTORGADO'] - df_global_pagados['DEUDA_A_RECUPERAR']
         
         return df_global, geojson_data, df_localidad_municipio, df_global_pagados
+
+@st.cache_data(ttl=3600)
+def load_and_preprocess_data_duckdb(_data, is_development=False):
+    """
+    Versión optimizada con DuckDB para carga y preprocesamiento de datos del Banco de la Gente.
+    Mejora significativa en rendimiento para operaciones de categorización, normalización y JOINs complejos.
+    
+    Args:
+        _data (dict): Diccionario con los datos cargados. El guion bajo evita que Streamlit intente hashear este parámetro.
+        is_development (bool): True si se está en modo desarrollo.
+        
+    Returns:
+        tuple: (df_global, geojson_data, df_localidad_municipio, df_global_pagados)
+    """
+    try:
+        with st.spinner("🚀 Procesando datos del Banco de la Gente con DuckDB..."):
+            # Extraer los dataframes necesarios
+            df_global_raw = _data.get('VT_NOMINA_REP_RECUPERO_X_ANIO.parquet')
+            df_cumplimiento_raw = _data.get('VT_CUMPLIMIENTO_FORMULARIOS.parquet')
+            geojson_data = _data.get('capa_departamentos_2010.geojson')
+            df_localidad_municipio = _data.get('LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt')
+            
+            # Verificar disponibilidad de datos principales
+            if df_global_raw is None or df_global_raw.empty:
+                st.error("No se pudieron cargar los datos principales del Banco de la Gente.")
+                return None, None, None, None
+            
+            # Inicializar DuckDB
+            processor = DuckDBProcessor()
+            
+            # Registrar tablas principales
+            processor.register_dataframe("global_raw", df_global_raw)
+            
+            if df_cumplimiento_raw is not None and not df_cumplimiento_raw.empty:
+                processor.register_dataframe("cumplimiento_raw", df_cumplimiento_raw)
+                has_cumplimiento = True
+            else:
+                has_cumplimiento = False
+            
+            if df_localidad_municipio is not None and not df_localidad_municipio.empty:
+                processor.register_dataframe("localidad_municipio", df_localidad_municipio)
+                has_localidad = True
+            else:
+                has_localidad = False
+            
+            # === PASO 1: Procesar datos principales con categorización y normalización ===
+            main_query = """
+            SELECT *,
+                -- Categorización de estados usando CASE WHEN
+                CASE 
+                    WHEN N_ESTADO_PRESTAMO IN ('EN EVALUACION', 'EN EVALUACION TECNICA', 'EN EVALUACION CREDITICIA', 
+                                              'EN EVALUACION LEGAL', 'EVALUACION TECNICA APROBADA', 'EVALUACION CREDITICIA APROBADA', 
+                                              'EVALUACION LEGAL APROBADA', 'EVALUACION TECNICA OBSERVADA', 'EVALUACION CREDITICIA OBSERVADA', 
+                                              'EVALUACION LEGAL OBSERVADA', 'EVALUACION TECNICA RECHAZADA', 'EVALUACION CREDITICIA RECHAZADA', 
+                                              'EVALUACION LEGAL RECHAZADA', 'SUBSANACION TECNICA', 'SUBSANACION CREDITICIA', 'SUBSANACION LEGAL') 
+                    THEN 'En Evaluación'
+                    WHEN N_ESTADO_PRESTAMO IN ('A PAGAR', 'CONVOCATORIA') 
+                    THEN 'A Pagar - Convocatoria'
+                    WHEN N_ESTADO_PRESTAMO = 'PAGADO' 
+                    THEN 'Pagados'
+                    WHEN N_ESTADO_PRESTAMO IN ('EN PROCESO DE PAGO', 'PROCESO DE PAGO') 
+                    THEN 'En proceso de pago'
+                    WHEN N_ESTADO_PRESTAMO = 'FINALIZADO' 
+                    THEN 'Pagados-Finalizados'
+                    WHEN N_ESTADO_PRESTAMO IN ('GESTIONADO', 'GESTIONAR PAGO') 
+                    THEN 'PAGOS GESTIONADOS'
+                    ELSE 'Otros'
+                END as CATEGORIA,
+                
+                -- Normalización de departamentos
+                CASE 
+                    WHEN N_DEPARTAMENTO IN ('CAPITAL', 'CALAMUCHITA', 'COLON', 'CRUZ DEL EJE', 'GENERAL ROCA', 
+                                           'GENERAL SAN MARTIN', 'ISCHILIN', 'JUAREZ CELMAN', 'MARCOS JUAREZ', 'MINAS', 
+                                           'POCHO', 'PRESIDENTE ROQUE SAENZ PEÑA', 'PUNILLA', 'RIO CUARTO', 'RIO PRIMERO', 
+                                           'RIO SECO', 'RIO SEGUNDO', 'SAN ALBERTO', 'SAN JAVIER', 'SAN JUSTO', 'SANTA MARIA', 
+                                           'SOBREMONTE', 'TERCERO ARRIBA', 'TOTORAL', 'TULUMBA', 'UNION') 
+                    THEN N_DEPARTAMENTO 
+                    ELSE 'OTROS' 
+                END as N_DEPARTAMENTO_NORM,
+                
+                -- Corrección de localidades para CAPITAL
+                CASE 
+                    WHEN N_DEPARTAMENTO = 'CAPITAL' THEN 'CORDOBA'
+                    ELSE N_LOCALIDAD 
+                END as N_LOCALIDAD_NORM,
+                
+                -- Corrección de ID_LOCALIDAD para CAPITAL
+                CASE 
+                    WHEN N_DEPARTAMENTO = 'CAPITAL' THEN 1
+                    ELSE ID_LOCALIDAD 
+                END as ID_LOCALIDAD_NORM,
+                
+                -- Clasificación de zonas favorecidas
+                CASE 
+                    WHEN N_DEPARTAMENTO IN ('PRESIDENTE ROQUE SAENZ PEÑA', 'GENERAL ROCA', 'RIO SECO', 'TULUMBA', 
+                                           'POCHO', 'SAN JAVIER', 'SAN ALBERTO', 'MINAS', 'CRUZ DEL EJE', 
+                                           'TOTORAL', 'SOBREMONTE', 'ISCHILIN') 
+                    THEN 'ZONA NOC Y SUR' 
+                    ELSE 'ZONA REGULAR' 
+                END as ZONA,
+                
+                -- Agrupación de líneas de préstamo
+                CASE 
+                    WHEN N_LINEA_PRESTAMO = 'L4.' THEN 'INICIAR EMPRENDIMIENTO'
+                    WHEN N_LINEA_PRESTAMO IN ('L1', 'L3', 'L4', 'L6') THEN 'Otras Lineas'
+                    ELSE N_LINEA_PRESTAMO 
+                END as N_LINEA_PRESTAMO_NORM,
+                
+                -- Renombrar DEUDA como DEUDA_VENCIDA y convertir a numérico
+                DEUDA as DEUDA_VENCIDA,
+                DEUDA_NO_VENCIDA as DEUDA_NO_VENCIDA,
+                MONTO_OTORGADO as MONTO_OTORGADO
+                
+            FROM global_raw
+            """
+            
+            df_global_processed = processor.execute_query(main_query)
+            
+            # === PASO 2: Agregar campos calculados ===
+            calc_query = """
+            SELECT *,
+                DEUDA_VENCIDA + DEUDA_NO_VENCIDA as DEUDA_A_RECUPERAR,
+                MONTO_OTORGADO - (DEUDA_VENCIDA + DEUDA_NO_VENCIDA) as RECUPERADO
+            FROM df_global_processed
+            """
+            processor.register_dataframe("df_global_processed", df_global_processed)
+            df_global = processor.execute_query(calc_query)
+
+            # Convertir columnas a numérico después de la consulta DuckDB
+            for col in ['DEUDA_VENCIDA', 'DEUDA_NO_VENCIDA', 'MONTO_OTORGADO']:
+                if col in df_global.columns:
+                    df_global[col] = pd.to_numeric(df_global[col].astype(str).str.replace(',', '.'), errors='coerce').fillna(0)
+            
+            # === PASO 3: JOIN con datos de localidad/municipio si está disponible ===
+            if has_localidad:
+                join_query = """
+                SELECT g.*,
+                    l.ID_GOBIERNO_LOCAL,
+                    l.TIPO,
+                    l."Gestion 2023-2027",
+                    l.FUERZAS,
+                    l.ESTADO,
+                    l."LEGISLADOR DEPARTAMENTAL",
+                    l.LATITUD,
+                    l.LONGITUD
+                FROM df_global g
+                LEFT JOIN localidad_municipio l ON g.ID_LOCALIDAD_NORM = l.ID_LOCALIDAD
+                """
+                df_global = processor.execute_query(join_query)
+                
+                # Limpiar coordenadas geográficas
+                if 'LATITUD' in df_global.columns and 'LONGITUD' in df_global.columns:
+                    def limpiar_coordenadas(df):
+                        for col in ['LATITUD', 'LONGITUD']:
+                            if col in df.columns:
+                                df[col] = df[col].astype(str).apply(
+                                    lambda x: '.'.join(x.split('.')[:-1]) + '.' + x.split('.')[-1] 
+                                    if isinstance(x, str) and x.count('.') > 1 else x
+                                )
+                                df[col] = pd.to_numeric(df[col], errors='coerce')
+                        return df
+                    df_global = limpiar_coordenadas(df_global)
+            
+            # === PASO 4: Crear DataFrame de pagados para recupero ===
+            pagados_query = """
+            SELECT *
+            FROM df_global
+            WHERE CATEGORIA IN ('Pagados', 'Pagados-Finalizados')
+            """
+            processor.register_dataframe("df_global", df_global)
+            df_global_pagados = processor.execute_query(pagados_query)
+            
+            # === PASO 5: JOIN con datos de cumplimiento si está disponible ===
+            if has_cumplimiento:
+                cumplimiento_query = """
+                SELECT p.*,
+                    c.PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO
+                FROM df_global_pagados p
+                LEFT JOIN cumplimiento_raw c ON p.NRO_SOLICITUD = c.NRO_FORMULARIO
+                """
+                processor.register_dataframe("df_global_pagados", df_global_pagados)
+                df_global_pagados = processor.execute_query(cumplimiento_query)
+            
+            # Actualizar nombres de columnas normalizadas en el DataFrame final
+            column_mapping = {
+                'N_DEPARTAMENTO_NORM': 'N_DEPARTAMENTO',
+                'N_LOCALIDAD_NORM': 'N_LOCALIDAD', 
+                'ID_LOCALIDAD_NORM': 'ID_LOCALIDAD',
+                'N_LINEA_PRESTAMO_NORM': 'N_LINEA_PRESTAMO'
+            }
+            df_global = df_global.rename(columns=column_mapping)
+            df_global_pagados = df_global_pagados.rename(columns=column_mapping)
+            
+            # Mostrar información detallada de DataFrames en modo desarrollo
+            if is_development:
+                # Importar módulos necesarios
+                from utils.ui_components import show_dev_dataframe_info
+                from utils.session_helper import safe_session_set
+                
+                # Asegurar que debug_mode esté activado para show_dev_dataframe_info
+                safe_session_set('debug_mode', True)
+                
+                # Mostrar información de debug
+                st.write("Información de DataFrames procesados con DuckDB - Banco de la Gente")
+                show_dev_dataframe_info(df_global, "df_global")
+                show_dev_dataframe_info(df_global_pagados, "df_global_pagados")
+                
+                # Restaurar estado anterior de debug_mode si no se quiere mantener
+                if not is_development:
+                    safe_session_set('debug_mode', False)
+            
+            return df_global, geojson_data, df_localidad_municipio, df_global_pagados
+            
+    except Exception as e:
+        st.error(f"Error en procesamiento DuckDB: {str(e)}")
+        st.info("🔄 Fallback a procesamiento pandas...")
+        return load_and_preprocess_data(_data, is_development)
 
 def render_filters(df_filtrado_global):
     """
@@ -585,14 +823,40 @@ def show_bco_gente_dashboard(data, dates, is_development=False):
     # Mostrar columnas en modo desarrollo
     if is_development:
         from utils.ui_components import show_dev_dataframe_info
-        show_dev_dataframe_info(data, modulo_nombre="Banco de la Gente")
+        from utils.session_helper import safe_session_set
+        
+        # Activar el modo debug para mostrar información detallada
+        safe_session_set('debug_mode', True)
+        
+        # Filtrar el diccionario de datos para evitar objetos de geometría
+        filtered_data = {}
+        for key, value in data.items():
+            # Excluir archivos GeoJSON que causan problemas de representación
+            if not key.endswith('.geojson'):
+                filtered_data[key] = value
+            else:
+                # Informar que se ha excluido un archivo GeoJSON
+                st.info(f"Archivo GeoJSON excluido de la vista de desarrollo: {key}")
+        
+        # Mostrar información de los datos filtrados
+        show_dev_dataframe_info(filtered_data, modulo_nombre="Banco de la Gente")
 
     df_global = None
     df_global_pagados = None
     
     # Cargar y preprocesar datos
-    df_global, geojson_data, df_localidad_municipio, df_global_pagados = load_and_preprocess_data(data)
+    use_duckdb = True
+    if use_duckdb:
+        # Pasando data como _data para evitar problemas de caché en Streamlit
+        df_global, geojson_data, df_localidad_municipio, df_global_pagados = load_and_preprocess_data_duckdb(_data=data, is_development=is_development)
+    else:
+        df_global, geojson_data, df_localidad_municipio, df_global_pagados = load_and_preprocess_data(data, is_development)
     
+    # Verificar si los DataFrames principales se cargaron correctamente
+    if df_global is None or df_global.empty:
+        st.error("No se pudieron cargar los datos principales para el dashboard del Banco de la Gente.")
+        return # Exit the function if data is not available
+
     if is_development:
         st.write("Datos Globales ya cruzados (después de load_and_preprocess_data):")
         if df_global is not None and not df_global.empty: # Asegurarse que df_global existe
