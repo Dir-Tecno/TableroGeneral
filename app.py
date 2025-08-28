@@ -10,6 +10,8 @@ from utils.styles import setup_page
 from utils.ui_components import render_footer, show_notification_bell
 from minio import Minio
 from os import path
+from moduls import escrituracion
+
 
 
 setup_page()
@@ -31,7 +33,6 @@ modules = {
                    'capa_departamentos_2010.geojson', 'LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt'],
     'cba_capacita': ['VT_ALUMNOS_EN_CURSOS.parquet','VT_INSCRIPCIONES_PRG129.parquet', 'VT_CURSOS_SEDES_GEO.parquet', 'capa_departamentos_2010.geojson'],
     'empleo': ['LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt','VT_REPORTES_PPP_MAS26.parquet', 'vt_empresas_adheridas.parquet','vt_empresas_ARCA.parquet', 'VT_PUESTOS_X_FICHAS.parquet','capa_departamentos_2010.geojson'],
-    'escrituracion': ['https://docs.google.com/spreadsheets/d/1V9vXwMQJjd4kLdJZQncOSoWggQk8S7tBKxbOSEIUoQ8/edit#gid=1593263408']
     
 }
 
@@ -129,7 +130,9 @@ for idx, tab in enumerate(tabs):
         data_for_module = {file: all_data.get(file) for file in module_files if file in all_data}
         dates_for_module = {file: all_dates.get(file) for file in module_files if file in all_dates}
 
-        if not data_for_module:
+        # Si no hay datos, mostrar el warning SÓLO para módulos que realmente requieren archivos.
+        # Para 'escrituracion' queremos mostrar siempre la vista (redirige a un servicio externo).
+        if not data_for_module and module_key != "escrituracion":
             st.warning(f"No se encontraron datos para el módulo '{tab_names[idx]}'.")
             with st.expander("🔍 Debug: Ver archivos esperados vs cargados"):
                 st.write(f"**Archivos esperados para {module_key}:**")
