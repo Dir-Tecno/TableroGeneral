@@ -5,9 +5,7 @@ import io
 import datetime
 import numpy as np
 import requests
-import sys
 import os
-import glob
 from minio import Minio
 import os 
 
