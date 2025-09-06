@@ -8,6 +8,13 @@ import requests
 import os
 from minio import Minio
 import os 
+# Importar utilidades de Sentry
+from utils.sentry_utils import (
+    capture_exception, 
+    add_breadcrumb, 
+    sentry_wrap, 
+    sentry_context_manager
+)
 
 def convert_numpy_types(df):
     if df is None or df.empty:
@@ -92,6 +99,12 @@ def procesar_archivo(nombre, contenido, es_buffer, logs=None):
     if logs is None:
         logs = {"warnings": [], "info": []}
     try:
+        add_breadcrumb(
+            category="data_processing",
+            message=f"Procesando archivo: {nombre}",
+            data={"es_buffer": es_buffer}
+        )
+        
         if nombre.endswith('.parquet'):
             if es_buffer:
                 df = ParquetLoader.load(contenido)
@@ -129,38 +142,256 @@ def procesar_archivo(nombre, contenido, es_buffer, logs=None):
             return None, None
     except Exception as e:
         logs["warnings"].append(f"Error al procesar {nombre}: {str(e)}")
+        capture_exception(e, extra_data={
+            "archivo": nombre,
+            "es_buffer": es_buffer,
+            "tipo": nombre.split('.')[-1] if '.' in nombre else "desconocido"
+        })
         return None, None
 
-# --- NUEVA FUNCIÓN PARA CARGA LOCAL ---
+@sentry_wrap(module_name="carga", operation="load_data_from_local")
 def load_data_from_local(local_path, modules):
+    """
+    Carga datos desde la ruta local en modo desarrollo.
+    
+    Args:
+        local_path (str): Ruta local donde se encuentran los archivos.
+        modules (dict): Diccionario con los módulos y sus archivos.
+        
+    Returns:
+        tuple: (all_data, all_dates, logs) con los datos, fechas de actualización y logs.
+    """
+    import os
+    from pathlib import Path
+    
     all_data = {}
     all_dates = {}
-
-    if not os.path.exists(local_path):
-        st.error(f"Error Crítico: La ruta para desarrollo local no existe -> {local_path}")
-        return all_data, all_dates
-
-    st.info(f"Cargando archivos desde la carpeta local: {local_path}")
-
-    all_files_to_load = [file for files in modules.values() for file in files]
-    progress = st.progress(0)
-    total = len(all_files_to_load)
-
-    for i, archivo in enumerate(all_files_to_load):
-        progress.progress((i + 1) / total)
-        file_path = os.path.join(local_path, archivo)
-        if os.path.exists(file_path):
-            df, fecha = procesar_archivo(archivo, file_path, es_buffer=False)
-            if df is not None:
-                all_data[archivo] = df
-                all_dates[archivo] = fecha
-        else:
-            st.warning(f"Archivo no encontrado en la ruta local: {file_path}")
+    logs = {"warnings": [], "info": []}
+    
+    # Obtener lista de todos los archivos necesarios para todos los módulos
+    all_files = []
+    for module_files in modules.values():
+        all_files.extend(module_files)
+    all_files = list(set(all_files))  # Eliminar duplicados
+    
+    total = len(all_files)
+    
+    add_breadcrumb(
+        category="data_loading",
+        message=f"Cargando {total} archivos desde ruta local",
+        data={"local_path": local_path}
+    )
+    
+    for i, nombre in enumerate(all_files):
+        file_path = os.path.join(local_path, nombre)
+        
+        if not os.path.exists(file_path):
+            logs["warnings"].append(f"Archivo no encontrado en ruta local: {file_path}")
+            continue
             
-    progress.empty()
-    st.write("Archivos cargados localmente:", list(all_data.keys()))
-    return all_data, all_dates
+        try:
+            df, fecha = procesar_archivo(nombre, file_path, es_buffer=False, logs=logs)
+            if df is not None:
+                all_data[nombre] = df
+                all_dates[nombre] = fecha
+        except Exception as e:
+            logs["warnings"].append(f"Error al cargar archivo local {nombre}: {str(e)}")
+            capture_exception(e, extra_data={
+                "archivo": nombre,
+                "file_path": file_path,
+                "index": i,
+                "total": total
+            })
+    
+    logs["info"].append(f"Archivos cargados desde local: {list(all_data.keys())}")
+    return all_data, all_dates, logs
 
+@sentry_wrap(module_name="carga", operation="load_data_from_minio")
+def load_data_from_minio(minio_client, bucket, modules):
+    """
+    Carga datos desde MinIO en modo producción.
+    
+    Args:
+        minio_client: Cliente de MinIO.
+        bucket (str): Nombre del bucket.
+        modules (dict): Diccionario con los módulos y sus archivos.
+        
+    Returns:
+        tuple: (all_data, all_dates, logs) con los datos, fechas de actualización y logs.
+    """
+    all_data = {}
+    all_dates = {}
+    logs = {"warnings": [], "info": []}
+    
+    try:
+        archivos = [obj.object_name for obj in minio_client.list_objects(bucket, recursive=True)]
+    except Exception as e:
+        logs["warnings"].append(f"Error al listar archivos en MinIO: {str(e)}")
+        capture_exception(e, extra_data={"bucket": bucket})
+        return all_data, all_dates, logs
+        
+    extensiones = ['.parquet', '.csv', '.geojson', '.txt', '.xlsx']
+    archivos_filtrados = [a for a in archivos if any(a.endswith(ext) for ext in extensiones)]
+    logs["info"].append(f"Archivos filtrados: {archivos_filtrados}")
+
+    total = len(archivos_filtrados)
+    add_breadcrumb(
+        category="data_loading",
+        message=f"Cargando {total} archivos desde MinIO",
+        data={"bucket": bucket}
+    )
+    
+    for i, archivo in enumerate(archivos_filtrados):
+        try:
+            response = minio_client.get_object(bucket, archivo)
+            contenido = response.read()
+            response.close()
+            response.release_conn()
+            nombre = archivo.split('/')[-1]
+            df, fecha = procesar_archivo(nombre, contenido, es_buffer=True, logs=logs)
+            if df is not None:
+                all_data[nombre] = df
+                all_dates[nombre] = fecha
+        except Exception as e:
+            logs["warnings"].append(f"Error al obtener {archivo} de MinIO: {str(e)}")
+            capture_exception(e, extra_data={
+                "archivo": archivo,
+                "bucket": bucket,
+                "index": i,
+                "total": total
+            })
+            continue
+    
+    logs["info"].append(f"Archivos cargados: {list(all_data.keys())}")
+    return all_data, all_dates, logs
+
+
+@sentry_wrap(module_name="carga", operation="load_data_from_gitlab")
+def load_data_from_gitlab(repo_id, branch, token, modules):
+    """
+    Carga datos desde GitLab.
+    
+    Args:
+        repo_id (str): ID del repositorio en formato "namespace/project".
+        branch (str): Rama del repositorio.
+        token (str): Token de acceso a GitLab.
+        modules (dict): Diccionario con los módulos y sus archivos.
+        
+    Returns:
+        tuple: (all_data, all_dates, logs) con los datos, fechas de actualización y logs.
+    """
+    all_data = {}
+    all_dates = {}
+    logs = {"warnings": [], "info": []}
+    
+    try:
+        # Obtener lista de archivos disponibles en GitLab
+        add_breadcrumb(
+            category="data_loading",
+            message=f"Obteniendo lista de archivos de GitLab",
+            data={"repo_id": repo_id, "branch": branch}
+        )
+        
+        archivos_disponibles, logs = obtener_lista_archivos_gitlab(repo_id, branch, token, logs)
+        
+        if not archivos_disponibles:
+            logs["warnings"].append(f"No se encontraron archivos disponibles en GitLab para el repositorio {repo_id}.")
+            capture_exception(extra_data={
+                "error": "No se encontraron archivos disponibles",
+                "repo_id": repo_id,
+                "branch": branch
+            })
+            return all_data, all_dates, logs
+            
+        # Filtrar por extensiones soportadas
+        extensiones = ['.parquet', '.csv', '.geojson', '.txt', '.xlsx']
+        archivos_filtrados = [a for a in archivos_disponibles if any(a.endswith(ext) for ext in extensiones)]
+        
+        # Crear un conjunto de archivos solicitados por los módulos
+        archivos_solicitados = set()
+        for modulo, archivos in modules.items():
+            for archivo in archivos:
+                # Normalizar path para comparaciones
+                archivo_normalizado = archivo.replace('\\', '/')
+                archivos_solicitados.add(archivo_normalizado)
+        
+        add_breadcrumb(
+            category="data_loading",
+            message=f"Procesando {len(archivos_solicitados)} archivos solicitados por módulos",
+            data={"archivos_disponibles": len(archivos_disponibles)}
+        )
+        
+        # Procesar cada archivo de todos los módulos
+        for modulo, archivos in modules.items():
+            for archivo in archivos:
+                # En GitLab, los paths pueden venir con estructura de directorios
+                archivo_gitlab = archivo.replace('\\', '/')
+                
+                if archivo_gitlab in archivos_disponibles:
+                    try:
+                        # Obtener y procesar archivo
+                        contenido, logs = obtener_archivo_gitlab(repo_id, branch, archivo_gitlab.replace('/', '%2F'), token, logs)
+                        if contenido:
+                            # Obtener fecha real del commit
+                            fecha_commit = obtener_fecha_commit_gitlab(repo_id, branch, archivo_gitlab, token, logs)
+                            df, _ = procesar_archivo(archivo, contenido, True, logs)
+                            if df is not None:
+                                all_data[archivo] = df
+                                all_dates[archivo] = fecha_commit or datetime.datetime.now()
+                                logs["info"].append(f"Cargado {archivo} correctamente desde GitLab.")
+                            else:
+                                logs["warnings"].append(f"Error al procesar {archivo} desde GitLab.")
+                        else:
+                            logs["warnings"].append(f"No se pudo obtener el contenido de {archivo} desde GitLab.")
+                    except Exception as e:
+                        logs["warnings"].append(f"Error al cargar {archivo} desde GitLab: {str(e)}")
+                        capture_exception(e, extra_data={
+                            "archivo": archivo,
+                            "archivo_gitlab": archivo_gitlab,
+                            "modulo": modulo,
+                            "repo_id": repo_id,
+                            "branch": branch
+                        })
+                else:
+                    # Buscar archivos con nombre similar (puede estar en otra ruta)
+                    nombre_archivo = archivo.split('/')[-1]
+                    archivos_similares = [a for a in archivos_disponibles if a.endswith('/' + nombre_archivo)]
+                    
+                    if archivos_similares:
+                        archivo_candidato = archivos_similares[0]
+                        try:
+                            contenido, logs = obtener_archivo_gitlab(repo_id, branch, archivo_candidato.replace('/', '%2F'), token, logs)
+                            if contenido:
+                                # Obtener fecha real del commit
+                                fecha_commit = obtener_fecha_commit_gitlab(repo_id, branch, archivo_candidato, token, logs)
+                                df, _ = procesar_archivo(archivo, contenido, True, logs)
+                                if df is not None:
+                                    all_data[archivo] = df
+                                    all_dates[archivo] = fecha_commit or datetime.datetime.now()
+                                    logs["info"].append(f"Cargado {archivo} (desde {archivo_candidato}) correctamente.")
+                                else:
+                                    logs["warnings"].append(f"Error al procesar {archivo_candidato} desde GitLab.")
+                        except Exception as e:
+                            logs["warnings"].append(f"Error al cargar {archivo_candidato}: {str(e)}")
+                            capture_exception(e, extra_data={
+                                "archivo": archivo,
+                                "archivo_candidato": archivo_candidato,
+                                "modulo": modulo
+                            })
+                    else:
+                        logs["warnings"].append(f"Archivo {archivo} no disponible en GitLab.")
+                        
+        # Resumen final
+        logs["info"].append(f"Total archivos cargados desde GitLab: {len(all_data)}/{len(archivos_solicitados)}")
+    except Exception as e:
+        logs["warnings"].append(f"Error general en carga desde GitLab: {str(e)}")
+        capture_exception(e, extra_data={
+            "error": "Error general en carga desde GitLab",
+            "repo_id": repo_id,
+            "branch": branch
+        })
+    
+    return all_data, all_dates, logs
 
 def obtener_archivo_minio(minio_client, bucket, file_name):
     try:
@@ -374,185 +605,3 @@ def obtener_archivo_gitlab(repo_id, branch, file_name, token, logs=None):
             return None, logs
     
     return None, logs
-
-def load_data_from_local(local_path, modules):
-    """
-    Carga datos desde la ruta local en modo desarrollo.
-    
-    Args:
-        local_path (str): Ruta local donde se encuentran los archivos.
-        modules (dict): Diccionario con los módulos y sus archivos.
-        
-    Returns:
-        tuple: (all_data, all_dates, logs) con los datos, fechas de actualización y logs.
-    """
-    import os
-    from pathlib import Path
-    
-    all_data = {}
-    all_dates = {}
-    logs = {"warnings": [], "info": []}
-    
-    # Obtener lista de todos los archivos necesarios para todos los módulos
-    all_files = []
-    for module_files in modules.values():
-        all_files.extend(module_files)
-    all_files = list(set(all_files))  # Eliminar duplicados
-    
-    total = len(all_files)
-    
-    for i, nombre in enumerate(all_files):
-        file_path = os.path.join(local_path, nombre)
-        
-        if not os.path.exists(file_path):
-            logs["warnings"].append(f"Archivo no encontrado en ruta local: {file_path}")
-            continue
-            
-        try:
-            df, fecha = procesar_archivo(nombre, file_path, es_buffer=False, logs=logs)
-            if df is not None:
-                all_data[nombre] = df
-                all_dates[nombre] = fecha
-        except Exception as e:
-            logs["warnings"].append(f"Error al cargar archivo local {nombre}: {str(e)}")
-    
-    logs["info"].append(f"Archivos cargados desde local: {list(all_data.keys())}")
-    return all_data, all_dates, logs
-
-def load_data_from_minio(minio_client, bucket, modules):
-    """
-    Carga datos desde MinIO en modo producción.
-    
-    Args:
-        minio_client: Cliente de MinIO.
-        bucket (str): Nombre del bucket.
-        modules (dict): Diccionario con los módulos y sus archivos.
-        
-    Returns:
-        tuple: (all_data, all_dates, logs) con los datos, fechas de actualización y logs.
-    """
-    all_data = {}
-    all_dates = {}
-    logs = {"warnings": [], "info": []}
-    
-    try:
-        archivos = [obj.object_name for obj in minio_client.list_objects(bucket, recursive=True)]
-    except Exception as e:
-        logs["warnings"].append(f"Error al listar archivos en MinIO: {str(e)}")
-        return all_data, all_dates, logs
-        
-    extensiones = ['.parquet', '.csv', '.geojson', '.txt', '.xlsx']
-    archivos_filtrados = [a for a in archivos if any(a.endswith(ext) for ext in extensiones)]
-    logs["info"].append(f"Archivos filtrados: {archivos_filtrados}")
-
-    total = len(archivos_filtrados)
-    for i, archivo in enumerate(archivos_filtrados):
-        try:
-            response = minio_client.get_object(bucket, archivo)
-            contenido = response.read()
-            response.close()
-            response.release_conn()
-            nombre = archivo.split('/')[-1]
-            df, fecha = procesar_archivo(nombre, contenido, es_buffer=True, logs=logs)
-            if df is not None:
-                all_data[nombre] = df
-                all_dates[nombre] = fecha
-        except Exception as e:
-            logs["warnings"].append(f"Error al obtener {archivo} de MinIO: {str(e)}")
-            continue
-    
-    logs["info"].append(f"Archivos cargados: {list(all_data.keys())}")
-    return all_data, all_dates, logs
-
-
-def load_data_from_gitlab(repo_id, branch, token, modules):
-    """
-    Carga datos desde GitLab.
-    
-    Args:
-        repo_id (str): ID del repositorio en formato "namespace/project".
-        branch (str): Rama del repositorio.
-        token (str): Token de acceso a GitLab.
-        modules (dict): Diccionario con los módulos y sus archivos.
-        
-    Returns:
-        tuple: (all_data, all_dates, logs) con los datos, fechas de actualización y logs.
-    """
-    all_data = {}
-    all_dates = {}
-    logs = {"warnings": [], "info": []}
-    
-    try:
-        # Obtener lista de archivos disponibles en GitLab
-        archivos_disponibles, logs = obtener_lista_archivos_gitlab(repo_id, branch, token, logs)
-        
-        if not archivos_disponibles:
-            logs["warnings"].append(f"No se encontraron archivos disponibles en GitLab para el repositorio {repo_id}.")
-            return all_data, all_dates, logs
-            
-        # Filtrar por extensiones soportadas
-        extensiones = ['.parquet', '.csv', '.geojson', '.txt', '.xlsx']
-        archivos_filtrados = [a for a in archivos_disponibles if any(a.endswith(ext) for ext in extensiones)]
-        
-        # Crear un conjunto de archivos solicitados por los módulos
-        archivos_solicitados = set()
-        for modulo, archivos in modules.items():
-            for archivo in archivos:
-                # Normalizar path para comparaciones
-                archivo_normalizado = archivo.replace('\\', '/')
-                archivos_solicitados.add(archivo_normalizado)
-        
-        # Procesar cada archivo de todos los módulos
-        for modulo, archivos in modules.items():
-            for archivo in archivos:
-                # En GitLab, los paths pueden venir con estructura de directorios
-                archivo_gitlab = archivo.replace('\\', '/')
-                
-                if archivo_gitlab in archivos_disponibles:
-                    try:
-                        # Obtener y procesar archivo
-                        contenido, logs = obtener_archivo_gitlab(repo_id, branch, archivo_gitlab.replace('/', '%2F'), token, logs)
-                        if contenido:
-                            # Obtener fecha real del commit
-                            fecha_commit = obtener_fecha_commit_gitlab(repo_id, branch, archivo_gitlab, token, logs)
-                            df, _ = procesar_archivo(archivo, contenido, True, logs)
-                            if df is not None:
-                                all_data[archivo] = df
-                                all_dates[archivo] = fecha_commit or datetime.datetime.now()
-                                logs["info"].append(f"Cargado {archivo} correctamente desde GitLab.")
-                            else:
-                                logs["warnings"].append(f"Error al procesar {archivo} desde GitLab.")
-                        else:
-                            logs["warnings"].append(f"No se pudo obtener el contenido de {archivo} desde GitLab.")
-                    except Exception as e:
-                        logs["warnings"].append(f"Error al cargar {archivo} desde GitLab: {str(e)}")
-                else:
-                    # Buscar archivos con nombre similar (puede estar en otra ruta)
-                    nombre_archivo = archivo.split('/')[-1]
-                    archivos_similares = [a for a in archivos_disponibles if a.endswith('/' + nombre_archivo)]
-                    
-                    if archivos_similares:
-                        archivo_candidato = archivos_similares[0]
-                        try:
-                            contenido, logs = obtener_archivo_gitlab(repo_id, branch, archivo_candidato.replace('/', '%2F'), token, logs)
-                            if contenido:
-                                # Obtener fecha real del commit
-                                fecha_commit = obtener_fecha_commit_gitlab(repo_id, branch, archivo_candidato, token, logs)
-                                df, _ = procesar_archivo(archivo, contenido, True, logs)
-                                if df is not None:
-                                    all_data[archivo] = df
-                                    all_dates[archivo] = fecha_commit or datetime.datetime.now()
-                                    logs["info"].append(f"Cargado {archivo} (desde {archivo_candidato}) correctamente.")
-                                else:
-                                    logs["warnings"].append(f"Error al procesar {archivo_candidato} desde GitLab.")
-                        except Exception as e:
-                            logs["warnings"].append(f"Error al cargar {archivo_candidato}: {str(e)}")
-                    else:
-                        logs["warnings"].append(f"Archivo {archivo} no disponible en GitLab.")
-                        
-        # Resumen final
-        logs["info"].append(f"Total archivos cargados desde GitLab: {len(all_data)}/{len(archivos_solicitados)}")
-    except Exception as e:
-        logs["warnings"].append(f"Error general en carga desde GitLab: {str(e)}")
-    
-    return all_data, all_dates, logs
