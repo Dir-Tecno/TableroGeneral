@@ -2,8 +2,13 @@ import streamlit as st
 # --- Configuración de la Página ---
 st.set_page_config(
     page_title="Dashboard Resumen del Ministerio de Desarrollo Social y Promoción del Empleo",
-    layout="wide"
+    layout="wide",
+    light_theme=True
 )
+from utils.sentry_utils import init_sentry, sentry_wrap, sentry_error, capture_exception
+# Inicializar Sentry al principio de la aplicación
+init_sentry()
+
 from moduls.carga import load_data_from_minio, load_data_from_local, load_data_from_gitlab
 from moduls import bco_gente, cbamecapacita, empleo, escrituracion
 from utils.styles import setup_page

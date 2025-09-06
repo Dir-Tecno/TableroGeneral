@@ -48,6 +48,9 @@ token = "${GITLAB_TOKEN}"\n\
 \n\
 [slack]\n\
 webhook_url = "${SLACK_WEBHOOK_URL}"\n\
+\n\
+[sentry]\n\
+dsn = "${SENTRY_DSN}"\n\
 EOF\n\
 exec "$@"' > /app/entrypoint.sh && \
     chmod +x /app/entrypoint.sh
@@ -55,6 +58,7 @@ exec "$@"' > /app/entrypoint.sh && \
 # Variables de entorno para tiempo de ejecución
 ENV GITLAB_TOKEN=""
 ENV SLACK_WEBHOOK_URL=""
+ENV SENTRY_DSN=""
 
 # Configuración final
 EXPOSE 8501
