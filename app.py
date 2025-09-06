@@ -3,7 +3,7 @@ import streamlit as st
 st.set_page_config(
     page_title="Dashboard Resumen del Ministerio de Desarrollo Social y Promoción del Empleo",
     layout="wide",
-    light_theme=True
+    theme="light"
 )
 from utils.sentry_utils import init_sentry, sentry_wrap, sentry_error, capture_exception
 # Inicializar Sentry al principio de la aplicación
