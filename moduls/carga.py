@@ -605,3 +605,61 @@ def obtener_archivo_gitlab(repo_id, branch, file_name, token, logs=None):
             return None, logs
     
     return None, logs
+
+# Función para carga granular de archivos con su propio cacheo independiente
+@st.cache_data(ttl=3600)
+def load_single_file_from_source(source_type, source_params, archivo):
+    """
+    Carga un único archivo con su propio cacheo independiente
+    
+    Args:
+        source_type (str): 'gitlab', 'minio' o 'local'
+        source_params (dict): Parámetros específicos de la fuente (ej: repo_id, branch, token)
+        archivo (str): Ruta al archivo
+        
+    Returns:
+        tuple: (dataframe, fecha, logs)
+    """
+    logs = {"warnings": [], "info": []}
+    
+    try:
+        if source_type == 'gitlab':
+            repo_id = source_params.get('repo_id')
+            branch = source_params.get('branch') 
+            token = source_params.get('token')
+            
+            contenido, logs = obtener_archivo_gitlab(repo_id, branch, archivo.replace('/', '%2F'), token, logs)
+            if contenido:
+                fecha_commit = obtener_fecha_commit_gitlab(repo_id, branch, archivo, token, logs)
+                df, _ = procesar_archivo(archivo, contenido, True, logs)
+                if df is not None:
+                    return df, fecha_commit or datetime.datetime.now(), logs
+                    
+        elif source_type == 'local':
+            local_path = source_params.get('local_path')
+            file_path = os.path.join(local_path, archivo)
+            
+            if os.path.exists(file_path):
+                df, fecha = procesar_archivo(archivo, file_path, es_buffer=False, logs=logs)
+                if df is not None:
+                    return df, fecha, logs
+                    
+        elif source_type == 'minio':
+            minio_client = source_params.get('minio_client')
+            bucket = source_params.get('bucket')
+            
+            try:
+                response = minio_client.get_object(bucket, archivo)
+                contenido = response.read()
+                response.close()
+                response.release_conn()
+                df, fecha = procesar_archivo(archivo, contenido, es_buffer=True, logs=logs)
+                if df is not None:
+                    return df, fecha, logs
+            except Exception as e:
+                logs["warnings"].append(f"Error al obtener {archivo} de MinIO: {str(e)}")
+                
+    except Exception as e:
+        logs["warnings"].append(f"Error al cargar {archivo}: {str(e)}")
+    
+    return None, None, logs
