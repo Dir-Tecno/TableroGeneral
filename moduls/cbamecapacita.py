@@ -137,8 +137,7 @@ def load_and_preprocess_data(data, is_development=False):
             df_cursos['POSTULACIONES'] = pd.to_numeric(df_cursos['POSTULACIONES'], errors='coerce').fillna(0).astype(int)
     if df_alumnos is not None and df_cursos is not None:
         if 'ID_ALUMNO' in df_alumnos.columns and 'ID_PLANIFICACION' in df_alumnos.columns:
-            # Debug: Ver valores únicos en ID_PLANIFICACION
-            print(f"Valores únicos en ID_PLANIFICACION de df_alumnos: {df_alumnos['ID_PLANIFICACION'].nunique()}")
+            
 
             alumnos_count = (
                 df_alumnos.groupby('ID_PLANIFICACION')['ID_ALUMNO']
@@ -146,8 +145,7 @@ def load_and_preprocess_data(data, is_development=False):
                 .reset_index()
                 .rename(columns={'ID_ALUMNO': 'ALUMNOS'})
             )
-            # Debug: Ver el resultado del conteo
-            print(f"Total de grupos en alumnos_count: {len(alumnos_count)}")
+            
 
             df_cursos = df_cursos.merge(
                 alumnos_count,
@@ -158,15 +156,13 @@ def load_and_preprocess_data(data, is_development=False):
 
         if 'ALUMNOS' in df_cursos.columns:
             df_cursos['ALUMNOS'] = pd.to_numeric(df_cursos['ALUMNOS'], errors='coerce').fillna(0).astype(int)
-            # Debug: Confirmar que ALUMNOS está en df_cursos
-            print(f"Columna ALUMNOS en df_cursos: {df_cursos['ALUMNOS'].sum()} alumnos en total")
+            
         else:
             print("ADVERTENCIA: La columna ALUMNOS no se agregó a df_cursos")
 
         # Agregar conteo de alumnos egresados a df_cursos
         if df_alumnos is not None and 'N_ESTADO' in df_alumnos.columns:
-            # Debug: Ver valores únicos en N_ESTADO
-            print(f"Estados únicos en df_alumnos: {df_alumnos['N_ESTADO'].unique()}")
+            
             
             # Contar alumnos egresados por ID_PLANIFICACION
             egresados_count = (
@@ -176,9 +172,7 @@ def load_and_preprocess_data(data, is_development=False):
                 .reset_index()
                 .rename(columns={'ID_ALUMNO': 'EGRESADOS'})
             )
-            # Debug: Ver el resultado del conteo de egresados
-            print(f"Total de grupos con egresados: {len(egresados_count)}")
-            print(f"Total de egresados: {egresados_count['EGRESADOS'].sum()}")
+            
 
             df_cursos = df_cursos.merge(
                 egresados_count,
@@ -189,8 +183,7 @@ def load_and_preprocess_data(data, is_development=False):
 
         if 'EGRESADOS' in df_cursos.columns:
             df_cursos['EGRESADOS'] = pd.to_numeric(df_cursos['EGRESADOS'], errors='coerce').fillna(0).astype(int)
-            # Debug: Confirmar que EGRESADOS está en df_cursos
-            print(f"Columna EGRESADOS en df_cursos: {df_cursos['EGRESADOS'].sum()} egresados en total")
+            
         else:
             print("ADVERTENCIA: La columna EGRESADOS no se agregó a df_cursos")
 
@@ -205,26 +198,22 @@ def load_and_preprocess_data(data, is_development=False):
 
     # Debug: Verificar columnas finales
     if df_cursos is not None:
-        print(f"Columnas en df_cursos: {df_cursos.columns.tolist()}")
-        if 'ALUMNOS' in df_cursos.columns:
-            print(f"Estadísticas de ALUMNOS: Min={df_cursos['ALUMNOS'].min()}, Max={df_cursos['ALUMNOS'].max()}, Media={df_cursos['ALUMNOS'].mean():.2f}")
-        if 'COMENZADO' in df_cursos.columns:
-            print(f"Cursos comenzados: {df_cursos['COMENZADO'].sum()} de {len(df_cursos)} ({df_cursos['COMENZADO'].mean()*100:.2f}%)")
+        
+        
 
         # Añadir columna "No asignados" como la diferencia entre POSTULACIONES y ALUMNOS
         if 'POSTULACIONES' in df_cursos.columns and 'ALUMNOS' in df_cursos.columns:
             df_cursos['No asignados'] = df_cursos['POSTULACIONES'] - df_cursos['ALUMNOS']
             # Asegurar que no haya valores negativos (en caso de inconsistencias en los datos)
             df_cursos['No asignados'] = df_cursos['No asignados'].apply(lambda x: max(0, x))
-            print(f"Columna 'No asignados' creada: Min={df_cursos['No asignados'].min()}, Max={df_cursos['No asignados'].max()}, Total={df_cursos['No asignados'].sum()}")
+        
         else:
             print("ADVERTENCIA: No se pudo crear la columna 'No asignados' porque faltan las columnas POSTULACIONES o ALUMNOS")
 
     # Cruzar df_postulantes con df_alumnos para obtener el campo ALUMNO
     if df_postulantes is not None and df_alumnos is not None and 'CUIL' in df_alumnos.columns:
         if 'CUIL' in df_postulantes.columns and 'CUIL' in df_alumnos.columns:
-            print("Agregando columna ALUMNO a df_postulantes desde df_alumnos...")
-
+            
             # Crear un set con los CUILs únicos de df_alumnos para hacer la búsqueda más eficiente
             cuils_alumnos = set(df_alumnos['CUIL'].dropna().unique())
 
@@ -236,14 +225,14 @@ def load_and_preprocess_data(data, is_development=False):
             # Verificar el resultado del cruce
             alumnos_count = df_postulantes['ALUMNO'].notnull().sum()
             total_postulantes = len(df_postulantes)
-            print(f"Columna ALUMNO agregada a df_postulantes. {alumnos_count} de {total_postulantes} postulantes son alumnos ({alumnos_count/total_postulantes*100:.2f}%)")
+        
         else:
             print("ADVERTENCIA: No se puede realizar el cruce porque faltan columnas necesarias en los DataFrames")
     if is_development:
         st.write("Información de DataFrames ya cruzados")
-        show_dev_dataframe_info(df_postulantes, "df_postulantes")
-        show_dev_dataframe_info(df_alumnos, "df_alumnos")
-        show_dev_dataframe_info(df_cursos, "df_cursos")
+        show_dev_dataframe_info(df_postulantes, "df_postulantes", is_development=is_development)
+        show_dev_dataframe_info(df_alumnos, "df_alumnos", is_development=is_development)
+        show_dev_dataframe_info(df_cursos, "df_cursos", is_development=is_development)
     return df_postulantes, df_alumnos, df_cursos
 
 def show_cba_capacita_dashboard(data, dates, is_development=False):
@@ -265,7 +254,7 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
 
     # Mostrar columnas en  desarrollo
     if is_development:
-        show_dev_dataframe_info(data, modulo_nombre="CBA Me Capacita")
+        show_dev_dataframe_info(data, modulo_nombre="CBA Me Capacita", is_development=is_development)
 
     
 

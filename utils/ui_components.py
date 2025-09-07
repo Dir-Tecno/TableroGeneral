@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import requests
 import datetime
-from utils.session_helper import safe_session_get, safe_session_set, safe_session_check
+from utils.session_helper import safe_session_get, safe_session_set, safe_session_check, is_session_initialized
 
 # Inicializar variables de sesión necesarias
 if "mostrar_form_comentario" not in st.session_state:
@@ -10,16 +10,17 @@ if "mostrar_form_comentario" not in st.session_state:
 if "campanita_mostrada" not in st.session_state:
     st.session_state["campanita_mostrada"] = False
 
-def show_dev_dataframe_info(data, modulo_nombre="Módulo", info_caption=None):
+def show_dev_dataframe_info(data, modulo_nombre="Módulo", info_caption=None, is_development=False):
     """
     Muestra información útil de uno o varios DataFrames en modo desarrollo.
     Args:
         data: pd.DataFrame o dict de DataFrames
         modulo_nombre: str, nombre del módulo
         info_caption: str, texto opcional para el caption
+        is_development: bool, indica si estamos en modo desarrollo
     """
-    # Mostrar información solo si estamos en modo debug
-    if safe_session_get('debug_mode', False):
+    # Mostrar información solo si estamos en modo desarrollo
+    if is_development:
         st.write(f"**{info_caption or f'Información de Desarrollo ({modulo_nombre})'}**")
         
         def _show_single(df, name):
@@ -28,16 +29,38 @@ def show_dev_dataframe_info(data, modulo_nombre="Módulo", info_caption=None):
             elif hasattr(df, 'empty') and df.empty:
                 st.write(f"- DataFrame '{name}' está vacío.")
             elif hasattr(df, 'head') and hasattr(df, 'columns'):
-                st.write(f"- **DataFrame**: {name}")
-                st.write(f"- **Shape**: {df.shape}")
-                st.write(f"- **Columnas**: {', '.join(df.columns)}")
-                st.write(f"- **Total de registros**: {len(df)}")
-                # Mostrar muestra de datos
-                if len(df) > 0:
-                    st.write(f"- **Muestra de datos (3 primeras filas)**:")
-                    st.dataframe(df.head(3))
+                # Crear un expander para este DataFrame
+                with st.expander(f"📊 DataFrame: {name} ({df.shape[0]} filas, {df.shape[1]} columnas)", expanded=False):
+                    st.write(f"- **Shape**: {df.shape}")
+                    st.write(f"- **Columnas**: {', '.join(df.columns)}")
+                    
+                    # Verificar si es un GeoDataFrame (tiene columna 'geometry')
+                    if 'geometry' in df.columns:
+                        # Es un GeoDataFrame - mostrar información sin la columna geometry
+                        st.write(f"- **Total de registros**: {len(df)}")
+                        st.write("- **Muestra de datos (10 primeras filas sin geometría):**")
+                        # Crear copia sin geometría para mostrar
+                        df_display = df.drop(columns=['geometry']).head(10)
+                        st.dataframe(df_display)
+                    else:
+                        # DataFrame normal - mostrar muestra de datos
+                        st.write(f"- **Total de registros**: {len(df)}")
+                        st.write("- **Muestra de datos (10 primeras filas):**")
+                        st.dataframe(df.head(10))
+                    
+                    # Mostrar estadísticas básicas para columnas numéricas
+                    numeric_cols = df.select_dtypes(include=['number']).columns
+                    if len(numeric_cols) > 0:
+                        st.write("- **Estadísticas básicas para columnas numéricas:**")
+                        try:
+                            stats_df = df[numeric_cols].describe().T
+                            st.dataframe(stats_df)
+                        except:
+                            st.write("  (No se pueden mostrar estadísticas para este DataFrame)")
             else:
-                st.write(f"- Objeto '{name}' no es un DataFrame válido (tipo: {type(df)})")
+                # Mostrar como objeto genérico si no es un DataFrame
+                with st.expander(f"🔍 Objeto: {name}", expanded=False):
+                    st.write(f"- **Tipo**: {type(df)}")
         
         if isinstance(data, dict):
             for name, df in data.items():
@@ -269,6 +292,11 @@ def show_notification_bell(novedades=None):
         novedades (list): Lista de diccionarios con novedades
                          [{"titulo": "Título", "descripcion": "Descripción", "fecha": "YYYY-MM-DD", "modulo": "Nombre del módulo"}, ...]
     """
+    # Verificar explícitamente si la sesión está inicializada antes de cualquier acceso
+    if not is_session_initialized():
+        # No mostrar la campanita si la sesión no está inicializada
+        return
+    
     # Evitar duplicación usando un identificador único en session_state seguro
     if safe_session_check("campanita_mostrada"):
         return
@@ -425,4 +453,3 @@ def show_notification_bell(novedades=None):
     
     # Cerrar el div contenedor
     st.markdown('</div>', unsafe_allow_html=True)
-

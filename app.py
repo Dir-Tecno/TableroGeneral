@@ -21,7 +21,7 @@ from moduls import escrituracion
 setup_page()
 st.markdown('<div class="main-header">Tablero General de Reportes</div>', unsafe_allow_html=True)
 # --- Configuración General ---
-FUENTE_DATOS = "gitlab"  # Opciones: 'minio', 'gitlab', 'local'
+FUENTE_DATOS = "local"  # Opciones: 'minio', 'gitlab', 'local'
 REPO_ID = "Dir-Tecno/Repositorio-Reportes"
 BRANCH = "main"
 LOCAL_PATH = r"D:\DESARROLLO\REPORTES\TableroGeneral\Repositorio-Reportes-main"
@@ -107,16 +107,14 @@ all_data, all_dates, logs = load_all_data()
 # --- Mostrar Campanita de Novedades DESPUÉS de la carga ---
 show_notification_bell()
 
-
-
 # --- Definición de Pestañas ---
-tab_names = ["CBA Me Capacita", "Banco de la Gente", "Programas de Empleo", "Escrituración"]
+tab_names = ["Programas de Empleo","CBA Me Capacita", "Banco de la Gente",  "Escrituración"]
 tabs = st.tabs(tab_names)
-tab_keys = ['cba_capacita', 'bco_gente', 'empleo', 'escrituracion']
+tab_keys = ['empleo', 'cba_capacita', 'bco_gente', 'escrituracion']
 tab_functions = [
+    empleo.show_empleo_dashboard,
     cbamecapacita.show_cba_capacita_dashboard,
     bco_gente.show_bco_gente_dashboard,
-    empleo.show_empleo_dashboard,
     escrituracion.show_escrituracion_dashboard,
 ]
 

@@ -8,8 +8,6 @@ from utils.kpi_tooltips import ESTADO_CATEGORIAS, TOOLTIPS_DESCRIPTIVOS
 from utils.session_helper import safe_session_get, safe_session_set, safe_session_check
 
 # Inicializar variables de sesión necesarias
-if "debug_mode" not in st.session_state:
-    st.session_state["debug_mode"] = False
 if "selected_categorias" not in st.session_state:
     st.session_state["selected_categorias"] = []
 if "selected_lineas_credito" not in st.session_state:
@@ -246,19 +244,9 @@ def load_and_preprocess_data(data):
         df_cumplimiento = ensure_dataframe(data.get('VT_CUMPLIMIENTO_FORMULARIOS.parquet'))
         geojson_data = data.get('capa_departamentos_2010.geojson')  # Este es un GeoJSON, no un DataFrame
         df_localidad_municipio = ensure_dataframe(data.get('LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt'))
-        
-        
         has_global_data = not df_global.empty
         has_cumplimiento_data = not df_cumplimiento.empty
         
-        # Verificar la estructura del DataFrame para diagnóstico
-        if has_global_data and safe_session_get('debug_mode', False):
-            st.write("Estructura de df_global al inicio:")
-            st.write(f"Tipo: {type(df_global)}")
-            st.write(f"Columnas: {df_global.columns.tolist()}")
-            st.write(f"Tipos de datos: {df_global.dtypes}")
- 
-
         # Agregar columna de CATEGORIA a df_global si está disponible y filtrar solo por 'Pagados' y 'Pagados-Finalizados'
         
         if has_global_data and 'N_ESTADO_PRESTAMO' in df_global.columns:
@@ -412,7 +400,6 @@ def load_and_preprocess_data(data):
             else:
                 st.info("df_localidad_municipio no está disponible o está vacío, se omite el segundo cruce.")
             # --- FIN: Nuevo Merge con df_localidad_municipio ---
-
         
         # Filtrar líneas de préstamo que no deben ser consideradas
         if has_global_data and 'N_LINEA_PRESTAMO' in df_global.columns:
@@ -428,15 +415,6 @@ def load_and_preprocess_data(data):
             # Ya no se eliminan filas, así que no es necesario re-evaluar has_global_data aquí
             # # Verificar si todavía hay datos después del filtrado
             # has_global_data = not df_global.empty
-
-        
-        # Verificar la estructura final para diagnóstico
-        if has_global_data and safe_session_get('debug_mode', False):
-            st.write("Estructura final de df_global:")
-            st.write(f"Tipo: {type(df_global)}")
-            st.write(f"Columnas: {df_global.columns.tolist()}")
-            st.write(f"Tipos de datos: {df_global.dtypes}")
-        
         # Convertir cualquier columna que sea Series a valores nativos
         if has_global_data and not df_global.empty:
             for col in df_global.columns:
@@ -560,7 +538,7 @@ def render_filters(df_filtrado_global):
         
         # Filtro de línea de préstamo en la tercera columna
         with col3:
-            lineas_prestamo = sorted(df_filtrado['N_LINEA_PRESTAMO'].dropna().unique())
+            lineas_prestamo = sorted(df_filtrado_global['N_LINEA_PRESTAMO'].dropna().unique())
             selected_lineas = st.multiselect("Línea de préstamo:", lineas_prestamo, default=lineas_prestamo, key="bco_linea_filter")
         
         if selected_lineas:
@@ -585,7 +563,7 @@ def show_bco_gente_dashboard(data, dates, is_development=False):
     # Mostrar columnas en modo desarrollo
     if is_development:
         from utils.ui_components import show_dev_dataframe_info
-        show_dev_dataframe_info(data, modulo_nombre="Banco de la Gente")
+        show_dev_dataframe_info(data, modulo_nombre="Banco de la Gente", is_development=is_development)
 
     df_global = None
     df_global_pagados = None
@@ -712,7 +690,7 @@ def show_bco_gente_dashboard(data, dates, is_development=False):
             # Crear una copia del DataFrame para trabajar con él
             df_filtrado_recupero = df_global_pagados.copy()
             
-            # Asegurar que df_filtrado_recupero tenga todas las columnas calculadas necesarias
+            # Asegurarse de que df_filtrado_recupero tenga todas las columnas calculadas necesarias
             # Rellenar valores NaN con 0
             for col in ['DEUDA_VENCIDA', 'DEUDA_NO_VENCIDA', 'MONTO_OTORGADO']:
                 if col in df_filtrado_recupero.columns:
@@ -839,8 +817,6 @@ def mostrar_global(df_filtrado_global, tooltips_categorias):
                     else:
                         # Si todos los CUILs son nulos, usar el número de filas como aproximación
                         total_personas = filas_coincidentes
-                else:
-                    total_personas = 0
             else:
                 total_personas = 0
                 
@@ -1104,7 +1080,6 @@ def mostrar_global(df_filtrado_global, tooltips_categorias):
                     if sexo_counts.empty:
                         st.warning("No hay datos para mostrar en el gráfico de sexo.")
                     else:
-                        # Crear el gráfico de torta
                         fig_sexo = px.pie(
                             sexo_counts,
                             values='Cantidad',
@@ -1953,8 +1928,15 @@ def mostrar_recupero(df_filtrado_recupero=None, is_development=False):
                 title='Histograma de Días de Cumplimiento con Curva Normal Superpuesta',
                 xaxis_title='Días de Cumplimiento (Mayor número = Menor cumplimiento)',
                 yaxis_title='Frecuencia',
-                legend_title='Distribución',
-                height=500,
+                xaxis_tickformat='%b %Y',
+                plot_bgcolor='white',
+                legend=dict(
+                    orientation="h",
+                    yanchor="bottom",
+                    y=1.02,
+                    xanchor="right",
+                    x=1
+                ),
                 hovermode='closest',
                 bargap=0.1
             )

@@ -3,21 +3,17 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-import json
 from datetime import datetime, timedelta
 from utils.ui_components import display_kpi_row, show_last_update
 from utils.map_utils import create_choropleth_map, display_map
 from utils.styles import COLORES_IDENTIDAD
 from utils.data_cleaning import clean_thousand_separator, convert_decimal_separator
 from utils.kpi_tooltips import TOOLTIPS_DESCRIPTIVOS, ESTADO_TOOLTIPS
-import folium
 from streamlit_folium import folium_static
 import geopandas as gpd
 import math
-import requests
 import altair as alt
 from io import StringIO
-import os
 
 def create_empleo_kpis(resultados, programa_nombre=""):
     """
@@ -192,7 +188,7 @@ def show_empleo_dashboard(data, dates, is_development=False):
     # Mostrar info de desarrollo de los DataFrames
     if is_development:
         from utils.ui_components import show_dev_dataframe_info
-        show_dev_dataframe_info(data, modulo_nombre="Empleo")
+        show_dev_dataframe_info(data, modulo_nombre="Empleo", is_development=is_development)
     # Cargar y preprocesar los datos
     df_inscriptos, df_empresas, geojson_data,  has_empresas, has_geojson = load_and_preprocess_data(data, dates, is_development)
     
@@ -898,7 +894,7 @@ def show_companies(df_empresas, geojson_data):
     columns_to_select = [col for col in ['N_LOCALIDAD', 'N_DEPARTAMENTO', 'CUIT', 'N_EMPRESA', 
                                        'NOMBRE_TIPO_EMPRESA', 'ADHERIDO', 'CANTIDAD_EMPLEADOS', 
                                        'VACANTES', 'CUPO', 'IMP_GANANCIAS', 'IMP_IVA', 'MONOTRIBUTO',
-                                       'INTEGRANTE_SOC', 'EMPLEADOR', 'ACTIVIDAD_MONOTRIBUTO', 'BENEF', 'TELEFONO', 'CELULAR', 'MAIL', 'SITIO_WEB', 'TEL_CONTACTO', 'EMAIL_CONTACTO', 'NOMBRE_FANTASIA'] 
+                                       'INTEGRANTE_SOC', 'EMPLEADOR', 'ACTIVIDAD_MONOTRIBUTO','BENEF', 'TELEFONO', 'CELULAR', 'MAIL', 'SITIO_WEB', 'TEL_CONTACTO', 'EMAIL_CONTACTO', 'NOMBRE_FANTASIA'] 
                        if col in df_empresas.columns]
 
     if 'CUIT' in df_empresas.columns and 'ADHERIDO' in df_empresas.columns:
