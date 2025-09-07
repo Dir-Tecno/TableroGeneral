@@ -26,7 +26,6 @@ REPO_ID = "Dir-Tecno/Repositorio-Reportes"
 BRANCH = "main"
 LOCAL_PATH = r"D:\DESARROLLO\REPORTES\TableroGeneral\Repositorio-Reportes-main"
 MINIO_BUCKET = "repositorio-dashboard"
-division_by_zero = 1 / 0
 # --- Determinación del Modo de Ejecución ---
 is_local = path.exists(LOCAL_PATH) and FUENTE_DATOS == "local"
 is_production = not is_local
