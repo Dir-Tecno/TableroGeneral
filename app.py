@@ -21,14 +21,13 @@ from moduls import escrituracion
 setup_page()
 st.markdown('<div class="main-header">Tablero General de Reportes</div>', unsafe_allow_html=True)
 # --- Configuración General ---
-FUENTE_DATOS = "local"  # Opciones: 'minio', 'gitlab', 'local'
+FUENTE_DATOS = "gitlab"  # Opciones: 'minio', 'gitlab', 'local'
 REPO_ID = "Dir-Tecno/Repositorio-Reportes"
 BRANCH = "main"
 LOCAL_PATH = r"D:\DESARROLLO\REPORTES\TableroGeneral\Repositorio-Reportes-main"
 MINIO_BUCKET = "repositorio-dashboard"
 # --- Determinación del Modo de Ejecución ---
 is_local = path.exists(LOCAL_PATH) and FUENTE_DATOS == "local"
-is_production = not is_local
 
 # --- Mapeo de Archivos por Módulo ---
 modules = {
@@ -108,12 +107,12 @@ all_data, all_dates, logs = load_all_data()
 show_notification_bell()
 
 # --- Definición de Pestañas ---
-tab_names = ["Programas de Empleo","CBA Me Capacita", "Banco de la Gente",  "Escrituración"]
+tab_names = ["CBA Me Capacita", "Programas de Empleo", "Banco de la Gente",  "Escrituración"]
 tabs = st.tabs(tab_names)
-tab_keys = ['empleo', 'cba_capacita', 'bco_gente', 'escrituracion']
+tab_keys = ['cba_capacita', 'empleo', 'bco_gente', 'escrituracion']
 tab_functions = [
-    empleo.show_empleo_dashboard,
     cbamecapacita.show_cba_capacita_dashboard,
+    empleo.show_empleo_dashboard,
     bco_gente.show_bco_gente_dashboard,
     escrituracion.show_escrituracion_dashboard,
 ]
