@@ -292,17 +292,21 @@ def show_notification_bell(novedades=None):
         novedades (list): Lista de diccionarios con novedades
                          [{"titulo": "Título", "descripcion": "Descripción", "fecha": "YYYY-MM-DD", "modulo": "Nombre del módulo"}, ...]
     """
-    # Verificar explícitamente si la sesión está inicializada antes de cualquier acceso
-    if not is_session_initialized():
-        # No mostrar la campanita si la sesión no está inicializada
+    try:
+        # Verificar explícitamente si la sesión está inicializada antes de cualquier acceso
+        if not is_session_initialized():
+            # No mostrar la campanita si la sesión no está inicializada
+            return
+        
+        # Evitar duplicación usando un identificador único en session_state seguro
+        if safe_session_check("campanita_mostrada"):
+            return
+        
+        # Marcar que ya se mostró la campanita
+        safe_session_set("campanita_mostrada", True)
+    except Exception:
+        # Si hay error al acceder a la sesión, simplemente no mostrar la campanita
         return
-    
-    # Evitar duplicación usando un identificador único en session_state seguro
-    if safe_session_check("campanita_mostrada"):
-        return
-    
-    # Marcar que ya se mostró la campanita
-    safe_session_set("campanita_mostrada", True)
     
     if novedades is None:
         # Novedades por defecto si no se proporcionan
