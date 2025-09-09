@@ -14,6 +14,8 @@ import geopandas as gpd
 import math
 import altair as alt
 from io import StringIO
+import datetime
+
 
 def create_empleo_kpis(resultados, programa_nombre=""):
     """
@@ -193,7 +195,7 @@ def show_empleo_dashboard(data, dates, is_development=False):
     df_inscriptos, df_empresas, geojson_data,  has_empresas, has_geojson = load_and_preprocess_data(data, dates, is_development)
     
     # Renderizar el dashboard principal
-    render_dashboard(df_inscriptos, df_empresas, geojson_data, has_empresas, has_geojson)
+    render_dashboard(df_inscriptos, df_empresas, geojson_data, has_empresas, has_geojson,data)
         
        
 
@@ -381,7 +383,7 @@ def load_and_preprocess_data(data, dates=None, is_development=False):
 
 
 
-def render_dashboard(df_inscriptos, df_empresas, geojson_data, has_empresas, has_geojson):
+def render_dashboard(df_inscriptos, df_empresas, geojson_data, has_empresas, has_geojson,data):
     """
     Renderiza el dashboard principal con los datos procesados.
     """
@@ -438,7 +440,8 @@ def render_dashboard(df_inscriptos, df_empresas, geojson_data, has_empresas, has
         st.markdown('</div>', unsafe_allow_html=True)
         
         # Crear pestañas para organizar el contenido
-        tab_beneficiarios, tab_empresas = st.tabs(["Beneficiarios", "Empresas"])
+        tab_beneficiarios, tab_empresas, tab_postulantes = st.tabs(["Beneficiarios", "Empresas", "Postulantes"])
+
         
         # Contenido de la pestaña Beneficiarios
         with tab_beneficiarios:
@@ -869,6 +872,122 @@ def render_dashboard(df_inscriptos, df_empresas, geojson_data, has_empresas, has
                         <strong>Información:</strong> No hay datos de empresas disponibles.
                     </div>
                 """, unsafe_allow_html=True)
+        
+        with tab_postulantes:
+            st.markdown('<div class="section-title">Postulantes</div>', unsafe_allow_html=True)
+
+            # Usar el DataFrame correcto
+            df_postulantes = data.get('VT_INSCRIPCIONES_EMPLEO.parquet')
+            if df_postulantes is None or df_postulantes.empty:
+                st.warning("No hay datos disponibles de postulantes.")
+                st.stop()
+
+            # Filtros visuales en dos columnas
+            st.markdown('<div class="filter-section">', unsafe_allow_html=True)
+            col_filtro1, col_filtro2 = st.columns(2)
+
+            # Primera columna: filtro de departamento
+            with col_filtro1:
+                st.markdown('<div class="filter-label">Departamento:</div>', unsafe_allow_html=True)
+                if 'N_DEPARTAMENTO' in df_postulantes.columns:
+                    departamentos = sorted(df_postulantes['N_DEPARTAMENTO'].dropna().unique())
+                    selected_dpto = st.selectbox(
+                        "Seleccionar departamento",
+                        options=["Todos los departamentos"] + departamentos,
+                        label_visibility="collapsed"
+                    )
+                else:
+                    selected_dpto = "Todos los departamentos"
+
+            # Segunda columna: filtro de localidad dependiente del departamento
+            with col_filtro2:
+                st.markdown('<div class="filter-label">Localidad:</div>', unsafe_allow_html=True)
+                if selected_dpto != "Todos los departamentos" and 'N_LOCALIDAD' in df_postulantes.columns:
+                    localidades = sorted(df_postulantes[df_postulantes['N_DEPARTAMENTO'] == selected_dpto]['N_LOCALIDAD'].dropna().unique())
+                    selected_loc = st.selectbox(
+                        "Seleccionar localidad",
+                        options=["Todas las localidades"] + localidades,
+                        label_visibility="collapsed"
+                    )
+                elif 'N_LOCALIDAD' in df_postulantes.columns:
+                    localidades = sorted(df_postulantes['N_LOCALIDAD'].dropna().unique())
+                    selected_loc = st.selectbox(
+                        "Seleccionar localidad",
+                        options=["Todas las localidades"] + localidades,
+                        label_visibility="collapsed"
+                    )
+                else:
+                    selected_loc = "Todas las localidades"
+
+            st.markdown('</div>', unsafe_allow_html=True)
+
+            # Aplicar filtros al DataFrame
+            df_filtrado = df_postulantes.copy()
+            if selected_dpto != "Todos los departamentos":
+                df_filtrado = df_filtrado[df_filtrado['N_DEPARTAMENTO'] == selected_dpto]
+            if selected_loc != "Todas las localidades":
+                df_filtrado = df_filtrado[df_filtrado['N_LOCALIDAD'] == selected_loc]
+
+            # Mostrar mensaje con el número de registros después de aplicar los filtros
+            st.markdown(f'<div class="filter-info">Mostrando {len(df_filtrado)} postulantes</div>', unsafe_allow_html=True)
+
+
+            # KPIs principales
+            total_cuil_unicos = df_filtrado['CUIL'].nunique() if 'CUIL' in df_filtrado.columns else 0
+            total_femenino = df_filtrado[df_filtrado['SEXO'] == "FEMENINO"]['CUIL'].nunique() if 'SEXO' in df_filtrado.columns else 0
+            total_masculino = df_filtrado[df_filtrado['SEXO'] == "MASCULINO"]['CUIL'].nunique() if 'SEXO' in df_filtrado.columns else 0
+            cantidad_cvs = df_filtrado['ID_DOCUMENTO_CV'].dropna().nunique() if 'ID_DOCUMENTO_CV' in df_filtrado.columns else 0
+
+            kpi_data = [
+                {
+                    "title": "CUIL únicos",
+                    "value_form": f"{total_cuil_unicos:,}".replace(',', '.'),
+                    "color_class": "kpi-primary",
+                },
+                {
+                    "title": "Femenino",
+                    "value_form": f"{total_femenino:,}".replace(',', '.'),
+                    "color_class": "kpi-accent-1",
+                },
+                {
+                    "title": "Masculino",
+                    "value_form": f"{total_masculino:,}".replace(',', '.'),
+                    "color_class": "kpi-secondary",
+                },
+                {
+                    "title": "Cantidad CVs",
+                    "value_form": f"{cantidad_cvs:,}".replace(',', '.'),
+                    "color_class": "kpi-accent-2",
+                }
+            ]
+            display_kpi_row(kpi_data)
+
+            # Tabla de postulantes filtrados
+            with st.expander("Ver tabla de postulantes", expanded=False):
+                st.dataframe(df_filtrado, hide_index=True, use_container_width=True)
+            
+            # Calcular la edad a partir de FEC_NACIMIENTO
+                if 'FEC_NACIMIENTO' in df_filtrado.columns:
+                    today = datetime.date.today()
+                    def calcular_edad(fecha_str):
+                        try:
+                            fecha = pd.to_datetime(fecha_str, errors='coerce')
+                            if pd.isnull(fecha):
+                                return None
+                            return today.year - fecha.year - ((today.month, today.day) < (fecha.month, fecha.day))
+                        except:
+                            return None
+                    df_filtrado['EDAD'] = df_filtrado['FEC_NACIMIENTO'].apply(calcular_edad)
+                    # Filtrar edades válidas
+                    edades_validas = df_filtrado['EDAD'].dropna()
+                    if not edades_validas.empty:
+                        st.markdown('<div class="section-title">Distribución de Edades</div>', unsafe_allow_html=True)
+                        fig_edades = px.histogram(edades_validas, nbins=20, labels={'value': 'Edad'}, title='Distribución de edades de postulantes')
+                        st.plotly_chart(fig_edades, use_container_width=True)
+                    else:
+                        st.info("No hay datos de edad válidos para graficar.")
+                else:
+                    st.info("No se encontró el campo FEC_NACIMIENTO en los datos.")
 
 def show_companies(df_empresas, geojson_data):
     # Asegúrate de que las columnas numéricas sean del tipo correcto
