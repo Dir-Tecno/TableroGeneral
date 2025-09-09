@@ -192,10 +192,10 @@ def show_empleo_dashboard(data, dates, is_development=False):
         from utils.ui_components import show_dev_dataframe_info
         show_dev_dataframe_info(data, modulo_nombre="Empleo", is_development=is_development)
     # Cargar y preprocesar los datos
-    df_inscriptos, df_empresas, geojson_data,  has_empresas, has_geojson = load_and_preprocess_data(data, dates, is_development)
+    df_postulantes_empleo, df_inscriptos, df_empresas, geojson_data,  has_empresas, has_geojson = load_and_preprocess_data(data, dates, is_development)
     
     # Renderizar el dashboard principal
-    render_dashboard(df_inscriptos, df_empresas, geojson_data, has_empresas, has_geojson,data)
+    render_dashboard(df_postulantes_empleo, df_inscriptos, df_empresas, geojson_data, has_empresas, has_geojson,data)
         
        
 
@@ -213,6 +213,7 @@ def load_and_preprocess_data(data, dates=None, is_development=False):
     with st.spinner("Cargando y procesando datos de empleo..."):
 
         # Extraer los dataframes necesarios
+        df_postulantes_empleo = data.get('VT_INSCRIPCIONES_EMPLEO.parquet')
         df_inscriptos_raw = data.get('VT_REPORTES_PPP_MAS26.parquet')
         geojson_data = data.get('capa_departamentos_2010.geojson')
         
@@ -318,10 +319,6 @@ def load_and_preprocess_data(data, dates=None, is_development=False):
             df_empresas['ZONA'] = df_empresas['N_DEPARTAMENTO'].apply(
                 lambda x: 'ZONA NOC Y SUR' if x in zonas_favorecidas else 'ZONA REGULAR'
             )
-
-        
-
-        
         # Preparar datos para los filtros
         # Limpiar y preparar los datos
         df_inscriptos_sin_adherido = df_inscriptos.copy()
@@ -331,7 +328,8 @@ def load_and_preprocess_data(data, dates=None, is_development=False):
             53: "Programa Primer Paso",
             51: "Más 26",
             54: "CBA Mejora",
-            55: "Nueva Oportunidad"
+            55: "Nueva Oportunidad",
+            57: "Más 26 [2025]"
         }
         
         # Crear columna con nombres de programas
@@ -340,7 +338,6 @@ def load_and_preprocess_data(data, dates=None, is_development=False):
         else:
             df_inscriptos_sin_adherido['PROGRAMA'] = "No especificado"
             
-        has_fichas = True  # Si llegamos hasta aquí, tenemos datos de fichas
         
         # Preprocesar el dataframe de circuitos electorales si está disponible
         df_inscriptos_cruzado = None  # Para debug visual
@@ -350,9 +347,6 @@ def load_and_preprocess_data(data, dates=None, is_development=False):
                 if 'ID_LOCALIDAD' in df_circuitos.columns:
                     df_circuitos['ID_LOCALIDAD'] = pd.to_numeric(df_circuitos['ID_LOCALIDAD'], errors='coerce')
                 
-                # Limpiar datos si es necesario
-                #df_circuitos = clean_thousand_separator(df_circuitos)
-                #df_circuitos = convert_decimal_separator(df_circuitos)
                 
                 # Si hay datos de inscriptos y circuitos, intentar cruzarlos
                 if df_inscriptos is not None and not df_inscriptos.empty:
@@ -379,11 +373,11 @@ def load_and_preprocess_data(data, dates=None, is_development=False):
                     st.dataframe(df_inscriptos_cruzado.head(50))
                     st.write(f"Filas: {df_inscriptos_cruzado.shape[0]}, Columnas: {df_inscriptos_cruzado.shape[1]}")
         # Retornar los dataframes procesados y los flags de disponibilidad
-        return df_inscriptos_sin_adherido, df_empresas,  geojson_data,  has_empresas, has_geojson
+        return df_postulantes_empleo, df_inscriptos_sin_adherido, df_empresas,  geojson_data,  has_empresas, has_geojson
 
 
 
-def render_dashboard(df_inscriptos, df_empresas, geojson_data, has_empresas, has_geojson,data):
+def render_dashboard(df_postulantes_empleo,df_inscriptos, df_empresas, geojson_data, has_empresas, has_geojson, data):
     """
     Renderiza el dashboard principal con los datos procesados.
     """
@@ -400,8 +394,7 @@ def render_dashboard(df_inscriptos, df_empresas, geojson_data, has_empresas, has
                                         (df_inscriptos['ZONA'] == 'ZONA NOC Y SUR')].shape[0]
         
         # Mostrar KPIs en la parte superior
-        st.markdown('<div class="kpi-container">', unsafe_allow_html=True)
-        
+        st.markdown('<div class="kpi-section">', unsafe_allow_html=True)
         # Usar la función auxiliar para mostrar KPIs
         kpi_data = [
             {
@@ -439,27 +432,30 @@ def render_dashboard(df_inscriptos, df_empresas, geojson_data, has_empresas, has
         display_kpi_row(kpi_data, num_columns=5)
         st.markdown('</div>', unsafe_allow_html=True)
         
-        # Crear pestañas para organizar el contenido
-        tab_postulantes, tab_beneficiarios, tab_empresas = st.tabs(["Postulantes", "Beneficiarios", "Empresas"])
-
-        with tab_postulantes:
+        # Verificar si existe el DataFrame de postulantes
+        has_postulantes = df_postulantes_empleo is not None and not (hasattr(df_postulantes_empleo, 'empty') and df_postulantes_empleo.empty)
+        
+        # Crear pestañas según los datos disponibles
+        if has_postulantes:
+            # Si hay datos de postulantes, mostrar las tres pestañas
+            tabs = st.tabs(["Postulantes", "Beneficiarios", "Empresas"])
+            tab_postulantes = tabs[0]
+            tab_beneficiarios = tabs[1]
+            tab_empresas = tabs[2]
+            
+            # Pestaña de postulantes
+            with tab_postulantes:
                 st.markdown('<div class="section-title">Postulantes EMPLEO +26 [2025]</div>', unsafe_allow_html=True)
-
-                # Usar el DataFrame correcto
-                df_postulantes = data.get('VT_INSCRIPCIONES_EMPLEO.parquet')
-                if df_postulantes is None or df_postulantes.empty:
-                    st.warning("No hay datos disponibles de postulantes.")
-                    st.stop()
-
+                
                 # Filtros visuales en dos columnas
                 st.markdown('<div class="filter-section">', unsafe_allow_html=True)
                 col_filtro1, col_filtro2 = st.columns(2)
-
+                
                 # Primera columna: filtro de departamento
                 with col_filtro1:
                     st.markdown('<div class="filter-label">Departamento:</div>', unsafe_allow_html=True)
-                    if 'N_DEPARTAMENTO' in df_postulantes.columns:
-                        departamentos = sorted(df_postulantes['N_DEPARTAMENTO'].dropna().unique())
+                    if 'N_DEPARTAMENTO' in df_postulantes_empleo.columns:
+                        departamentos = sorted(df_postulantes_empleo['N_DEPARTAMENTO'].dropna().unique())
                         selected_dpto = st.selectbox(
                             "Seleccionar departamento",
                             options=["Todos los departamentos"] + departamentos,
@@ -471,15 +467,15 @@ def render_dashboard(df_inscriptos, df_empresas, geojson_data, has_empresas, has
                 # Segunda columna: filtro de localidad dependiente del departamento
                 with col_filtro2:
                     st.markdown('<div class="filter-label">Localidad:</div>', unsafe_allow_html=True)
-                    if selected_dpto != "Todos los departamentos" and 'N_LOCALIDAD' in df_postulantes.columns:
-                        localidades = sorted(df_postulantes[df_postulantes['N_DEPARTAMENTO'] == selected_dpto]['N_LOCALIDAD'].dropna().unique())
+                    if selected_dpto != "Todos los departamentos" and 'N_LOCALIDAD' in df_postulantes_empleo.columns:
+                        localidades = sorted(df_postulantes_empleo[df_postulantes_empleo['N_DEPARTAMENTO'] == selected_dpto]['N_LOCALIDAD'].dropna().unique())
                         selected_loc = st.selectbox(
                             "Seleccionar localidad",
                             options=["Todas las localidades"] + localidades,
                             label_visibility="collapsed"
                         )
-                    elif 'N_LOCALIDAD' in df_postulantes.columns:
-                        localidades = sorted(df_postulantes['N_LOCALIDAD'].dropna().unique())
+                    elif 'N_LOCALIDAD' in df_postulantes_empleo.columns:
+                        localidades = sorted(df_postulantes_empleo['N_LOCALIDAD'].dropna().unique())
                         selected_loc = st.selectbox(
                             "Seleccionar localidad",
                             options=["Todas las localidades"] + localidades,
@@ -491,7 +487,7 @@ def render_dashboard(df_inscriptos, df_empresas, geojson_data, has_empresas, has
                 st.markdown('</div>', unsafe_allow_html=True)
 
                 # Aplicar filtros al DataFrame
-                df_filtrado = df_postulantes.copy()
+                df_filtrado = df_postulantes_empleo.copy()
                 if selected_dpto != "Todos los departamentos":
                     df_filtrado = df_filtrado[df_filtrado['N_DEPARTAMENTO'] == selected_dpto]
                 if selected_loc != "Todas las localidades":
