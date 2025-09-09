@@ -443,7 +443,7 @@ def render_dashboard(df_inscriptos, df_empresas, geojson_data, has_empresas, has
         tab_postulantes, tab_beneficiarios, tab_empresas = st.tabs(["Postulantes", "Beneficiarios", "Empresas"])
 
         with tab_postulantes:
-                st.markdown('<div class="section-title">Postulantes</div>', unsafe_allow_html=True)
+                st.markdown('<div class="section-title">Postulantes EMPLEO +26 [2025]</div>', unsafe_allow_html=True)
 
                 # Usar el DataFrame correcto
                 df_postulantes = data.get('VT_INSCRIPCIONES_EMPLEO.parquet')
