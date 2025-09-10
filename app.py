@@ -29,6 +29,15 @@ MINIO_BUCKET = "repositorio-dashboard"
 # --- Determinación del Modo de Ejecución ---
 is_local = path.exists(LOCAL_PATH) and FUENTE_DATOS == "local"
 
+# --- Botón para Limpiar Caché en Modo Desarrollo ---
+if is_local:
+    st.sidebar.title("🛠️ Opciones de Desarrollo")
+    if st.sidebar.button("Limpiar Caché y Recargar"):
+        st.cache_data.clear()
+        st.cache_resource.clear()
+        st.success("Caché limpiado. La página se recargará con datos frescos.")
+        st.rerun()
+
 # --- Mapeo de Archivos por Módulo ---
 modules = {
     'bco_gente': ['VT_CUMPLIMIENTO_FORMULARIOS.parquet', 'VT_NOMINA_REP_RECUPERO_X_ANIO.parquet', 

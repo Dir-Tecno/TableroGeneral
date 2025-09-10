@@ -15,6 +15,8 @@ import math
 import altair as alt
 from io import StringIO
 import datetime
+import io
+import xlsxwriter
 
 
 def create_empleo_kpis(resultados, programa_nombre=""):
@@ -88,140 +90,71 @@ def calculate_cupo(cantidad_empleados, empleador, adherido):
     
     return 0
 
-def render_filters(df_inscriptos, key_prefix=""):
+def render_tab_filters(df, key_prefix):
     """
-    Renderiza los filtros de la interfaz de usuario.
-    
-    Args:
-        df_inscriptos: DataFrame con los datos de inscripciones
-        
-    Returns:
-        Tupla con el DataFrame filtrado y los filtros seleccionados
+    Renderiza los filtros para una pestaña específica y devuelve el DataFrame filtrado.
     """
-    # Mantener una copia del DataFrame original para no modificarlo
-    df_filtered = df_inscriptos.copy()
-    
-    # Inicializar la lista de filtros aplicados
+    df_filtered = df.copy()
     filtros_aplicados = []
-    
-    with st.container():
-        # Contenedor de filtros con 2 columnas
-        col1, col2= st.columns(2)
-        
-        # Filtro de departamento en la primera columna
-        with col1:
-            # Solo mostrar el filtro de departamento si la columna existe en el dataframe
-            if 'N_DEPARTAMENTO' in df_inscriptos.columns:
-                departamentos = sorted(df_inscriptos['N_DEPARTAMENTO'].dropna().unique())
-                all_dpto_option = "Todos los departamentos"
-                selected_dpto = st.selectbox("Departamento (Beneficiarios):", [all_dpto_option] + list(departamentos), key=f"{key_prefix}_dpto_filter")
-                
-                # Inicializar variables con valores por defecto
-                selected_loc = None
-                all_loc_option = None
-                
-                # Filtrar por departamento si se seleccionó uno
-                if selected_dpto != all_dpto_option:
-                    df_filtered = df_filtered[df_filtered['N_DEPARTAMENTO'] == selected_dpto]
-                    
-                    # Solo mostrar el filtro de localidad si la columna existe en el dataframe
-                    if 'N_LOCALIDAD' in df_inscriptos.columns:
-                        localidades = sorted(df_filtered['N_LOCALIDAD'].dropna().unique())
-                        all_loc_option = "Todas las localidades"
-                        selected_loc = st.selectbox("Localidad:", [all_loc_option] + list(localidades), key=f"{key_prefix}_loc_filter")
-                        
-                        # Filtrar por localidad si se seleccionó una
-                        if selected_loc != all_loc_option:
-                            df_filtered = df_filtered[df_filtered['N_LOCALIDAD'] == selected_loc]
-                    else:
-                        all_loc_option = None
-                        selected_loc = None
-            else:
-                # Si no existe la columna N_DEPARTAMENTO, establecer valores por defecto
-                selected_dpto = None
-                all_dpto_option = None
-                selected_loc = None
-                all_loc_option = None
-        
-        # Filtro de zona favorecida en la segunda columna
-        with col2:
-            # Solo mostrar el filtro de ZONA si la columna existe en el dataframe
-            if 'ZONA' in df_inscriptos.columns:
-                zonas = sorted(df_inscriptos['ZONA'].dropna().unique())
-                all_zona_option = "Todas las zonas"
-                selected_zona = st.selectbox("Zona:", [all_zona_option] + list(zonas), key=f"{key_prefix}_zona_filter")
-            else:
-                all_zona_option = "Todas las zonas"
-                selected_zona = all_zona_option
-                
-    
-    if selected_dpto != all_dpto_option:
-        filtros_aplicados.append(f"Departamento: {selected_dpto}")
-        if selected_loc is not None and selected_loc != all_loc_option:
-            filtros_aplicados.append(f"Localidad: {selected_loc}")
-            
-    if 'ZONA' in df_inscriptos.columns and selected_zona != all_zona_option:
-        filtros_aplicados.append(f"Zona: {selected_zona}")
-    
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if 'N_DEPARTAMENTO' in df.columns:
+            departamentos = sorted(df['N_DEPARTAMENTO'].dropna().unique())
+            all_dpto_option = "Todos los departamentos"
+            selected_dpto = st.selectbox("Departamento:", [all_dpto_option] + departamentos, key=f"{key_prefix}_dpto")
+
+            if selected_dpto != all_dpto_option:
+                df_filtered = df_filtered[df_filtered['N_DEPARTAMENTO'] == selected_dpto]
+                filtros_aplicados.append(f"Departamento: {selected_dpto}")
+
+    with col2:
+        if 'ZONA' in df.columns:
+            zonas = sorted(df['ZONA'].dropna().unique())
+            all_zona_option = "Todas las zonas"
+            selected_zona = st.selectbox("Zona:", [all_zona_option] + zonas, key=f"{key_prefix}_zona")
+            if selected_zona != all_zona_option:
+                df_filtered = df_filtered[df_filtered['ZONA'] == selected_zona]
+                filtros_aplicados.append(f"Zona: {selected_zona}")
+
     if filtros_aplicados:
-        filtros_texto = ", ".join(filtros_aplicados)
-        st.markdown(f"**Filtros aplicados:** {filtros_texto}")
+        st.markdown(f"**Filtros aplicados:** {', '.join(filtros_aplicados)}")
     else:
-        st.markdown("**Mostrando todos los datos**")
-    
-    return df_filtered, selected_dpto, selected_loc, all_dpto_option, all_loc_option
+        st.markdown("**Mostrando todos los datos para esta sección**")
+
+    return df_filtered
 
 def show_empleo_dashboard(data, dates, is_development=False):
     """
     Función principal que muestra el dashboard de empleo.
-    
-    Args:
-        data: Diccionario con los dataframes cargados
-        dates: Diccionario con las fechas de actualización
-        is_development: Booleano que indica si estamos en modo desarrollo
     """
-    # Mostrar última actualización al inicio del dashboard
     if dates:
         show_last_update(dates, 'VT_REPORTES_PPP_MAS26.parquet')
     
     if data is None:
         st.error("No se pudieron cargar los datos de Programas de Empleo.")
         return
-    # Mostrar info de desarrollo de los DataFrames
+
     if is_development:
         from utils.ui_components import show_dev_dataframe_info
         show_dev_dataframe_info(data, modulo_nombre="Empleo", is_development=is_development)
-    # Cargar y preprocesar los datos
-    df_postulantes_empleo, df_inscriptos, df_empresas, geojson_data,  has_empresas, has_geojson = load_and_preprocess_data(data, dates, is_development)
+
+    df_postulantes_empleo, df_inscriptos, df_empresas, geojson_data, has_empresas, has_geojson = load_and_preprocess_data(data, dates, is_development)
     
-    # Renderizar el dashboard principal
-    render_dashboard(df_postulantes_empleo, df_inscriptos, df_empresas, geojson_data, has_empresas, has_geojson,data)
-        
-       
+    render_dashboard(df_postulantes_empleo, df_inscriptos, df_empresas, geojson_data, has_empresas, has_geojson, data)
 
 def load_and_preprocess_data(data, dates=None, is_development=False):
     """
     Carga y preprocesa los datos necesarios para el dashboard.
-    
-    Args:
-        data: Diccionario de dataframes cargados desde GitLab
-        dates: Diccionario de fechas de actualización de los archivos
-        
-    Returns:
-        Tupla con los dataframes procesados y flags de disponibilidad
     """
     with st.spinner("Cargando y procesando datos de empleo..."):
-
-        # Extraer los dataframes necesarios
         df_postulantes_empleo = data.get('VT_INSCRIPCIONES_EMPLEO.parquet')
         df_inscriptos_raw = data.get('VT_REPORTES_PPP_MAS26.parquet')
         geojson_data = data.get('capa_departamentos_2010.geojson')
-        
-        # Cargar datos de circuitos electorales
         df_circuitos = data.get('LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt')
         has_circuitos = df_circuitos is not None and not df_circuitos.empty
 
-        # Crear df_emp_ben: cantidad de beneficiarios por empresa (CUIT)
         df_emp_ben = (
             df_inscriptos_raw[
                 (df_inscriptos_raw["IDETAPA"].isin([51, 53, 54, 55])) &
@@ -232,150 +165,69 @@ def load_and_preprocess_data(data, dates=None, is_development=False):
             .agg(BENEF=("ID_FICHA", "count"))
         )
         
-        # Cargar el dataset de empresas
         df_empresas = data.get('vt_empresas_adheridas.parquet')
         has_empresas = df_empresas is not None and not df_empresas.empty
 
-
-
-        # --- NUEVO: Cruce con ARCA ---
         df_arca = data.get('vt_empresas_ARCA.parquet')
         if has_empresas and df_arca is not None and not df_arca.empty:
-            # Limpiar CUIT en ambos DataFrames (quitar guiones y asegurar string)
             df_empresas['CUIT'] = df_empresas['CUIT'].astype(str).str.replace('-', '', regex=False)
             df_arca['CUIT'] = df_arca['CUIT'].astype(str).str.replace('-', '', regex=False)
-            # Seleccionar solo las columnas de interés de ARCA
             cols_arca = ['CUIT', 'IMP_GANANCIAS', 'IMP_IVA', 'MONOTRIBUTO', 'INTEGRANTE_SOC', 'EMPLEADOR', 'ACTIVIDAD_MONOTRIBUTO','NOMBRE_TIPO_EMPRESA','TELEFONO', 'CELULAR', 'MAIL', 'VACANTES', 'SITIO_WEB', 'TEL_CONTACTO', 'EMAIL_CONTACTO', 'NOMBRE_FANTASIA']
             df_arca_sel = df_arca[cols_arca].copy()
-            # Merge left
             df_empresas = df_empresas.merge(df_arca_sel, on='CUIT', how='left')
 
-        # Cruce de df_display con df_emp_ben por CUIT
         if "CUIT" in df_empresas.columns:
             df_empresas = df_empresas.merge(df_emp_ben, on="CUIT", how="left")
         
-
-        
-        # Verificar si hay datos geojson
         has_geojson = geojson_data is not None
         
-
-        
-        # Verificar que los datos estén disponibles
         if df_inscriptos_raw is None or df_inscriptos_raw.empty:
             st.error("No se pudieron cargar los datos de inscripciones.")
-            return None, None, None, None, False, False, False, False
+            return None, None, None, None, False, False
         
-        
-        # Filtrar para excluir el estado "ADHERIDO"
         df_inscriptos = df_inscriptos_raw[df_inscriptos_raw['N_ESTADO_FICHA'] != "ADHERIDO"].copy()
 
-        # Convertir campos numéricos a enteros para eliminar decimales (.0)
-        integer_columns = [
-            "ID_DEPARTAMENTO_GOB", 
-            "ID_LOCALIDAD_GOB",
-            "ID_FICHA",
-            "IDETAPA",
-            "CUPO",
-            "ID_MOD_CONT_AFIP",
-            "EDAD"
-        ]
-        
-        # Convertir solo las columnas que existen en el DataFrame
+        integer_columns = ["ID_DEPARTAMENTO_GOB", "ID_LOCALIDAD_GOB", "ID_FICHA", "IDETAPA", "CUPO", "ID_MOD_CONT_AFIP", "EDAD"]
         for col in integer_columns:
             if col in df_inscriptos.columns:
-                # Primero convertir a float para manejar posibles NaN, luego a int
-                df_inscriptos[col] = df_inscriptos[col].fillna(-1)  # Reemplazar NaN con -1 temporalmente
-                df_inscriptos[col] = df_inscriptos[col].astype(int)
-                # Opcional: volver a convertir -1 a NaN si es necesario
+                df_inscriptos[col] = df_inscriptos[col].fillna(-1).astype(int)
                 df_inscriptos.loc[df_inscriptos[col] == -1, col] = pd.NA
         
-        # Corregir localidades del departamento CAPITAL a "CORDOBA"
         if 'N_DEPARTAMENTO' in df_inscriptos.columns and 'N_LOCALIDAD' in df_inscriptos.columns:
-            # Crear una máscara para identificar registros del departamento CAPITAL
             capital_mask = df_inscriptos['N_DEPARTAMENTO'] == 'CAPITAL'
-            
-            # Aplicar la corrección solo a los registros del departamento CAPITAL
             df_inscriptos.loc[capital_mask, 'N_LOCALIDAD'] = 'CORDOBA'
         
         if 'BEN_N_ESTADO' in df_inscriptos.columns:
             estado_ben_mask = df_inscriptos['BEN_N_ESTADO'] == 'BAJA POR FINALIZACION DE PROGR'
             df_inscriptos.loc[estado_ben_mask, 'N_ESTADO_FICHA'] = 'BENEFICIARIO FIN PROGRAMA'
 
-        # Añadir columna de ZONA FAVORECIDA
-        zonas_favorecidas = [
-            'PRESIDENTE ROQUE SAENZ PEÑA', 'GENERAL ROCA', 'RIO SECO', 'TULUMBA', 
-            'POCHO', 'SAN JAVIER', 'SAN ALBERTO', 'MINAS', 'CRUZ DEL EJE', 
-            'TOTORAL', 'SOBREMONTE', 'ISCHILIN'
-        ]
+        zonas_favorecidas = ['PRESIDENTE ROQUE SAENZ PEÑA', 'GENERAL ROCA', 'RIO SECO', 'TULUMBA', 'POCHO', 'SAN JAVIER', 'SAN ALBERTO', 'MINAS', 'CRUZ DEL EJE', 'TOTORAL', 'SOBREMONTE', 'ISCHILIN']
+        df_inscriptos['ZONA'] = df_inscriptos['N_DEPARTAMENTO'].apply(lambda x: 'ZONA NOC Y SUR' if x in zonas_favorecidas else 'ZONA REGULAR')
         
-        # Crear la columna ZONA
-        df_inscriptos['ZONA'] = df_inscriptos['N_DEPARTAMENTO'].apply(
-            lambda x: 'ZONA NOC Y SUR' if x in zonas_favorecidas else 'ZONA REGULAR'
-        )
-        
-        # Añadir la columna ZONA también al dataframe de empresas
         if has_empresas and 'N_DEPARTAMENTO' in df_empresas.columns:
-            df_empresas['ZONA'] = df_empresas['N_DEPARTAMENTO'].apply(
-                lambda x: 'ZONA NOC Y SUR' if x in zonas_favorecidas else 'ZONA REGULAR'
-            )
-        # Preparar datos para los filtros
-        # Limpiar y preparar los datos
+            df_empresas['ZONA'] = df_empresas['N_DEPARTAMENTO'].apply(lambda x: 'ZONA NOC Y SUR' if x in zonas_favorecidas else 'ZONA REGULAR')
+
         df_inscriptos_sin_adherido = df_inscriptos.copy()
         
-        # Mapeo de programas según IDETAPA
-        programas = {
-            53: "Programa Primer Paso",
-            51: "Más 26",
-            54: "CBA Mejora",
-            55: "Nueva Oportunidad",
-            57: "Más 26 [2025]"
-        }
-        
-        # Crear columna con nombres de programas
+        programas = {53: "Programa Primer Paso", 51: "Más 26", 54: "CBA Mejora", 55: "Nueva Oportunidad", 57: "Más 26 [2025]"}
         if 'IDETAPA' in df_inscriptos_sin_adherido.columns:
             df_inscriptos_sin_adherido['PROGRAMA'] = df_inscriptos_sin_adherido['IDETAPA'].map(lambda x: programas.get(x, f"Programa {x}"))
         else:
             df_inscriptos_sin_adherido['PROGRAMA'] = "No especificado"
             
-        
-        # Preprocesar el dataframe de circuitos electorales si está disponible
-        df_inscriptos_cruzado = None  # Para debug visual
         if has_circuitos:
             try:
-                # Asegurarse de que las columnas estén correctamente tipadas
                 if 'ID_LOCALIDAD' in df_circuitos.columns:
                     df_circuitos['ID_LOCALIDAD'] = pd.to_numeric(df_circuitos['ID_LOCALIDAD'], errors='coerce')
                 
-                
-                # Si hay datos de inscriptos y circuitos, intentar cruzarlos
                 if df_inscriptos is not None and not df_inscriptos.empty:
                     if 'ID_LOCALIDAD_GOB' in df_inscriptos.columns and 'ID_LOCALIDAD' in df_circuitos.columns:
-                        df_inscriptos = pd.merge(
-                            df_inscriptos,
-                            df_circuitos,
-                            left_on='ID_LOCALIDAD_GOB',
-                            right_on='ID_LOCALIDAD',
-                            how='left',
-                            suffixes=('', '_circuito')
-                        )
-                    # Guardar copia para debug visual si estamos en modo desarrollo
-                    df_inscriptos_cruzado = df_inscriptos.copy()
+                        df_inscriptos = pd.merge(df_inscriptos, df_circuitos, left_on='ID_LOCALIDAD_GOB', right_on='ID_LOCALIDAD', how='left', suffixes=('', '_circuito'))
 
             except Exception as e:
                 st.error(f"Error al procesar datos de circuitos electorales: {str(e)}")
-                has_circuitos = False
-        
-        # Mostrar df_inscriptos cruzado solo en modo desarrollo
-        if is_development:
-            if df_inscriptos_cruzado is not None:
-                with st.expander('🔍 Visualización DEBUG: df_inscriptos cruzado (post-merge) NO RETORNA DE LA FUNCION DE CARGA', expanded=False):
-                    st.dataframe(df_inscriptos_cruzado.head(50))
-                    st.write(f"Filas: {df_inscriptos_cruzado.shape[0]}, Columnas: {df_inscriptos_cruzado.shape[1]}")
-        # Retornar los dataframes procesados y los flags de disponibilidad
-        return df_postulantes_empleo, df_inscriptos_sin_adherido, df_empresas,  geojson_data,  has_empresas, has_geojson
 
-
+        return df_postulantes_empleo, df_inscriptos_sin_adherido, df_empresas, geojson_data, has_empresas, has_geojson
 
 def render_dashboard(df_postulantes_empleo,df_inscriptos, df_empresas, geojson_data, has_empresas, has_geojson, data):
     """
@@ -494,70 +346,108 @@ def render_dashboard(df_postulantes_empleo,df_inscriptos, df_empresas, geojson_d
 
             # KPIs principales
             total_cuil_unicos = df_filtrado['CUIL'].nunique() if 'CUIL' in df_filtrado.columns else 0
-            total_femenino = df_filtrado[df_filtrado['SEXO'] == "FEMENINO"]['CUIL'].nunique() if 'SEXO' in df_filtrado.columns else 0
-            total_masculino = df_filtrado[df_filtrado['SEXO'] == "MASCULINO"]['CUIL'].nunique() if 'SEXO' in df_filtrado.columns else 0
             cantidad_cvs = df_filtrado['ID_DOCUMENTO_CV'].dropna().nunique() if 'ID_DOCUMENTO_CV' in df_filtrado.columns else 0
 
             kpi_data = [
                 {
-                    "title": "CUIL únicos",
+                    "title": "Postulantes (CUIL únicos)",
                     "value_form": f"{total_cuil_unicos:,}".replace(',', '.'),
                     "color_class": "kpi-primary",
+                    "tooltip": "Cantidad total de postulantes únicos (basado en CUIL) después de aplicar filtros."
                 },
                 {
-                    "title": "Femenino",
-                    "value_form": f"{total_femenino:,}".replace(',', '.'),
-                    "color_class": "kpi-accent-1",
-                },
-                {
-                    "title": "Masculino",
-                    "value_form": f"{total_masculino:,}".replace(',', '.'),
-                    "color_class": "kpi-secondary",
-                },
-                {
-                    "title": "Cantidad CVs",
+                    "title": "Cantidad CVs Cargados",
                     "value_form": f"{cantidad_cvs:,}".replace(',', '.'),
                     "color_class": "kpi-accent-2",
+                    "tooltip": "Número de currículums vitae únicos que han sido cargados por los postulantes filtrados."
                 }
             ]
             display_kpi_row(kpi_data)
 
-            # Tabla de postulantes filtrados
-            with st.expander("Ver tabla de postulantes", expanded=False):
-                st.dataframe(df_filtrado, hide_index=True, use_container_width=True)
-            
-            # Calcular la edad a partir de FEC_NACIMIENTO
-            if 'FEC_NACIMIENTO' in df_filtrado.columns:
-                today = datetime.date.today()
-                def calcular_edad(fecha_str):
-                    try:
-                        fecha = pd.to_datetime(fecha_str, errors='coerce')
-                        if pd.isnull(fecha):
-                            return None
-                        return today.year - fecha.year - ((today.month, today.day) < (fecha.month, fecha.day))
-                    except:
-                        return None
-                df_filtrado['EDAD'] = df_filtrado['FEC_NACIMIENTO'].apply(calcular_edad)
-                # Filtrar edades válidas
-                edades_validas = df_filtrado['EDAD'].dropna()
-                if not edades_validas.empty:
-                    st.markdown('<div class="section-title">Distribución de Edades</div>', unsafe_allow_html=True)
-                    fig_edades = px.histogram(edades_validas, nbins=20, labels={'value': 'Edad'}, title='Distribución de edades de postulantes')
-                    st.plotly_chart(fig_edades, use_container_width=True)
+            # Gráficos en dos columnas
+            col_genero, col_edad = st.columns(2)
+
+            with col_genero:
+                st.markdown('<div class="section-title">Distribución por Género</div>', unsafe_allow_html=True)
+                if 'SEXO' in df_filtrado.columns and 'CUIL' in df_filtrado.columns and not df_filtrado['SEXO'].dropna().empty:
+                    gender_counts = df_filtrado.groupby('SEXO')['CUIL'].nunique().reset_index()
+                    gender_counts.columns = ['SEXO', 'CANTIDAD']
+                    
+                    fig_gender = px.pie(
+                        gender_counts, 
+                        names='SEXO', 
+                        values='CANTIDAD', 
+                        title='Postulantes por Género (CUILs únicos)',
+                        color_discrete_sequence=px.colors.qualitative.Pastel
+                    )
+                    fig_gender.update_layout(showlegend=True, title_x=0.5)
+                    st.plotly_chart(fig_gender, use_container_width=True)
                 else:
-                    st.info("No hay datos de edad válidos para graficar.")
-            else:
-                st.info("No se encontró el campo FEC_NACIMIENTO en los datos.")
+                    st.info("No hay datos de género o CUIL disponibles para mostrar.")
+
+            with col_edad:
+                st.markdown('<div class="section-title">Distribución por Edades</div>', unsafe_allow_html=True)
+                if 'FEC_NACIMIENTO' in df_filtrado.columns and 'CUIL' in df_filtrado.columns:
+                    df_edad = df_filtrado[['FEC_NACIMIENTO', 'CUIL']].copy().dropna()
+                    if not df_edad.empty:
+                        today = datetime.date.today()
+                        def calcular_edad(fecha_str):
+                            try:
+                                fecha = pd.to_datetime(fecha_str, errors='coerce')
+                                if pd.isnull(fecha):
+                                    return None
+                                return today.year - fecha.year - ((today.month, today.day) < (fecha.month, fecha.day))
+                            except:
+                                return None
+                        df_edad['EDAD'] = df_edad['FEC_NACIMIENTO'].apply(calcular_edad)
+                        df_edad = df_edad.dropna(subset=['EDAD'])
+
+                        bins = [18, 25, 31, 41, 51, 61, 101]
+                        labels = ['18-24', '25-30', '31-40', '41-50', '51-60', '60+']
+                        df_edad['RANGO_EDAD'] = pd.cut(df_edad['EDAD'], bins=bins, labels=labels, right=False)
+                        
+                        edad_cuil_counts = df_edad.groupby('RANGO_EDAD')['CUIL'].nunique().reset_index()
+                        edad_cuil_counts.columns = ['Rango de Edad', 'Postulantes Únicos']
+
+                        fig_edades = px.bar(
+                            edad_cuil_counts,
+                            x='Rango de Edad',
+                            y='Postulantes Únicos',
+                            title='Postulantes por Rango de Edad',
+                            color_discrete_sequence=px.colors.qualitative.Vivid
+                        )
+                        fig_edades.update_layout(title_x=0.5)
+                        st.plotly_chart(fig_edades, use_container_width=True)
+                    else:
+                        st.info("No hay datos de edad válidos para graficar.")
+                else:
+                    st.info("No se encontró la columna FEC_NACIMIENTO o CUIL.")
+
+            # Botón de Descarga
+            st.markdown('<div class="section-title">Descargar Datos</div>', unsafe_allow_html=True)
+            st.write("Usa el siguiente botón para descargar los datos de los postulantes filtrados en formato Excel.")
+
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                df_filtrado.to_excel(writer, index=False, sheet_name='Postulantes')
+            excel_data = output.getvalue()
+
+            st.download_button(
+                label="📥 Descargar Tabla de Postulantes (Excel)",
+                data=excel_data,
+                file_name=f"postulantes_empleo_{datetime.date.today()}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
         
         # Contenido de la pestaña Beneficiarios
         with tab_beneficiarios:
-            # Contenedor para los filtros específicos de la pestaña Beneficiarios
             st.markdown('<div class="section-title">Inscriptos y Beneficiarios de todos lo programas de la gestión</div>', unsafe_allow_html=True)
 
-            df_filtered, selected_dpto, selected_loc, all_dpto_option, all_loc_option = render_filters(df_inscriptos, key_prefix="benef_tab")
+            df_inscriptos_filtrado = render_tab_filters(df_inscriptos, key_prefix="benef_tab")
             
             # Conteo de ID_FICHA por PROGRAMA y ESTADO_FICHA
-            pivot_table = df_filtered.pivot_table(
+            pivot_table = df_inscriptos_filtrado.pivot_table(
                 index='PROGRAMA',
                 columns='N_ESTADO_FICHA',
                 values='ID_FICHA',
@@ -855,7 +745,7 @@ def render_dashboard(df_postulantes_empleo,df_inscriptos, df_empresas, geojson_d
                 )
             
             # Mostrar distribución geográfica si hay datos geojson y no hay filtros específicos
-            if has_geojson and selected_dpto == all_dpto_option:
+            if has_geojson and df_inscriptos_filtrado['N_DEPARTAMENTO'].nunique() == 1:
                 st.markdown('<h3 style="font-size: 20px; margin: 20px 0 15px 0;">Distribución Geográfica</h3>', unsafe_allow_html=True)
                 
                 # Filtrar solo beneficiarios
@@ -974,8 +864,27 @@ def render_dashboard(df_postulantes_empleo,df_inscriptos, df_empresas, geojson_d
             st.markdown('<div class="section-title">Empresas adheridas en todos los programas de la gestión</div>', unsafe_allow_html=True)
 
             if has_empresas:
-                # Pasar directamente el DataFrame de empresas sin aplicar los filtros de render_filters
-                # ya que los filtros se manejarán internamente en show_companies
+                # --- Filtros específicos para esta pestaña ---
+                col1, _ = st.columns([1, 1])
+                with col1:
+                    programas_disponibles = sorted(df_empresas['PROGRAMA_ADHERIDO'].dropna().unique())
+                    selected_programas = st.multiselect(
+                        "Programa:",
+                        options=programas_disponibles,
+                        default=None,  # No seleccionar ninguno por defecto
+                        key="company_program_filter"
+                    )
+
+                # Aplicar filtros
+                if selected_programas:
+                    df_empresas = df_empresas[df_empresas['PROGRAMA_ADHERIDO'].isin(selected_programas)]
+
+                # Mostrar conteo de empresas después de aplicar filtros
+                st.markdown(f"Mostrando {len(df_empresas)} de {df_empresas['CUIT'].nunique()} empresas")
+
+                # --- KPIs de Empresas ---
+                empresas_con_beneficiarios = df_empresas[df_empresas['BENEF'] > 0]['CUIT'].nunique()
+                empresas_sin_beneficiarios = df_empresas['CUIT'].nunique() - empresas_con_beneficiarios
                 show_companies(df_empresas)
             else:
                 st.markdown("""
@@ -1031,7 +940,7 @@ def show_companies(df_empresas):
     
     # Añadir filtros en la pestaña de empresas
     st.markdown('<div class="filter-section">', unsafe_allow_html=True)
-    col_filtro1, col_filtro2 = st.columns(2)
+    col_filtro1, _ = st.columns([1, 1])
     
     # Primera columna para el filtro de programas (subido como solicitado)
     with col_filtro1:
@@ -1041,23 +950,10 @@ def show_companies(df_empresas):
         else:
             selected_programas = []
     
-    # Segunda columna para el filtro de departamento
-    with col_filtro2:
-        st.markdown('<div class="filter-label">Departamento (Empresas):</div>', unsafe_allow_html=True)
-        if 'N_DEPARTAMENTO' in df_display.columns:
-            departamentos = sorted(df_display['N_DEPARTAMENTO'].dropna().unique())
-            selected_dpto = st.selectbox("Seleccionar departamento de empresas", options=["Todos los departamentos"] + departamentos, label_visibility="collapsed")
-        else:
-            selected_dpto = "Todos los departamentos"
-    
     st.markdown('</div>', unsafe_allow_html=True)
     
     # Aplicar filtros al dataframe
     df_filtered = df_display.copy()
-    
-    # Filtrar por departamento si se seleccionó uno específico
-    if selected_dpto != "Todos los departamentos" and 'N_DEPARTAMENTO' in df_filtered.columns:
-        df_filtered = df_filtered[df_filtered['N_DEPARTAMENTO'] == selected_dpto]
     
     # Filtrar por programas seleccionados
     if selected_programas:
@@ -1097,8 +993,8 @@ def show_companies(df_empresas):
         df_empresas_original = df_empresas.copy()
         
         # Aplicamos los mismos filtros que aplicamos a df_filtered
-        if selected_dpto != "Todos los departamentos" and 'N_DEPARTAMENTO' in df_empresas_original.columns:
-            df_empresas_original = df_empresas_original[df_empresas_original['N_DEPARTAMENTO'] == selected_dpto]
+        if selected_programas:
+            df_empresas_original = df_empresas_original[df_empresas_original['PROGRAMAS_LISTA'].isin(selected_programas)]
             
         for programa in programas_unicos:
             # Contar empresas que tienen este programa específico
@@ -1207,109 +1103,49 @@ def show_companies(df_empresas):
             st.markdown('<div class="chart-container">', unsafe_allow_html=True)
             st.markdown('<h3 style="font-size: 18px; margin-bottom: 15px;">Puestos y Categorías Demandadas por Empresa</h3>', unsafe_allow_html=True)
             # Gráfico de torta por tipo de empresa
-            if 'NOMBRE_TIPO_EMPRESA' in df_perfil_demanda.columns:
-                tipo_empresa_count = (
-                df_perfil_demanda.groupby('NOMBRE_TIPO_EMPRESA')['CUIT'].nunique()
-                .reset_index()
-                .rename(columns={'NOMBRE_TIPO_EMPRESA': 'Tipo de Empresa', 'CUIT': 'Cantidad'})
+            if 'N_CATEGORIA_EMPLEO' in df_perfil_demanda.columns and 'CUIT' in df_perfil_demanda.columns:
+                df_actividad = df_perfil_demanda.groupby('N_CATEGORIA_EMPLEO')['CUIT'].nunique().reset_index()
+                df_actividad.columns = ['Actividad Principal', 'Cantidad de Empresas']
+                df_actividad = df_actividad.sort_values(by='Cantidad de Empresas', ascending=False).head(10)
+                
+                fig_actividad = px.pie(
+                    df_actividad, 
+                    names='Actividad Principal', 
+                    values='Cantidad de Empresas',
+                    title='Distribución por Actividad Principal (Top 10)',
+                    color_discrete_sequence=px.colors.qualitative.Pastel
                 )
-                fig_pie = px.pie(tipo_empresa_count, names='Tipo de Empresa', values='Cantidad',
-                                 title='Distribución por Tipo de Empresa',
-                                 color_discrete_sequence=px.colors.qualitative.Pastel)
-                st.plotly_chart(fig_pie, use_container_width=True)
+                fig_actividad.update_layout(showlegend=True, title_x=0.5)
+                st.plotly_chart(fig_actividad, use_container_width=True)
             else:
                 st.info("No hay datos de tipo de empresa para graficar.")
             st.markdown('</div>', unsafe_allow_html=True)
         
-        # --- Visualización 2: Gráfico de Barras por Categoría (Top 10) (en col2) con mejor estilo ---
+        # --- Visualización 2: Gráfico de Barras por Categoría (Top 10) (en col2) ---
         with col2:
             st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-            st.markdown('<h3 style="font-size: 18px; margin-bottom: 15px;">Top 10 - Distribución de Categorías de Empleo</h3>', unsafe_allow_html=True)
+            st.markdown('<h3 style="font-size: 18px; margin-bottom: 15px;">Top 10 - Categorías de Empleo por Nº de Empresas</h3>', unsafe_allow_html=True)
 
-            # Agrupar por categoría y contar las ocurrencias
-            df_cat_count = df_perfil_demanda.groupby('N_CATEGORIA_EMPLEO')['CUIT'].nunique().reset_index(name='Empresas que Buscan')
-            
-            # Limpiar valores infinitos y NaN para evitar warnings en Vega-Lite
-            df_cat_count['Empresas que Buscan'] = df_cat_count['Empresas que Buscan'].replace([float('inf'), float('-inf')], 0)
-            df_cat_count = df_cat_count.dropna(subset=['Empresas que Buscan'])
-            df_cat_count = df_cat_count[df_cat_count['Empresas que Buscan'].notna() & 
-                                       (df_cat_count['Empresas que Buscan'] != float('inf')) & 
-                                       (df_cat_count['Empresas que Buscan'] != float('-inf'))]
-            
-            df_cat_count = df_cat_count.sort_values(by='Empresas que Buscan', ascending=False)
-
-            if len(df_cat_count) > 9:
-                # Tomar el top 9 directamente, sin agregar 'Otros'
-                df_cat_count_final = df_cat_count.head(9).copy()
-            else:
-                df_cat_count_final = df_cat_count.copy()
-
-            if True:
-                # Crear gráfico de barras con texto de categoría y conteo visible
-                chart_cat = alt.Chart(df_cat_count_final).mark_bar(
-                    cornerRadiusTopRight=5,
-                    cornerRadiusBottomRight=5
-                ).encode( 
-                    x=alt.X('Empresas que Buscan', title=''),  
-                    y=alt.Y('N_CATEGORIA_EMPLEO:N', title=''), 
-                    tooltip=['N_CATEGORIA_EMPLEO', 'Empresas que Buscan'],
-                    color=alt.value('#4e73df')  # Consistent color scheme
-                ).properties(
-                    width=600,
-                    height=400
-                )
-                # Texto de conteo
-                text_count = alt.Chart(df_cat_count_final).mark_text(
-                    align='left',
-                    baseline='middle',
-                    dx=3,
-                    color='white',
-                    fontWeight='bold',
-                    size=16
-                ).encode(
-                    x=alt.X('Empresas que Buscan', title=''),  
-                    y=alt.Y('N_CATEGORIA_EMPLEO:N', title=''), 
-                    text=alt.Text('Empresas que Buscan', format=',d')
-                )
-                # Texto de categoría (ubicado a la izquierda de la barra)
-                text_cat = alt.Chart(df_cat_count_final).mark_text(
-                    align='right',
-                    baseline='middle',
-                    dx=-8,
-                    color='black',
-                    fontWeight='bold',
-                    size=14
-                ).encode(
-                    x=alt.value(0),
-                    y=alt.Y('N_CATEGORIA_EMPLEO:N', title=''),
-                    text='N_CATEGORIA_EMPLEO'
-                )
-                # Combinar gráfico de barras, texto de conteo y texto de categoría
-                combined_chart = alt.layer(chart_cat, text_count, text_cat)
-                # Configuración visual
-                combined_chart = combined_chart.configure_axisY(labels=False, domain=False, ticks=False)
-                st.altair_chart(combined_chart, use_container_width=True)
-            else:
-                # Alternativa usando Plotly si Altair no está disponible
-                fig = px.bar(
-                    df_cat_count_final, 
-                    x='Empresas que Buscan', 
-                    y='N_CATEGORIA_EMPLEO',
-                    text='Empresas que Buscan',
-                    labels={'Empresas que Buscan': '', 'N_CATEGORIA_EMPLEO': ''},
-                    height=400,
-                    color_discrete_sequence=['#4e73df']
-                )
-                fig.update_layout(
-                    yaxis={'categoryorder': 'total ascending'},
-                    showlegend=False
-                )
-                fig.update_traces(
-                    textposition='inside',
-                    textfont_color='white'
-                )
-                st.plotly_chart(fig, use_container_width=True)
+            if 'N_PUESTO_EMPLEO' in df_perfil_demanda.columns and 'CUIT' in df_perfil_demanda.columns:
+                categoria_counts = df_perfil_demanda.groupby('N_PUESTO_EMPLEO')['CUIT'].nunique().reset_index()
+                categoria_counts.columns = ['Puesto', 'Nº de Empresas']
                 
+                top_10_categorias = categoria_counts.sort_values(by='Nº de Empresas', ascending=False).head(10)
+                
+                fig_bar = px.bar(
+                    top_10_categorias, 
+                    x='Nº de Empresas', 
+                    y='Puesto',
+                    orientation='h',
+                    title='Top 10 Puestos por Empresas (CUITs únicos)',
+                    labels={'Nº de Empresas': 'Nº de Empresas (CUITs únicos)', 'Puesto': 'Puesto de Empleo'},
+                    color_discrete_sequence=px.colors.qualitative.Vivid
+                )
+                fig_bar.update_layout(yaxis={'categoryorder':'total ascending'}, title_x=0.5)
+                st.plotly_chart(fig_bar, use_container_width=True)
+            else:
+                st.info("No hay datos de puestos de empleo para graficar.")
+
             st.markdown('</div>', unsafe_allow_html=True)
 
 def show_inscriptions(df_inscriptos, file_date):
