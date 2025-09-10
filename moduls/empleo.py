@@ -865,27 +865,7 @@ def render_dashboard(df_postulantes_empleo,df_inscriptos, df_empresas, geojson_d
             st.markdown('<div class="section-title">Empresas adheridas en todos los programas de la gestión</div>', unsafe_allow_html=True)
 
             if has_empresas:
-                # --- Filtros específicos para esta pestaña ---
-                col1, _ = st.columns([1, 1])
-                with col1:
-                    programas_disponibles = sorted(df_empresas['PROGRAMA_ADHERIDO'].dropna().unique())
-                    selected_programas = st.multiselect(
-                        "Programa:",
-                        options=programas_disponibles,
-                        default=None,  # No seleccionar ninguno por defecto
-                        key="company_program_filter"
-                    )
-
-                # Aplicar filtros
-                if selected_programas:
-                    df_empresas = df_empresas[df_empresas['PROGRAMA_ADHERIDO'].isin(selected_programas)]
-
-                # Mostrar conteo de empresas después de aplicar filtros
-                st.markdown(f"Mostrando {len(df_empresas)} de {df_empresas['CUIT'].nunique()} empresas")
-
-                # --- KPIs de Empresas ---
-                empresas_con_beneficiarios = df_empresas[df_empresas['BENEF'] > 0]['CUIT'].nunique()
-                empresas_sin_beneficiarios = df_empresas['CUIT'].nunique() - empresas_con_beneficiarios
+             
                 show_companies(df_empresas)
             else:
                 st.markdown("""
