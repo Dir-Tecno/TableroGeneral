@@ -16,8 +16,6 @@ from minio import Minio
 from os import path
 from moduls import escrituracion
 
-
-
 setup_page()
 st.markdown('<div class="main-header">Tablero General de Reportes</div>', unsafe_allow_html=True)
 # --- Configuración General ---
