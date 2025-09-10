@@ -432,131 +432,128 @@ def render_dashboard(df_postulantes_empleo,df_inscriptos, df_empresas, geojson_d
         display_kpi_row(kpi_data, num_columns=5)
         st.markdown('</div>', unsafe_allow_html=True)
         
-        # Verificar si existe el DataFrame de postulantes
-        has_postulantes = df_postulantes_empleo is not None and not (hasattr(df_postulantes_empleo, 'empty') and df_postulantes_empleo.empty)
-        
-        # Crear pestañas según los datos disponibles
-        if has_postulantes:
-            # Si hay datos de postulantes, mostrar las tres pestañas
-            tabs = st.tabs(["Postulantes", "Beneficiarios", "Empresas"])
-            tab_postulantes = tabs[0]
-            tab_beneficiarios = tabs[1]
-            tab_empresas = tabs[2]
+
+        tabs = st.tabs(["Postulantes", "Inscriptos y Beneficiarios", "Empresas"])
+        tab_postulantes = tabs[0]
+        tab_beneficiarios = tabs[1]
+        tab_empresas = tabs[2]
             
             # Pestaña de postulantes
-            with tab_postulantes:
-                st.markdown('<div class="section-title">Postulantes EMPLEO +26 [2025]</div>', unsafe_allow_html=True)
-                
-                # Filtros visuales en dos columnas
-                st.markdown('<div class="filter-section">', unsafe_allow_html=True)
-                col_filtro1, col_filtro2 = st.columns(2)
-                
-                # Primera columna: filtro de departamento
-                with col_filtro1:
-                    st.markdown('<div class="filter-label">Departamento:</div>', unsafe_allow_html=True)
-                    if 'N_DEPARTAMENTO' in df_postulantes_empleo.columns:
-                        departamentos = sorted(df_postulantes_empleo['N_DEPARTAMENTO'].dropna().unique())
-                        selected_dpto = st.selectbox(
-                            "Seleccionar departamento",
-                            options=["Todos los departamentos"] + departamentos,
-                            label_visibility="collapsed"
-                        )
-                    else:
-                        selected_dpto = "Todos los departamentos"
+        with tab_postulantes:
+            st.markdown('<div class="section-title">Postulantes EMPLEO +26 [2025]</div>', unsafe_allow_html=True)
+            
+            # Filtros visuales en dos columnas
+            st.markdown('<div class="filter-section">', unsafe_allow_html=True)
+            col_filtro1, col_filtro2 = st.columns(2)
+            
+            # Primera columna: filtro de departamento
+            with col_filtro1:
+                st.markdown('<div class="filter-label">Departamento:</div>', unsafe_allow_html=True)
+                if 'N_DEPARTAMENTO' in df_postulantes_empleo.columns:
+                    departamentos = sorted(df_postulantes_empleo['N_DEPARTAMENTO'].dropna().unique())
+                    selected_dpto = st.selectbox(
+                        "Seleccionar departamento",
+                        options=["Todos los departamentos"] + departamentos,
+                        label_visibility="collapsed"
+                    )
+                else:
+                    selected_dpto = "Todos los departamentos"
 
-                # Segunda columna: filtro de localidad dependiente del departamento
-                with col_filtro2:
-                    st.markdown('<div class="filter-label">Localidad:</div>', unsafe_allow_html=True)
-                    if selected_dpto != "Todos los departamentos" and 'N_LOCALIDAD' in df_postulantes_empleo.columns:
-                        localidades = sorted(df_postulantes_empleo[df_postulantes_empleo['N_DEPARTAMENTO'] == selected_dpto]['N_LOCALIDAD'].dropna().unique())
-                        selected_loc = st.selectbox(
-                            "Seleccionar localidad",
-                            options=["Todas las localidades"] + localidades,
-                            label_visibility="collapsed"
-                        )
-                    elif 'N_LOCALIDAD' in df_postulantes_empleo.columns:
-                        localidades = sorted(df_postulantes_empleo['N_LOCALIDAD'].dropna().unique())
-                        selected_loc = st.selectbox(
-                            "Seleccionar localidad",
-                            options=["Todas las localidades"] + localidades,
-                            label_visibility="collapsed"
-                        )
-                    else:
-                        selected_loc = "Todas las localidades"
+            # Segunda columna: filtro de localidad dependiente del departamento
+            with col_filtro2:
+                st.markdown('<div class="filter-label">Localidad:</div>', unsafe_allow_html=True)
+                if selected_dpto != "Todos los departamentos" and 'N_LOCALIDAD' in df_postulantes_empleo.columns:
+                    localidades = sorted(df_postulantes_empleo[df_postulantes_empleo['N_DEPARTAMENTO'] == selected_dpto]['N_LOCALIDAD'].dropna().unique())
+                    selected_loc = st.selectbox(
+                        "Seleccionar localidad",
+                        options=["Todas las localidades"] + localidades,
+                        label_visibility="collapsed"
+                    )
+                elif 'N_LOCALIDAD' in df_postulantes_empleo.columns:
+                    localidades = sorted(df_postulantes_empleo['N_LOCALIDAD'].dropna().unique())
+                    selected_loc = st.selectbox(
+                        "Seleccionar localidad",
+                        options=["Todas las localidades"] + localidades,
+                        label_visibility="collapsed"
+                    )
+                else:
+                    selected_loc = "Todas las localidades"
 
-                st.markdown('</div>', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
 
-                # Aplicar filtros al DataFrame
-                df_filtrado = df_postulantes_empleo.copy()
-                if selected_dpto != "Todos los departamentos":
-                    df_filtrado = df_filtrado[df_filtrado['N_DEPARTAMENTO'] == selected_dpto]
-                if selected_loc != "Todas las localidades":
-                    df_filtrado = df_filtrado[df_filtrado['N_LOCALIDAD'] == selected_loc]
+            # Aplicar filtros al DataFrame
+            df_filtrado = df_postulantes_empleo.copy()
+            if selected_dpto != "Todos los departamentos":
+                df_filtrado = df_filtrado[df_filtrado['N_DEPARTAMENTO'] == selected_dpto]
+            if selected_loc != "Todas las localidades":
+                df_filtrado = df_filtrado[df_filtrado['N_LOCALIDAD'] == selected_loc]
 
-                # Mostrar mensaje con el número de registros después de aplicar los filtros
-                st.markdown(f'<div class="filter-info">Mostrando {len(df_filtrado)} postulantes</div>', unsafe_allow_html=True)
+            # Mostrar mensaje con el número de registros después de aplicar los filtros
+            st.markdown(f'<div class="filter-info">Mostrando {len(df_filtrado)} postulantes</div>', unsafe_allow_html=True)
 
 
-                # KPIs principales
-                total_cuil_unicos = df_filtrado['CUIL'].nunique() if 'CUIL' in df_filtrado.columns else 0
-                total_femenino = df_filtrado[df_filtrado['SEXO'] == "FEMENINO"]['CUIL'].nunique() if 'SEXO' in df_filtrado.columns else 0
-                total_masculino = df_filtrado[df_filtrado['SEXO'] == "MASCULINO"]['CUIL'].nunique() if 'SEXO' in df_filtrado.columns else 0
-                cantidad_cvs = df_filtrado['ID_DOCUMENTO_CV'].dropna().nunique() if 'ID_DOCUMENTO_CV' in df_filtrado.columns else 0
+            # KPIs principales
+            total_cuil_unicos = df_filtrado['CUIL'].nunique() if 'CUIL' in df_filtrado.columns else 0
+            total_femenino = df_filtrado[df_filtrado['SEXO'] == "FEMENINO"]['CUIL'].nunique() if 'SEXO' in df_filtrado.columns else 0
+            total_masculino = df_filtrado[df_filtrado['SEXO'] == "MASCULINO"]['CUIL'].nunique() if 'SEXO' in df_filtrado.columns else 0
+            cantidad_cvs = df_filtrado['ID_DOCUMENTO_CV'].dropna().nunique() if 'ID_DOCUMENTO_CV' in df_filtrado.columns else 0
 
-                kpi_data = [
-                    {
-                        "title": "CUIL únicos",
-                        "value_form": f"{total_cuil_unicos:,}".replace(',', '.'),
-                        "color_class": "kpi-primary",
-                    },
-                    {
-                        "title": "Femenino",
-                        "value_form": f"{total_femenino:,}".replace(',', '.'),
-                        "color_class": "kpi-accent-1",
-                    },
-                    {
-                        "title": "Masculino",
-                        "value_form": f"{total_masculino:,}".replace(',', '.'),
-                        "color_class": "kpi-secondary",
-                    },
-                    {
-                        "title": "Cantidad CVs",
-                        "value_form": f"{cantidad_cvs:,}".replace(',', '.'),
-                        "color_class": "kpi-accent-2",
-                    }
-                ]
-                display_kpi_row(kpi_data)
+            kpi_data = [
+                {
+                    "title": "CUIL únicos",
+                    "value_form": f"{total_cuil_unicos:,}".replace(',', '.'),
+                    "color_class": "kpi-primary",
+                },
+                {
+                    "title": "Femenino",
+                    "value_form": f"{total_femenino:,}".replace(',', '.'),
+                    "color_class": "kpi-accent-1",
+                },
+                {
+                    "title": "Masculino",
+                    "value_form": f"{total_masculino:,}".replace(',', '.'),
+                    "color_class": "kpi-secondary",
+                },
+                {
+                    "title": "Cantidad CVs",
+                    "value_form": f"{cantidad_cvs:,}".replace(',', '.'),
+                    "color_class": "kpi-accent-2",
+                }
+            ]
+            display_kpi_row(kpi_data)
 
-                # Tabla de postulantes filtrados
-                with st.expander("Ver tabla de postulantes", expanded=False):
-                    st.dataframe(df_filtrado, hide_index=True, use_container_width=True)
-                
-                # Calcular la edad a partir de FEC_NACIMIENTO
-                    if 'FEC_NACIMIENTO' in df_filtrado.columns:
-                        today = datetime.date.today()
-                        def calcular_edad(fecha_str):
-                            try:
-                                fecha = pd.to_datetime(fecha_str, errors='coerce')
-                                if pd.isnull(fecha):
-                                    return None
-                                return today.year - fecha.year - ((today.month, today.day) < (fecha.month, fecha.day))
-                            except:
-                                return None
-                        df_filtrado['EDAD'] = df_filtrado['FEC_NACIMIENTO'].apply(calcular_edad)
-                        # Filtrar edades válidas
-                        edades_validas = df_filtrado['EDAD'].dropna()
-                        if not edades_validas.empty:
-                            st.markdown('<div class="section-title">Distribución de Edades</div>', unsafe_allow_html=True)
-                            fig_edades = px.histogram(edades_validas, nbins=20, labels={'value': 'Edad'}, title='Distribución de edades de postulantes')
-                            st.plotly_chart(fig_edades, use_container_width=True)
-                        else:
-                            st.info("No hay datos de edad válidos para graficar.")
-                    else:
-                        st.info("No se encontró el campo FEC_NACIMIENTO en los datos.")
+            # Tabla de postulantes filtrados
+            with st.expander("Ver tabla de postulantes", expanded=False):
+                st.dataframe(df_filtrado, hide_index=True, use_container_width=True)
+            
+            # Calcular la edad a partir de FEC_NACIMIENTO
+            if 'FEC_NACIMIENTO' in df_filtrado.columns:
+                today = datetime.date.today()
+                def calcular_edad(fecha_str):
+                    try:
+                        fecha = pd.to_datetime(fecha_str, errors='coerce')
+                        if pd.isnull(fecha):
+                            return None
+                        return today.year - fecha.year - ((today.month, today.day) < (fecha.month, fecha.day))
+                    except:
+                        return None
+                df_filtrado['EDAD'] = df_filtrado['FEC_NACIMIENTO'].apply(calcular_edad)
+                # Filtrar edades válidas
+                edades_validas = df_filtrado['EDAD'].dropna()
+                if not edades_validas.empty:
+                    st.markdown('<div class="section-title">Distribución de Edades</div>', unsafe_allow_html=True)
+                    fig_edades = px.histogram(edades_validas, nbins=20, labels={'value': 'Edad'}, title='Distribución de edades de postulantes')
+                    st.plotly_chart(fig_edades, use_container_width=True)
+                else:
+                    st.info("No hay datos de edad válidos para graficar.")
+            else:
+                st.info("No se encontró el campo FEC_NACIMIENTO en los datos.")
         
         # Contenido de la pestaña Beneficiarios
         with tab_beneficiarios:
             # Contenedor para los filtros específicos de la pestaña Beneficiarios
+            st.markdown('<div class="section-title">Inscriptos y Beneficiarios de todos lo programas de la gestión</div>', unsafe_allow_html=True)
+
             df_filtered, selected_dpto, selected_loc, all_dpto_option, all_loc_option = render_filters(df_inscriptos, key_prefix="benef_tab")
             
             # Conteo de ID_FICHA por PROGRAMA y ESTADO_FICHA
@@ -973,10 +970,13 @@ def render_dashboard(df_postulantes_empleo,df_inscriptos, df_empresas, geojson_d
                         st.plotly_chart(fig, use_container_width=True)
         
         with tab_empresas:
+        
+            st.markdown('<div class="section-title">Empresas adheridas en todos los programas de la gestión</div>', unsafe_allow_html=True)
+
             if has_empresas:
                 # Pasar directamente el DataFrame de empresas sin aplicar los filtros de render_filters
                 # ya que los filtros se manejarán internamente en show_companies
-                show_companies(df_empresas, geojson_data)
+                show_companies(df_empresas)
             else:
                 st.markdown("""
                     <div class="info-box status-warning">
@@ -986,7 +986,7 @@ def render_dashboard(df_postulantes_empleo,df_inscriptos, df_empresas, geojson_d
         
        
 
-def show_companies(df_empresas, geojson_data):
+def show_companies(df_empresas):
     # Asegúrate de que las columnas numéricas sean del tipo correcto
     if 'CANTIDAD_EMPLEADOS' in df_empresas.columns:
         df_empresas['CANTIDAD_EMPLEADOS'] = pd.to_numeric(df_empresas['CANTIDAD_EMPLEADOS'], errors='coerce')
@@ -1312,7 +1312,7 @@ def show_companies(df_empresas, geojson_data):
                 
             st.markdown('</div>', unsafe_allow_html=True)
 
-def show_inscriptions(df_inscriptos, df_poblacion, geojson_data, file_date):
+def show_inscriptions(df_inscriptos, file_date):
     """
     Muestra la vista de inscripciones con mejor estilo visual
     
