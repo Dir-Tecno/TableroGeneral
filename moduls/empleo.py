@@ -16,7 +16,6 @@ import altair as alt
 from io import StringIO
 import datetime
 import io
-import xlsxwriter
 
 
 def create_empleo_kpis(resultados, programa_nombre=""):
@@ -425,18 +424,20 @@ def render_dashboard(df_postulantes_empleo,df_inscriptos, df_empresas, geojson_d
 
             # Botón de Descarga
             st.markdown('<div class="section-title">Descargar Datos</div>', unsafe_allow_html=True)
-            st.write("Usa el siguiente botón para descargar los datos de los postulantes filtrados en formato Excel.")
+            st.write("Usa el siguiente botón para descargar los datos de los postulantes filtrados en formato CSV.")
 
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                df_filtrado.to_excel(writer, index=False, sheet_name='Postulantes')
-            excel_data = output.getvalue()
+            @st.cache_data
+            def convert_df_to_csv(df):
+                # IMPORTANT: Cache the conversion to prevent computation on every rerun
+                return df.to_csv(index=False).encode('utf-8')
+
+            csv_data = convert_df_to_csv(df_filtrado)
 
             st.download_button(
-                label="📥 Descargar Tabla de Postulantes (Excel)",
-                data=excel_data,
-                file_name=f"postulantes_empleo_{datetime.date.today()}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                label="📥 Descargar Tabla de Postulantes (CSV)",
+                data=csv_data,
+                file_name=f"postulantes_empleo_{datetime.date.today()}.csv",
+                mime="text/csv",
                 use_container_width=True
             )
         
