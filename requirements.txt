@@ -7,7 +7,6 @@ pyarrow>=15.0.0
 pandas==2.2.2
 
 # Dependencias geoespaciales
-geopandas
 
 # Dependencias principales
 streamlit==1.37.1
