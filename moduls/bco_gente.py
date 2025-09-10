@@ -8,10 +8,10 @@ from utils.kpi_tooltips import ESTADO_CATEGORIAS, TOOLTIPS_DESCRIPTIVOS
 from utils.session_helper import safe_session_get, safe_session_set, safe_session_check
 
 # Inicializar variables de sesión necesarias
-if "selected_categorias" not in st.session_state:
-    st.session_state["selected_categorias"] = []
-if "selected_lineas_credito" not in st.session_state:
-    st.session_state["selected_lineas_credito"] = []
+if not safe_session_check("selected_categorias"):
+    safe_session_set("selected_categorias", [])
+if not safe_session_check("selected_lineas_credito"):
+    safe_session_set("selected_lineas_credito", [])
 
 # Crear diccionario para tooltips de categorías (técnico, lista de estados)
 tooltips_categorias = {k: ", ".join(v) for k, v in ESTADO_CATEGORIAS.items()}
@@ -627,43 +627,43 @@ def show_bco_gente_dashboard(data, dates, is_development=False):
                     departamentos.append("Otros")
                 all_dpto_option = "Todos los departamentos"
                 selected_dpto = st.selectbox("Departamento:", [all_dpto_option] + list(departamentos), key="global_dpto_filter")
-
-            # Filtrar por departamento seleccionado
-            if selected_dpto != all_dpto_option:
-                if selected_dpto == "Otros":
-                    df_filtrado_global_tab = df_lat_null.copy()
-                    localidades = sorted(df_filtrado_global_tab['N_LOCALIDAD'].dropna().unique())
-                else:
-                    df_filtrado_global_tab = df_filtrado_global[df_filtrado_global['N_DEPARTAMENTO'] == selected_dpto]
-                    # Filtro de localidad (dependiente del departamento)
-                    df_latitud_notnull = df_filtrado_global_tab[df_filtrado_global_tab['LATITUD'].notnull()]
-                    df_latitud_null = df_filtrado_global_tab[df_filtrado_global_tab['LATITUD'].isnull()]
-                    localidades = sorted(
-                        pd.concat([
-                            df_latitud_notnull['N_LOCALIDAD'].dropna(),
-                            df_latitud_null['N_LOCALIDAD'].dropna()
-                        ]).unique()
-                    )
-                all_loc_option = "Todas las localidades"
-
-                # Mostrar filtro de localidad en la segunda columna
-                with col2:
-                    selected_loc = st.selectbox("Localidad:", [all_loc_option] + list(localidades), key="global_loc_filter")
-
-                if selected_loc != all_loc_option:
-                    df_filtrado_global_tab = df_filtrado_global_tab[df_filtrado_global_tab['N_LOCALIDAD'] == selected_loc]
+        
+        # Filtrar por departamento seleccionado
+        if selected_dpto != all_dpto_option:
+            if selected_dpto == "Otros":
+                df_filtrado_global_tab = df_lat_null.copy()
+                localidades = sorted(df_filtrado_global_tab['N_LOCALIDAD'].dropna().unique())
             else:
-                # Si no se seleccionó departamento, mostrar todas las localidades
-                localidades = sorted(df_filtrado_global['N_LOCALIDAD'].dropna().unique())
-                all_loc_option = "Todas las localidades"
-                df_filtrado_global_tab = df_filtrado_global
+                df_filtrado_global_tab = df_filtrado_global[df_filtrado_global['N_DEPARTAMENTO'] == selected_dpto]
+                # Filtro de localidad (dependiente del departamento)
+                df_latitud_notnull = df_filtrado_global_tab[df_filtrado_global_tab['LATITUD'].notnull()]
+                df_latitud_null = df_filtrado_global_tab[df_filtrado_global_tab['LATITUD'].isnull()]
+                localidades = sorted(
+                    pd.concat([
+                        df_latitud_notnull['N_LOCALIDAD'].dropna(),
+                        df_latitud_null['N_LOCALIDAD'].dropna()
+                    ]).unique()
+                )
+            all_loc_option = "Todas las localidades"
 
-                # Mostrar filtro de localidad en la segunda columna
-                with col2:
-                    selected_loc = st.selectbox("Localidad:", [all_loc_option] + list(localidades), key="global_loc_filter")
+            # Mostrar filtro de localidad en la segunda columna
+            with col2:
+                selected_loc = st.selectbox("Localidad:", [all_loc_option] + list(localidades), key="global_loc_filter")
 
-                if selected_loc != all_loc_option:
-                    df_filtrado_global_tab = df_filtrado_global_tab[df_filtrado_global_tab['N_LOCALIDAD'] == selected_loc]
+            if selected_loc != all_loc_option:
+                df_filtrado_global_tab = df_filtrado_global_tab[df_filtrado_global_tab['N_LOCALIDAD'] == selected_loc]
+        else:
+            # Si no se seleccionó departamento, mostrar todas las localidades
+            localidades = sorted(df_filtrado_global['N_LOCALIDAD'].dropna().unique())
+            all_loc_option = "Todas las localidades"
+            df_filtrado_global_tab = df_filtrado_global
+
+            # Mostrar filtro de localidad en la segunda columna
+            with col2:
+                selected_loc = st.selectbox("Localidad:", [all_loc_option] + list(localidades), key="global_loc_filter")
+
+            if selected_loc != all_loc_option:
+                df_filtrado_global_tab = df_filtrado_global_tab[df_filtrado_global_tab['N_LOCALIDAD'] == selected_loc]
             
             # Filtro de línea de préstamo en la tercera columna
             with col3:

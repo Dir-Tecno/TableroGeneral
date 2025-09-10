@@ -5,10 +5,10 @@ import datetime
 from utils.session_helper import safe_session_get, safe_session_set, safe_session_check, is_session_initialized
 
 # Inicializar variables de sesión necesarias
-if "mostrar_form_comentario" not in st.session_state:
-    st.session_state["mostrar_form_comentario"] = False
-if "campanita_mostrada" not in st.session_state:
-    st.session_state["campanita_mostrada"] = False
+if not safe_session_check("mostrar_form_comentario"):
+    safe_session_set("mostrar_form_comentario", False)
+if not safe_session_check("campanita_mostrada"):
+    safe_session_set("campanita_mostrada", False)
 
 def show_dev_dataframe_info(data, modulo_nombre="Módulo", info_caption=None, is_development=False):
     """
@@ -312,16 +312,17 @@ def show_notification_bell(novedades=None):
         # Novedades por defecto si no se proporcionan
         novedades = [
             {
-                "titulo": "Fecha de los datos",
-                "descripcion": "Se corrigió el dato de la fecha de los datos en todos los módulos",
-                "fecha": "2025-08-13",
+                "titulo": "Nuevas mejoras en el módulo de Empleo",
+                "descripcion": "Se rediseñó la sección de gráficos con un layout de dos columnas y se mejoró el conteo en la distribución de edades.\n\nFiltros Corregidos: Los filtros de Departamento y Zona ahora funcionan correctamente y se aplican de manera consistente en las pestañas de Beneficiarios y Empresas.\n\nGráficos Precisos: Los gráficos en \"Perfil de Demanda\" (Empresas) ahora cuentan empresas únicas (CUITs) para darte datos más exactos.",
+                "fecha": "2025-09-10",
                 "modulo": "Todos"
             },
+            
             {
-                "titulo": "Egresados",
-                "descripcion": "Se añadió el conteo de egresados en el excel y la tabla de cursos",
-                "fecha": "2025-08-13",
-                "modulo": "CBA Me Capacita"
+                "titulo": "Filtros Corregidos",
+                "descripcion": "Los filtros de Departamento y Zona ahora funcionan correctamente y se aplican de manera consistente en las pestañas de Beneficiarios y Empresas.",
+                "fecha": "2025-09-10",
+                "modulo": "Todos"
             }
         ]
     
