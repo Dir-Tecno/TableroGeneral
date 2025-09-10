@@ -33,8 +33,13 @@ WORKDIR /app
 COPY requirements.txt /app/
 
 # ACTUALIZAR PIP Y LUEGO INSTALAR LAS DEPENDENCIAS CON MÁS VERBOSIDAD
-RUN pip install --upgrade pip && \
-    pip install --no-cache-dir -v -r requirements.txt
+RUN pip install --upgrade pip
+
+# Instalar dependencias geoespaciales desde un índice de paquetes compatible
+RUN pip install fiona pyproj rasterio shapely geopandas --find-links https://fiona.rivr.nl/wheelhouse/
+
+# Instalar el resto de las dependencias
+RUN pip install --no-cache-dir -v -r requirements.txt
 
 # Copiar el resto de la aplicación
 COPY . /app/
