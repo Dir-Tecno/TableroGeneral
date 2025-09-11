@@ -313,7 +313,7 @@ def show_notification_bell(novedades=None):
         novedades = [
             {
                 "titulo": "Nuevas mejoras en el módulo de Empleo",
-                "descripcion": "Se rediseñó la sección de gráficos con un layout de dos columnas y se mejoró el conteo en la distribución de edades.\n\nFiltros Corregidos: Los filtros de Departamento y Zona ahora funcionan correctamente y se aplican de manera consistente en las pestañas de Beneficiarios y Empresas.\n\nGráficos Precisos: Los gráficos en \"Perfil de Demanda\" (Empresas) ahora cuentan empresas únicas (CUITs) para darte datos más exactos.",
+                "descripcion": "Se mejoró el conteo en la distribución de edades. ",
                 "fecha": "2025-09-10",
                 "modulo": "Todos"
             },
