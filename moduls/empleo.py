@@ -139,9 +139,9 @@ def show_empleo_dashboard(data, dates, is_development=False):
         from utils.ui_components import show_dev_dataframe_info
         show_dev_dataframe_info(data, modulo_nombre="Empleo", is_development=is_development)
 
-    df_postulantes_empleo, df_inscriptos, df_empresas, geojson_data, has_empresas, has_geojson = load_and_preprocess_data(data, dates, is_development)
+    df_postulantes_empleo, df_inscriptos, df_empresas, geojson_data = load_and_preprocess_data(data, dates, is_development)
     
-    render_dashboard(df_postulantes_empleo, df_inscriptos, df_empresas, geojson_data, has_empresas, has_geojson, data)
+    render_dashboard(df_postulantes_empleo, df_inscriptos, df_empresas, geojson_data)
 
 def load_and_preprocess_data(data, dates=None, is_development=False):
     """
@@ -163,26 +163,10 @@ def load_and_preprocess_data(data, dates=None, is_development=False):
             .groupby("CUIT", as_index=False)
             .agg(BENEF=("ID_FICHA", "count"))
         )
-        
-        df_empresas = data.get('vt_empresas_adheridas.parquet')
-        has_empresas = df_empresas is not None and not df_empresas.empty
-
-        df_arca = data.get('vt_empresas_ARCA.parquet')
-        if has_empresas and df_arca is not None and not df_arca.empty:
-            df_empresas['CUIT'] = df_empresas['CUIT'].astype(str).str.replace('-', '', regex=False)
-            df_arca['CUIT'] = df_arca['CUIT'].astype(str).str.replace('-', '', regex=False)
-            cols_arca = ['CUIT', 'IMP_GANANCIAS', 'IMP_IVA', 'MONOTRIBUTO', 'INTEGRANTE_SOC', 'EMPLEADOR', 'ACTIVIDAD_MONOTRIBUTO','NOMBRE_TIPO_EMPRESA','TELEFONO', 'CELULAR', 'MAIL', 'VACANTES', 'SITIO_WEB', 'TEL_CONTACTO', 'EMAIL_CONTACTO', 'NOMBRE_FANTASIA']
-            df_arca_sel = df_arca[cols_arca].copy()
-            df_empresas = df_empresas.merge(df_arca_sel, on='CUIT', how='left')
-
-        if "CUIT" in df_empresas.columns:
-            df_empresas = df_empresas.merge(df_emp_ben, on="CUIT", how="left")
-        
-        has_geojson = geojson_data is not None
-        
+        df_empresas = data.get('vt_empresas_ARCA.parquet')
         if df_inscriptos_raw is None or df_inscriptos_raw.empty:
             st.error("No se pudieron cargar los datos de inscripciones.")
-            return None, None, None, None, False, False
+            return None, None, None, None
         
         df_inscriptos = df_inscriptos_raw[df_inscriptos_raw['N_ESTADO_FICHA'] != "ADHERIDO"].copy()
 
@@ -203,7 +187,7 @@ def load_and_preprocess_data(data, dates=None, is_development=False):
         zonas_favorecidas = ['PRESIDENTE ROQUE SAENZ PEÑA', 'GENERAL ROCA', 'RIO SECO', 'TULUMBA', 'POCHO', 'SAN JAVIER', 'SAN ALBERTO', 'MINAS', 'CRUZ DEL EJE', 'TOTORAL', 'SOBREMONTE', 'ISCHILIN']
         df_inscriptos['ZONA'] = df_inscriptos['N_DEPARTAMENTO'].apply(lambda x: 'ZONA NOC Y SUR' if x in zonas_favorecidas else 'ZONA REGULAR')
         
-        if has_empresas and 'N_DEPARTAMENTO' in df_empresas.columns:
+        if 'N_DEPARTAMENTO' in df_empresas.columns:
             df_empresas['ZONA'] = df_empresas['N_DEPARTAMENTO'].apply(lambda x: 'ZONA NOC Y SUR' if x in zonas_favorecidas else 'ZONA REGULAR')
 
         df_inscriptos_sin_adherido = df_inscriptos.copy()
@@ -226,9 +210,9 @@ def load_and_preprocess_data(data, dates=None, is_development=False):
             except Exception as e:
                 st.error(f"Error al procesar datos de circuitos electorales: {str(e)}")
 
-        return df_postulantes_empleo, df_inscriptos_sin_adherido, df_empresas, geojson_data, has_empresas, has_geojson
+        return df_postulantes_empleo, df_inscriptos_sin_adherido, df_empresas, geojson_data
 
-def render_dashboard(df_postulantes_empleo,df_inscriptos, df_empresas, geojson_data, has_empresas, has_geojson, data):
+def render_dashboard(df_postulantes_empleo,df_inscriptos, df_empresas, geojson_data):
     """
     Renderiza el dashboard principal con los datos procesados.
     """
@@ -746,7 +730,7 @@ def render_dashboard(df_postulantes_empleo,df_inscriptos, df_empresas, geojson_d
                 )
             
             # Mostrar distribución geográfica si hay datos geojson y no hay filtros específicos
-            if has_geojson and df_inscriptos_filtrado['N_DEPARTAMENTO'].nunique() == 1:
+            if df_inscriptos_filtrado['N_DEPARTAMENTO'].nunique() == 1:
                 st.markdown('<h3 style="font-size: 20px; margin: 20px 0 15px 0;">Distribución Geográfica</h3>', unsafe_allow_html=True)
                 
                 # Filtrar solo beneficiarios
@@ -864,15 +848,8 @@ def render_dashboard(df_postulantes_empleo,df_inscriptos, df_empresas, geojson_d
         
             st.markdown('<div class="section-title">Empresas adheridas en todos los programas de la gestión</div>', unsafe_allow_html=True)
 
-            if has_empresas:
-             
-                show_companies(df_empresas)
-            else:
-                st.markdown("""
-                    <div class="info-box status-warning">
-                        <strong>Información:</strong> No hay datos de empresas disponibles.
-                    </div>
-                """, unsafe_allow_html=True)
+            show_companies(df_empresas)
+            
         
        
 
@@ -896,20 +873,16 @@ def show_companies(df_empresas):
     else:
         df_empresas['CUPO'] = 0
 
-    # Filtrar por CUIT único y eliminar duplicados
-    columns_to_select = [col for col in ['N_LOCALIDAD', 'N_DEPARTAMENTO', 'CUIT', 'N_EMPRESA', 
-                                       'NOMBRE_TIPO_EMPRESA', 'ADHERIDO', 'CANTIDAD_EMPLEADOS', 
-                                       'VACANTES', 'CUPO', 'IMP_GANANCIAS', 'IMP_IVA', 'MONOTRIBUTO',
-                                       'INTEGRANTE_SOC', 'EMPLEADOR', 'ACTIVIDAD_MONOTRIBUTO','BENEF', 'TELEFONO', 'CELULAR', 'MAIL', 'SITIO_WEB', 'TEL_CONTACTO', 'EMAIL_CONTACTO', 'NOMBRE_FANTASIA'] 
-                       if col in df_empresas.columns]
+    # Filtrar por CUIT único y eliminar duplicados - usar TODAS las columnas disponibles
+    columns_to_select = list(df_empresas.columns)
 
     if 'CUIT' in df_empresas.columns and 'ADHERIDO' in df_empresas.columns:
         # Guardamos la lista original de programas para cada CUIT antes de agrupar
         df_empresas['PROGRAMAS_LISTA'] = df_empresas['ADHERIDO']
         df_empresas['ADHERIDO'] = df_empresas.groupby('CUIT')['ADHERIDO'].transform(lambda x: ', '.join(sorted(set(x))))
     
-    # Usar columns_to_select para crear df_display correctamente
-    df_display = df_empresas[columns_to_select + (['PROGRAMAS_LISTA'] if 'PROGRAMAS_LISTA' in df_empresas.columns else [])].drop_duplicates(subset='CUIT')
+    # Usar columns_to_select para crear df_display correctamente (sin duplicar columnas)
+    df_display = df_empresas[columns_to_select].drop_duplicates(subset='CUIT')
     df_display = df_display.sort_values(by='CUPO', ascending=False).reset_index(drop=True)
     
     # Extraer todos los programas únicos para el filtro multiselect
@@ -919,17 +892,40 @@ def show_companies(df_empresas):
         todos_programas = df_display['ADHERIDO'].str.split(', ').explode().dropna().unique()
         programas_unicos = sorted(todos_programas)
     
-    # Añadir filtros en la pestaña de empresas
-    st.markdown('<div class="filter-section">', unsafe_allow_html=True)
-    col_filtro1, _ = st.columns([1, 1])
+    # Extraer valores únicos para los filtros
+    departamentos_unicos = sorted(df_display['N_DEPARTAMENTO'].dropna().unique()) if 'N_DEPARTAMENTO' in df_display.columns else []
     
-    # Primera columna para el filtro de programas (subido como solicitado)
+    # Usar la columna ZONA existente (ya está en el DataFrame)
+    
+    zonas_unicas = sorted(df_display['ZONA'].dropna().unique()) if 'ZONA' in df_display.columns else []
+    
+    # Añadir filtros en la pestaña de empresas - 3 filtros en una fila
+    st.markdown('<div class="filter-section">', unsafe_allow_html=True)
+    col_filtro1, col_filtro2, col_filtro3 = st.columns(3)
+    
+    # Filtro 1: Programas
     with col_filtro1:
         if programas_unicos:
             st.markdown('<div class="filter-label">Programa:</div>', unsafe_allow_html=True)
-            selected_programas = st.multiselect("Seleccionar programas", options=programas_unicos, default=[], label_visibility="collapsed")
+            selected_programas = st.multiselect("Seleccionar programas", options=programas_unicos, default=[], label_visibility="collapsed", key="empresas_programa_filter")
         else:
             selected_programas = []
+    
+    # Filtro 2: Departamentos
+    with col_filtro2:
+        if departamentos_unicos:
+            st.markdown('<div class="filter-label">Departamento:</div>', unsafe_allow_html=True)
+            selected_departamentos = st.multiselect("Seleccionar departamentos", options=departamentos_unicos, default=[], label_visibility="collapsed", key="empresas_depto_filter")
+        else:
+            selected_departamentos = []
+    
+    # Filtro 3: Zonas
+    with col_filtro3:
+        if zonas_unicas:
+            st.markdown('<div class="filter-label">Zona:</div>', unsafe_allow_html=True)
+            selected_zonas = st.multiselect("Seleccionar zonas", options=zonas_unicas, default=[], label_visibility="collapsed", key="empresas_zona_filter")
+        else:
+            selected_zonas = []
     
     st.markdown('</div>', unsafe_allow_html=True)
     
@@ -939,7 +935,6 @@ def show_companies(df_empresas):
     # Filtrar por programas seleccionados
     if selected_programas:
         # Crear una máscara para filtrar empresas que tengan al menos uno de los programas seleccionados
-        # Primero verificamos si la columna PROGRAMAS_LISTA existe (datos originales)
         if 'PROGRAMAS_LISTA' in df_filtered.columns:
             # Creamos un conjunto con los CUITs de empresas que tienen alguno de los programas seleccionados
             cuits_con_programas = set()
@@ -954,8 +949,25 @@ def show_companies(df_empresas):
             mask = df_filtered['ADHERIDO'].apply(lambda x: any(programa in x.split(', ') for programa in selected_programas))
             df_filtered = df_filtered[mask]
     
+    # Filtrar por departamentos seleccionados
+    if selected_departamentos and 'N_DEPARTAMENTO' in df_filtered.columns:
+        df_filtered = df_filtered[df_filtered['N_DEPARTAMENTO'].isin(selected_departamentos)]
+    
+    # Filtrar por zonas seleccionadas
+    if selected_zonas and 'ZONA' in df_filtered.columns:
+        df_filtered = df_filtered[df_filtered['ZONA'].isin(selected_zonas)]
+    
     # Mostrar mensaje con el número de registros después de aplicar los filtros
-    st.markdown(f'<div class="filter-info">Mostrando {len(df_filtered)} de {len(df_display)} empresas</div>', unsafe_allow_html=True)
+    filtros_activos = []
+    if selected_programas:
+        filtros_activos.append(f"Programas: {len(selected_programas)}")
+    if selected_departamentos:
+        filtros_activos.append(f"Departamentos: {len(selected_departamentos)}")
+    if selected_zonas:
+        filtros_activos.append(f"Zonas: {len(selected_zonas)}")
+    
+    filtros_texto = " | ".join(filtros_activos) if filtros_activos else "Sin filtros"
+    st.markdown(f'<div class="filter-info">Mostrando {len(df_filtered)} de {len(df_display)} empresas ({filtros_texto})</div>', unsafe_allow_html=True)
 
     # Métricas y tabla final con mejor diseño
     empresas_adh = df_filtered['CUIT'].nunique()
@@ -1054,7 +1066,19 @@ def show_companies(df_empresas):
 
     # Mostrar el DataFrame con mejor estilo, dentro de un expander
     with st.expander("Ver tabla de empresas adheridas", expanded=False):
-        st.dataframe(df_filtered, hide_index=True, use_container_width=True)
+        # Usar las columnas especificadas por el usuarioDefinir las columnas a mostrar (usando los nombres reales disponibles en el DataFrame)
+        columns_to_select = [col for col in ['N_LOCALIDAD', 'N_DEPARTAMENTO', 'CUIT', 'N_EMPRESA', 
+                                           'NOMBRE_TIPO_EMPRESA', 'ADHERIDO', 'CANTIDAD_EMPLEADOS', 
+                                           'VACANTES', 'CUPO', 'IMP_GANANCIAS', 'IMP_IVA', 'MONOTRIBUTO',
+                                           'INTEGRANTE_SOC', 'EMPLEADOR', 'ACTIVIDAD_MONOTRIBUTO','BENEF', 
+                                           'TELEFONO', 'CELULAR', 'MAIL', 'SITIO_WEB', 'TEL_CONTACTO', 
+                                           'EMAIL_CONTACTO', 'NOMBRE_FANTASIA', 'ZONA'] 
+                           if col in df_filtered.columns]
+        
+        # Filtrar columnas existentes en el DataFrame
+        existing_columns = [col for col in columns_to_select if col in df_display.columns]
+        
+        st.dataframe(df_filtered[existing_columns], hide_index=True, use_container_width=True)
 
     st.markdown("<hr style='border: 1px solid #e0e0e0; margin: 20px 0;'>", unsafe_allow_html=True)
 
