@@ -156,7 +156,7 @@ def load_and_preprocess_data(data, dates=None, is_development=False):
 
         df_emp_ben = (
             df_inscriptos_raw[
-                (df_inscriptos_raw["IDETAPA"].isin([51, 53, 54, 55])) &
+                (df_inscriptos_raw["IDETAPA"].isin([51, 53, 54, 55,57])) &
                 (df_inscriptos_raw["N_ESTADO_FICHA"] == "BENEFICIARIO")
             ]
             .assign(CUIT=lambda df: df["EMP_CUIT"].astype(str).str.replace("-", ""))
@@ -164,6 +164,10 @@ def load_and_preprocess_data(data, dates=None, is_development=False):
             .agg(BENEF=("ID_FICHA", "count"))
         )
         df_empresas = data.get('vt_empresas_ARCA.parquet')
+
+        if "CUIT" in df_empresas.columns:
+            df_empresas = df_empresas.merge(df_emp_ben, on="CUIT", how="left")
+
         if df_inscriptos_raw is None or df_inscriptos_raw.empty:
             st.error("No se pudieron cargar los datos de inscripciones.")
             return None, None, None, None
