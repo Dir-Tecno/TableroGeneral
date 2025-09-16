@@ -17,7 +17,7 @@ from os import path
 from moduls import escrituracion
 
 setup_page()
-st.markdown('<div class="main-header">Tablero General de Reportes</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header">Tablero General de Reportes  VERSION DESACOPLADO </div>', unsafe_allow_html=True)
 # --- Configuración General ---
 FUENTE_DATOS = "gitlab"  # Opciones: 'minio', 'gitlab', 'local'
 REPO_ID = "Dir-Tecno/setministerio"
