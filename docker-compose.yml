@@ -10,7 +10,7 @@ services:
     ports:
       - 8504:8501
     environment:
-      - GITLAB_TOKEN=${GITLAB_TOKEN}
+      - GITLAB_TOKEN=glpat-lcmLuTDjcL8tDjhYsTh4WG86MQp1Omh6eTZxCw.01.120ayfy9q
       - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
       - SENTRY_DSN=${SENTRY_DSN}
 networks:
