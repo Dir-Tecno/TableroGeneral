@@ -256,11 +256,12 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
     if is_development:
         show_dev_dataframe_info(data, modulo_nombre="CBA Me Capacita", is_development=is_development)
 
-    
-
     # --- Usar función de carga y preprocesamiento ---
-    df_postulantes, df_alumnos, df_cursos = load_and_preprocess_data(data, is_development)
+    # df_postulantes, df_alumnos, df_cursos = load_and_preprocess_data(data, is_development)
 
+    df_postulantes = data.get('df_postulantes_cbamecapacita.parquet')
+    df_alumnos = data.get('df_alumnos.parquet')
+    df_cursos = data.get('df_cursos.parquet')
 
 
     # KPIs reales usando VT_INSCRIPCIONES_PRG129.parquet (postulantes) y VT_CURSOS_SEDES_GEO.parquet (cursos)
