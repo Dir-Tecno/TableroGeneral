@@ -299,45 +299,12 @@ def show_bco_gente_dashboard(data, dates, is_development=False):
     df_global = None
     df_global_pagados = None
     
-    """
-    # Cargar y preprocesar datos
-    # df_global, geojson_data, df_localidad_municipio, df_global_pagados = load_and_preprocess_data(data)
-    """
-    df_global = ensure_dataframe(data.get('df_global.parquet'))
-    df_global_pagados = ensure_dataframe(data.get('VT_CUMPLIMIENTO_FORMULARIOS.parquet'))
-    geojson_data = data.get('capa_departamentos_2010.geojson')  # Este es un GeoJSON, no un DataFrame
+    df_global = data.get('df_global_banco.parquet')
+    df_global_pagados = data.get('df_global_pagados.parquet')
     
-    if is_development:
-        st.write("Datos Globales ya cruzados (después de load_and_preprocess_data):")
-        if df_global is not None and not df_global.empty: # Asegurarse que df_global existe
-            # Mostrar solo información resumida del DataFrame
-            st.write(f"Dimensiones del DataFrame: {df_global.shape[0]} filas x {df_global.shape[1]} columnas")
-            st.write(f"Columnas disponibles: {', '.join(df_global.columns.tolist()[:20])}{'...' if len(df_global.columns) > 20 else ''}")
-            
-            # Mostrar solo las primeras 5 filas
-            st.write("Primeras 5 filas:")
-            if 'geometry' in df_global.columns:
-                st.dataframe(df_global.drop(columns=['geometry']).head(5), use_container_width=True)
-                df_to_download = df_global.drop(columns=['geometry'])
-            else:
-                st.dataframe(df_global.head(5), use_container_width=True)
-                df_to_download = df_global
-                
-            # Mover el código de descarga dentro del bloque condicional
-            import io
-            csv = df_to_download.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="Descargar CSV de Datos Globales",
-                data=csv,
-                file_name="datos_globales.csv",
-                mime="text/csv"
-            )
-
     
     # Crear una copia del DataFrame para trabajar con él
     df_filtrado_global = df_global.copy()
-    
-
     
     # Crear pestañas para las diferentes vistas
     tab_global, tab_recupero = st.tabs(["GLOBAL", "RECUPERO"])
@@ -1441,24 +1408,6 @@ def mostrar_recupero(df_filtrado_recupero=None, is_development=False):
     import numpy as np
     st.header("Análisis de Recupero")
     
-    # Mostrar df_filtrado_recupero en modo desarrollo siempre al inicio (versión limitada)
-    if is_development and df_filtrado_recupero is not None and not df_filtrado_recupero.empty:
-        st.subheader("DataFrame de Recupero (Modo Desarrollo - Vista Reducida)")
-        
-        # Mostrar solo información básica del DataFrame para evitar problemas de tamaño
-        st.write(f"Dimensiones del DataFrame: {df_filtrado_recupero.shape[0]} filas x {df_filtrado_recupero.shape[1]} columnas")
-        st.write(f"Columnas disponibles: {', '.join(df_filtrado_recupero.columns.tolist())}")
-        
-        # Mostrar solo las primeras 5 filas en lugar del DataFrame completo
-        st.write("Primeras 5 filas:")
-        st.dataframe(df_filtrado_recupero.head(5), use_container_width=True)
-        
-        # Verificar si existe la columna PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO
-        if 'PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO' in df_filtrado_recupero.columns:
-            st.success("✅ La columna PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO está presente en df_filtrado_recupero")
-        else:
-            st.error("❌ La columna PROMEDIO_DIAS_CUMPLIMIENTO_FORMULARIO NO está presente en df_filtrado_recupero")
-        
     # Añadir botón para descargar el DataFrame df_filtrado_recupero
     col1, col2 = st.columns([1, 3])
     with col1:
