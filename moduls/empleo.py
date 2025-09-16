@@ -211,574 +211,11 @@ def render_dashboard(df_postulantes_empleo,df_inscriptos, df_empresas, geojson_d
             
             # Pestaña de postulantes
         with tab_postulantes:
-            st.markdown('<div class="section-title">Postulantes EMPLEO +26 [2025]</div>', unsafe_allow_html=True)
-            
-            # Filtros visuales en dos columnas
-            st.markdown('<div class="filter-section">', unsafe_allow_html=True)
-            col_filtro1, col_filtro2 = st.columns(2)
-            
-            # Primera columna: filtro de departamento
-            with col_filtro1:
-                st.markdown('<div class="filter-label">Departamento:</div>', unsafe_allow_html=True)
-                if 'N_DEPARTAMENTO' in df_postulantes_empleo.columns:
-                    departamentos = sorted(df_postulantes_empleo['N_DEPARTAMENTO'].dropna().unique())
-                    selected_dpto = st.selectbox(
-                        "Seleccionar departamento",
-                        options=["Todos los departamentos"] + departamentos,
-                        label_visibility="collapsed"
-                    )
-                else:
-                    selected_dpto = "Todos los departamentos"
-
-            # Segunda columna: filtro de localidad dependiente del departamento
-            with col_filtro2:
-                st.markdown('<div class="filter-label">Localidad:</div>', unsafe_allow_html=True)
-                if selected_dpto != "Todos los departamentos" and 'N_LOCALIDAD' in df_postulantes_empleo.columns:
-                    localidades = sorted(df_postulantes_empleo[df_postulantes_empleo['N_DEPARTAMENTO'] == selected_dpto]['N_LOCALIDAD'].dropna().unique())
-                    selected_loc = st.selectbox(
-                        "Seleccionar localidad",
-                        options=["Todas las localidades"] + localidades,
-                        label_visibility="collapsed"
-                    )
-                elif 'N_LOCALIDAD' in df_postulantes_empleo.columns:
-                    localidades = sorted(df_postulantes_empleo['N_LOCALIDAD'].dropna().unique())
-                    selected_loc = st.selectbox(
-                        "Seleccionar localidad",
-                        options=["Todas las localidades"] + localidades,
-                        label_visibility="collapsed"
-                    )
-                else:
-                    selected_loc = "Todas las localidades"
-
-            st.markdown('</div>', unsafe_allow_html=True)
-
-            # Aplicar filtros al DataFrame
-            df_filtrado = df_postulantes_empleo.copy()
-            if selected_dpto != "Todos los departamentos":
-                df_filtrado = df_filtrado[df_filtrado['N_DEPARTAMENTO'] == selected_dpto]
-            if selected_loc != "Todas las localidades":
-                df_filtrado = df_filtrado[df_filtrado['N_LOCALIDAD'] == selected_loc]
-
-            # Mostrar mensaje con el número de registros después de aplicar los filtros
-            st.markdown(f'<div class="filter-info">Mostrando {len(df_filtrado)} postulantes</div>', unsafe_allow_html=True)
-
-
-            # KPIs principales
-            total_cuil_unicos = df_filtrado['CUIL'].nunique() if 'CUIL' in df_filtrado.columns else 0
-            cantidad_cvs = df_filtrado['ID_DOCUMENTO_CV'].dropna().nunique() if 'ID_DOCUMENTO_CV' in df_filtrado.columns else 0
-
-            kpi_data = [
-                {
-                    "title": "Postulantes (CUIL únicos)",
-                    "value_form": f"{total_cuil_unicos:,}".replace(',', '.'),
-                    "color_class": "kpi-primary",
-                    "tooltip": "Cantidad total de postulantes únicos (basado en CUIL) después de aplicar filtros."
-                },
-                {
-                    "title": "Cantidad CVs Cargados",
-                    "value_form": f"{cantidad_cvs:,}".replace(',', '.'),
-                    "color_class": "kpi-accent-2",
-                    "tooltip": "Número de currículums vitae únicos que han sido cargados por los postulantes filtrados."
-                }
-            ]
-            display_kpi_row(kpi_data)
-
-            # Gráficos en dos columnas
-            col_genero, col_edad = st.columns(2)
-
-            with col_genero:
-                st.markdown('<div class="section-title">Distribución por Género</div>', unsafe_allow_html=True)
-                if 'SEXO' in df_filtrado.columns and 'CUIL' in df_filtrado.columns and not df_filtrado['SEXO'].dropna().empty:
-                    gender_counts = df_filtrado.groupby('SEXO')['CUIL'].nunique().reset_index()
-                    gender_counts.columns = ['SEXO', 'CANTIDAD']
-                    
-                    fig_gender = px.pie(
-                        gender_counts, 
-                        names='SEXO', 
-                        values='CANTIDAD', 
-                        title='Postulantes por Género (CUILs únicos)',
-                        color_discrete_sequence=px.colors.qualitative.Pastel
-                    )
-                    fig_gender.update_layout(showlegend=True, title_x=0.5)
-                    st.plotly_chart(fig_gender, use_container_width=True)
-                else:
-                    st.info("No hay datos de género o CUIL disponibles para mostrar.")
-
-            with col_edad:
-                st.markdown('<div class="section-title">Distribución por Edades</div>', unsafe_allow_html=True)
-                if 'FEC_NACIMIENTO' in df_filtrado.columns and 'CUIL' in df_filtrado.columns:
-                    df_edad = df_filtrado[['FEC_NACIMIENTO', 'CUIL']].copy().dropna()
-                    if not df_edad.empty:
-                        today = datetime.date.today()
-                        def calcular_edad(fecha_str):
-                            try:
-                                fecha = pd.to_datetime(fecha_str, errors='coerce')
-                                if pd.isnull(fecha):
-                                    return None
-                                return today.year - fecha.year - ((today.month, today.day) < (fecha.month, fecha.day))
-                            except:
-                                return None
-                        df_edad['EDAD'] = df_edad['FEC_NACIMIENTO'].apply(calcular_edad)
-                        df_edad = df_edad.dropna(subset=['EDAD'])
-
-                        bins = [18, 25, 31, 41, 51, 61, 101]
-                        labels = ['18-24', '25-30', '31-40', '41-50', '51-60', '60+']
-                        df_edad['RANGO_EDAD'] = pd.cut(df_edad['EDAD'], bins=bins, labels=labels, right=False)
-                        
-                        edad_cuil_counts = df_edad.groupby('RANGO_EDAD')['CUIL'].nunique().reset_index()
-                        edad_cuil_counts.columns = ['Rango de Edad', 'Postulantes Únicos']
-
-                        fig_edades = px.bar(
-                            edad_cuil_counts,
-                            x='Rango de Edad',
-                            y='Postulantes Únicos',
-                            title='Postulantes por Rango de Edad',
-                            color_discrete_sequence=px.colors.qualitative.Vivid
-                        )
-                        fig_edades.update_layout(title_x=0.5)
-                        st.plotly_chart(fig_edades, use_container_width=True)
-                    else:
-                        st.info("No hay datos de edad válidos para graficar.")
-                else:
-                    st.info("No se encontró la columna FEC_NACIMIENTO o CUIL.")
-
-            # Botón de Descarga
-            st.markdown('<div class="section-title">Descargar Datos</div>', unsafe_allow_html=True)
-            st.write("Usa el siguiente botón para descargar los datos de los postulantes filtrados en formato CSV.")
-
-            @st.cache_data
-            def convert_df_to_csv(df):
-                # IMPORTANT: Cache the conversion to prevent computation on every rerun
-                return df.to_csv(index=False).encode('utf-8')
-
-            csv_data = convert_df_to_csv(df_filtrado)
-
-            st.download_button(
-                label="📥 Descargar Tabla de Postulantes (CSV)",
-                data=csv_data,
-                file_name=f"postulantes_empleo_{datetime.date.today()}.csv",
-                mime="text/csv",
-                use_container_width=True
-            )
+            show_postulantes(df_postulantes_empleo)
         
         # Contenido de la pestaña Beneficiarios
         with tab_beneficiarios:
-            st.markdown('<div class="section-title">Inscriptos y Beneficiarios de todos lo programas de la gestión</div>', unsafe_allow_html=True)
-
-            df_inscriptos_filtrado = render_tab_filters(df_inscriptos, key_prefix="benef_tab")
-            
-            # Conteo de ID_FICHA por PROGRAMA y ESTADO_FICHA
-            pivot_table = df_inscriptos_filtrado.pivot_table(
-                index='PROGRAMA',
-                columns='N_ESTADO_FICHA',
-                values='ID_FICHA',
-                aggfunc='count',
-                fill_value=0
-            )
-            
-            # Definir el orden de las columnas por grupos
-            grupo1 = ["POSTULANTE APTO", "INSCRIPTO", "BENEFICIARIO"]
-            grupo2 = ["INSCRIPTO - CTI", "RETENIDO - CTI", "VALIDADO - CTI", "BENEFICIARIO- CTI", "BAJA - CTI"]
-            grupo3 = ["POSTULANTE SIN EMPRESA", "FUERA CUPO DE EMPRESA", "RECHAZO FORMAL", "INSCRIPTO NO ACEPTADO", "DUPLICADO", "EMPRESA NO APTA"]
-            
-            # Crear una lista con todas las columnas en el orden deseado
-            columnas_ordenadas = grupo1 + grupo2 + grupo3
-            
-            # Añadir totales primero para cálculos internos, pero no los mostraremos
-            pivot_table['Total'] = pivot_table.sum(axis=1)
-            pivot_table.loc['Total'] = pivot_table.sum()
-            
-            # Reordenar con las columnas existentes más cualquier otra columna y el total al final (para cálculos)
-            pivot_table = pivot_table.reindex(columns=columnas_ordenadas + [col for col in pivot_table.columns if col not in columnas_ordenadas and col != 'Total'] + ['Total'])
-            
-            # Mostrar tabla con estilo mejorado
-            st.markdown('<div class="section-title">Conteo de personas por Programa y Estado</div>', unsafe_allow_html=True)
-            
-            # Convertir pivot table a DataFrame para mejor visualización
-            pivot_df = pivot_table.reset_index()
-            
-            # Separar las columnas por grupos
-            grupo1_cols = [col for col in grupo1 if col in pivot_table.columns]
-            grupo2_cols = [col for col in grupo2 if col in pivot_table.columns]
-            grupo3_cols = [col for col in grupo3 if col in pivot_table.columns]
-            otros_cols = [col for col in pivot_table.columns if col not in grupo1 and col not in grupo2 and col not in grupo3 and col != 'Total' and col != 'PROGRAMA']
-            
-            # Quitar columna EX BENEFICIARIO y añadir columna Sub total
-            cols_to_sum = [col for col in pivot_table.columns if col in ("BENEFICIARIO", "BENEFICIARIO- CTI")]
-            columns_no_ex = [col for col in pivot_table.columns if col != "EX BENEFICARIO"]
-            columns_final = columns_no_ex + ["Sub total"]
-
-            html_table_main = """
-            <div style="overflow-x: auto; margin-bottom: 20px;">
-                <table class="styled-table">
-                    <thead>
-                        <tr>
-                            <th rowspan="2">PROGRAMA</th>
-                            <th colspan="{}" style="background-color: var(--color-primary); border-right: 2px solid white;">Beneficiarios EL (Entrenamiento Laboral)</th>
-                            <th colspan="{}" style="background-color: var(--color-secondary); border-right: 2px solid white;">Beneficiarios CTI (Contratados)</th>
-                            <th rowspan="2" style="background-color: #e6f0f7; color: #333;">Totales Beneficiario</th>
-                        </tr>
-                        <tr>
-            """.format(
-                len(grupo1_cols),
-                len(grupo2_cols)
-            )
-            
-            # Agregar las cabeceras de columnas para la tabla principal
-            for col in grupo1_cols + grupo2_cols:
-                # Determinar el estilo según el grupo
-                if col == "BENEFICIARIO":
-                    style = 'style="background-color: #0066a0; color: white;"'  # Versión más oscura del color primario
-                elif col == "BENEFICIARIO- CTI":
-                    style = 'style="background-color: #0080b3; color: white;"'  # Versión más oscura del color secundario
-                elif col in grupo1:
-                    style = 'style="background-color: var(--color-primary);"'
-                elif col in grupo2:
-                    style = 'style="background-color: var(--color-secondary);"'
-                else:
-                    style = 'style="background-color: var(--color-accent-2);"'
-                
-                # Agregar el tooltip si existe para este estado
-                tooltip = ESTADO_TOOLTIPS.get(col, "")
-                if tooltip:
-                    html_table_main += f'<th {style} title="{tooltip}">{col}</th>'
-                else:
-                    html_table_main += f'<th {style}>{col}</th>'
-            
-            html_table_main += """
-                        </tr>
-                    </thead>
-                    <tbody>
-            """
-            
-            # Agregar filas de datos para la tabla principal
-            for index, row in pivot_df.iterrows():
-                html_table_main += '<tr>'
-                
-                # Columna PROGRAMA
-                if row['PROGRAMA'] == 'Total':
-                    html_table_main += f'<td style="font-weight: bold; background-color: #f2f2f2;">{row["PROGRAMA"]}</td>'
-                else:
-                    html_table_main += f'<td>{row["PROGRAMA"]}</td>'
-                
-                # Columnas de datos para grupos 1 y 2
-                for col in grupo1_cols + grupo2_cols:
-                    if row['PROGRAMA'] == 'Total':
-                        # Destacar también las celdas de totales para BENEFICIARIO y BENEFICIARIO- CTI
-                        if col == "BENEFICIARIO":
-                            cell_style = 'style="font-weight: bold; background-color: #e6f0f7; text-align: right;"'
-                        elif col == "BENEFICIARIO- CTI":
-                            cell_style = 'style="font-weight: bold; background-color: #e6f0f7; text-align: right;"'
-                        else:
-                            cell_style = 'style="font-weight: bold; background-color: #f2f2f2; text-align: right;"'
-                    else:
-                        # Destacar las celdas de datos para BENEFICIARIO y BENEFICIARIO- CTI
-                        if col == "BENEFICIARIO":
-                            cell_style = 'style="background-color: #e6f0f7; text-align: right;"'
-                        elif col == "BENEFICIARIO- CTI":
-                            cell_style = 'style="background-color: #e6f0f7; text-align: right;"'
-                        else:
-                            cell_style = 'style="text-align: right;"'
-                    
-                    # Manejar posibles valores NaN antes de convertir a entero
-                    if pd.isna(row[col]):
-                        html_table_main += f'<td {cell_style}>0</td>'
-                    else:
-                        html_table_main += f'<td {cell_style}>{int(row[col]):,}'.replace(',', '.')+'</td>'
-                
-                # Celda Sub total
-                val1 = int(row['BENEFICIARIO']) if 'BENEFICIARIO' in row and not pd.isnull(row['BENEFICIARIO']) else 0
-                val2 = int(row['BENEFICIARIO- CTI']) if 'BENEFICIARIO- CTI' in row and not pd.isnull(row['BENEFICIARIO- CTI']) else 0
-                cell_value = val1 + val2
-                cell_style = 'style="background-color: #e6f0f7; text-align: right; font-weight: bold;"'
-                html_table_main += f'<td {cell_style}>{cell_value:,}'.replace(',', '.')+'</td>'
-                html_table_main += '</tr>'
-            
-            html_table_main += """
-                    </tbody>
-                </table>
-            </div>
-            """
-            
-            # Mostrar la tabla principal
-            st.markdown(html_table_main, unsafe_allow_html=True)
-            
-            # Crear un botón desplegable para mostrar la tabla del grupo 3 y otros
-            if grupo3_cols or otros_cols:  # Solo mostrar si hay columnas del grupo 3 u otros
-                with st.expander("Ver casos especiales (Bajas y Rechazos) y otros estados"):
-                    # Crear HTML para la tabla del grupo 3 y otros
-                    html_table_grupo3 = """
-                    <div style="overflow-x: auto; margin-bottom: 20px;">
-                        <table class="styled-table">
-                            <thead>
-                                <tr>
-                                    <th>PROGRAMA</th>
-                    """
-                    
-                    # Agregar cabeceras para el grupo 3
-                    for col in grupo3_cols:
-                        if col == "BENEFICIARIO":
-                            style = 'style="background-color: #0066a0; color: white;"'  # Versión más oscura del color primario
-                        elif col == "BENEFICIARIO- CTI":
-                            style = 'style="background-color: #0080b3; color: white;"'  # Versión más oscura del color secundario
-                        else:
-                            style = 'style="background-color: var(--color-accent-3);"'
-                        html_table_grupo3 += f'<th {style}>{col}</th>'
-                    
-                    # Agregar cabeceras para otros
-                    if otros_cols:
-                        # Crear un título para la sección "Otros" que incluya los nombres de los estados
-                        otros_nombres = ", ".join(otros_cols)
-                        html_table_grupo3 += f'<th colspan="{len(otros_cols)}" style="background-color: var(--color-accent-2);">Otros (Estados: {otros_nombres})</th>'
-                    
-                    # Si hay columnas en "otros", agregar una segunda fila para los nombres específicos
-                    if otros_cols:
-                        html_table_grupo3 += """
-                                </tr>
-                                <tr>
-                                    <th></th>
-                        """
-                        # Agregar los nombres de cada estado en "otros"
-                        for _ in grupo3_cols:
-                            html_table_grupo3 += "<th></th>"  # Celdas vacías para alinear con grupo3
-                        
-                        for col in otros_cols:
-                            if col == "BENEFICIARIO":
-                                style = 'style="background-color: #0066a0; color: white;"'  # Versión más oscura del color primario
-                            elif col == "BENEFICIARIO- CTI":
-                                style = 'style="background-color: #0080b3; color: white;"'  # Versión más oscura del color secundario
-                            else:
-                                style = 'style="background-color: var(--color-accent-2);"'
-                            html_table_grupo3 += f'<th {style}>{col}</th>'
-                    
-                    html_table_grupo3 += """
-                                </tr>
-                            </thead>
-                            <tbody>
-                    """
-                    
-                    # Agregar filas de datos para la tabla del grupo 3 y otros
-                    for index, row in pivot_df.iterrows():
-                        if row['PROGRAMA'] != 'Total':
-                            html_table_grupo3 += '<tr>'
-                            
-                            # Columna PROGRAMA
-                            html_table_grupo3 += f'<td>{row["PROGRAMA"]}</td>'
-                            
-                            # Columnas de datos para el grupo 3
-                            for col in grupo3_cols:
-                                # Destacar las celdas de datos para BENEFICIARIO y BENEFICIARIO- CTI
-                                if col == "BENEFICIARIO":
-                                    cell_style = 'style="background-color: #e6f0f7; text-align: right;"'
-                                elif col == "BENEFICIARIO- CTI":
-                                    cell_style = 'style="background-color: #e6f0f7; text-align: right;"'
-                                else:
-                                    cell_style = 'style="text-align: right;"'
-                                # Manejar posibles valores NaN antes de convertir a entero
-                                if pd.isna(row[col]):
-                                    html_table_grupo3 += f'<td {cell_style}>0</td>'
-                                else:
-                                    html_table_grupo3 += f'<td {cell_style}>{int(row[col]):,}'.replace(',', '.')+'</td>'
-                            
-                            # Columnas de datos para otros
-                            for col in otros_cols:
-                                # Destacar las celdas de datos para BENEFICIARIO y BENEFICIARIO- CTI
-                                if col == "BENEFICIARIO":
-                                    cell_style = 'style="background-color: #e6f0f7; text-align: right;"'
-                                elif col == "BENEFICIARIO- CTI":
-                                    cell_style = 'style="background-color: #e6f0f7; text-align: right;"'
-                                else:
-                                    cell_style = 'style="text-align: right;"'
-                                # Manejar posibles valores NaN antes de convertir a entero
-                                if pd.isna(row[col]):
-                                    html_table_grupo3 += f'<td {cell_style}>0</td>'
-                                else:
-                                    html_table_grupo3 += f'<td {cell_style}>{int(row[col]):,}'.replace(',', '.')+'</td>'
-                            
-                            html_table_grupo3 += '</tr>'
-                    
-                    html_table_grupo3 += """
-                            </tbody>
-                        </table>
-                    </div>
-                    """
-                    
-                    # Mostrar la tabla del grupo 3 y otros
-                    st.markdown(html_table_grupo3, unsafe_allow_html=True)
-            
-            # Mostrar tabla de beneficiarios por localidad
-            st.subheader("Beneficiarios por Localidad")
-            
-            # Filtrar solo beneficiarios
-            beneficiarios_estados = ["BENEFICIARIO", "BENEFICIARIO- CTI"]
-            df_beneficiarios = df_inscriptos[df_inscriptos['N_ESTADO_FICHA'].isin(beneficiarios_estados)]
-            
-            if df_beneficiarios.empty:
-                st.warning("No hay beneficiarios con los filtros seleccionados.")
-            else:
-                # Enfoque más directo: separar por tipo de beneficiario y luego unir
-                # 1. Crear dataframe para beneficiarios EL
-                df_beneficiarios_el = df_beneficiarios[df_beneficiarios['N_ESTADO_FICHA'] == "BENEFICIARIO"]
-                df_el_count = df_beneficiarios_el.groupby(['N_DEPARTAMENTO', 'N_LOCALIDAD']).size().reset_index(name='BENEFICIARIO')
-                
-                # 2. Crear dataframe para beneficiarios CTI
-                df_beneficiarios_cti = df_beneficiarios[df_beneficiarios['N_ESTADO_FICHA'] == "BENEFICIARIO- CTI"]
-                df_cti_count = df_beneficiarios_cti.groupby(['N_DEPARTAMENTO', 'N_LOCALIDAD']).size().reset_index(name='BENEFICIARIO- CTI')
-                
-                # 3. Unir los dos dataframes
-                df_mapa = pd.merge(df_el_count, df_cti_count, on=['N_DEPARTAMENTO', 'N_LOCALIDAD'], how='outer')
-                
-                # 4. Rellenar los NAs con ceros
-                df_mapa['BENEFICIARIO'] = df_mapa['BENEFICIARIO'].fillna(0).astype(int)
-                df_mapa['BENEFICIARIO- CTI'] = df_mapa['BENEFICIARIO- CTI'].fillna(0).astype(int)
-                
-                # 5. Añadir columna de total
-                df_mapa['TOTAL'] = df_mapa['BENEFICIARIO'] + df_mapa['BENEFICIARIO- CTI']
-                # Ordenar por 'TOTAL' descendente (y N_DEPARTAMENTO como criterio secundario)
-                df_mapa_sorted = df_mapa.sort_values(['TOTAL', 'N_DEPARTAMENTO'], ascending=[False, True])
-                
-                # Aplicar formato y estilo a la tabla
-                styled_df = df_mapa_sorted.style \
-                    .background_gradient(subset=['BENEFICIARIO', 'BENEFICIARIO- CTI', 'TOTAL'], cmap='Blues') \
-                    .format(thousands=".", precision=0)
-                
-                # Mostrar tabla con estilo mejorado y sin índice
-                st.dataframe(
-                    styled_df,
-                    use_container_width=True,
-                    hide_index=True,
-                    column_config={
-                        "N_DEPARTAMENTO": st.column_config.TextColumn(
-                            "Departamento"),
-                        "N_LOCALIDAD": st.column_config.TextColumn(
-                            "Localidad"),
-                        "BENEFICIARIO": st.column_config.NumberColumn(
-                            "Beneficiarios",
-                            help="Cantidad de beneficiarios regulares"),
-                        "BENEFICIARIO- CTI": st.column_config.NumberColumn(
-                            "Beneficiarios CTI",
-                            help="Beneficiarios en situación crítica"),
-                        "TOTAL": st.column_config.NumberColumn(
-                            "Total General",
-                            help="Suma total de beneficiarios")
-                    },
-                    height=400
-                )
-            
-            # Mostrar distribución geográfica si hay datos geojson y no hay filtros específicos
-            if df_inscriptos_filtrado['N_DEPARTAMENTO'].nunique() == 1:
-                st.markdown('<h3 style="font-size: 20px; margin: 20px 0 15px 0;">Distribución Geográfica</h3>', unsafe_allow_html=True)
-                
-                # Filtrar solo beneficiarios
-                beneficiarios_estados = ["BENEFICIARIO", "BENEFICIARIO- CTI"]
-                df_beneficiarios = df_inscriptos[df_inscriptos['N_ESTADO_FICHA'].isin(beneficiarios_estados)]
-                
-                if df_beneficiarios.empty:
-                    st.warning("No hay beneficiarios para mostrar en el mapa.")
-                    return
-                
-                # Enfoque más directo: separar por tipo de beneficiario y luego unir
-                # 1. Crear dataframe para beneficiarios EL
-                df_beneficiarios_el = df_beneficiarios[df_beneficiarios['N_ESTADO_FICHA'] == "BENEFICIARIO"]
-                df_el_count = df_beneficiarios_el.groupby(['ID_DEPARTAMENTO_GOB', 'N_DEPARTAMENTO']).size().reset_index(name='BENEFICIARIO')
-                
-                # 2. Crear dataframe para beneficiarios CTI
-                df_beneficiarios_cti = df_beneficiarios[df_beneficiarios['N_ESTADO_FICHA'] == "BENEFICIARIO- CTI"]
-                df_cti_count = df_beneficiarios_cti.groupby(['ID_DEPARTAMENTO_GOB', 'N_DEPARTAMENTO']).size().reset_index(name='BENEFICIARIO- CTI')
-                
-                # 3. Unir los dos dataframes
-                df_mapa = pd.merge(df_el_count, df_cti_count, on=['ID_DEPARTAMENTO_GOB', 'N_DEPARTAMENTO'], how='outer')
-                
-                # 4. Rellenar los NAs con ceros
-                df_mapa['BENEFICIARIO'] = df_mapa['BENEFICIARIO'].fillna(0).astype(int)
-                df_mapa['BENEFICIARIO- CTI'] = df_mapa['BENEFICIARIO- CTI'].fillna(0).astype(int)
-                
-                # 5. Añadir columna de total
-                df_mapa['Total'] = df_mapa['BENEFICIARIO'] + df_mapa['BENEFICIARIO- CTI']
-                
-                # Convertir a string para el mapa (sin decimales porque ya es entero)
-                df_mapa['ID_DEPARTAMENTO_GOB'] = df_mapa['ID_DEPARTAMENTO_GOB'].apply(lambda x: str(int(x)) if pd.notnull(x) else "")
-                
-                # Reemplazar "-1" con un valor adecuado para NaN si es necesario
-                df_mapa.loc[df_mapa['ID_DEPARTAMENTO_GOB'] == "-1", 'ID_DEPARTAMENTO_GOB'] = "Sin asignar"
-                
-                # Detectar si geojson_data es un DataFrame y convertir a GeoJSON estándar
-                import geopandas as gpd
-                geojson_dict = None
-                if isinstance(geojson_data, (pd.DataFrame, gpd.GeoDataFrame)):
-                    try:
-                        gdf = gpd.GeoDataFrame(geojson_data)
-                        geojson_dict = gdf.__geo_interface__
-                    except Exception as e:
-                        st.error(f"Error convirtiendo DataFrame a GeoJSON: {e}")
-                elif isinstance(geojson_data, dict) and 'features' in geojson_data:
-                    geojson_dict = geojson_data
-                else:
-                    st.warning("geojson_data no es un DataFrame ni un GeoJSON estándar. Revisa la fuente de datos.")
-
-                # Normalizar tipos y depurar IDs antes de graficar
-                if isinstance(geojson_dict, dict) and 'features' in geojson_dict:
-                    for f in geojson_dict['features']:
-                        f['properties']['CODDEPTO'] = str(f['properties']['CODDEPTO']).strip()
-
-                else:
-                    st.warning("geojson_dict no tiene la clave 'features' o no es un dict. Revisa la carga del GeoJSON.")
-                
-                # Crear un layout con 4 columnas (3 para la tabla y 1 para el mapa)
-                table_col, map_col = st.columns([3, 1])
-                
-                # Mostrar tabla de datos para el mapa en las primeras 3 columnas
-                with table_col:
-                    st.markdown(f"### Beneficiarios por Departamento")
-                    # Crear una copia del dataframe sin la columna ID_DEPARTAMENTO_GOB para mostrar
-                    df_mapa_display = df_mapa.drop(columns=['ID_DEPARTAMENTO_GOB']).copy()
-                    # Renombrar columnas para mejor visualización
-                    df_mapa_display = df_mapa_display.rename(columns={
-                        'N_DEPARTAMENTO': 'Departamento',
-                        'BENEFICIARIO': 'Beneficiarios EL',
-                        'BENEFICIARIO- CTI': 'Beneficiarios CTI',
-                        'Total': 'Total Beneficiarios'
-                    })
-                    st.dataframe(df_mapa_display, use_container_width=True)
-
-                # Crear y mostrar el mapa usando Plotly en la última columna
-                with map_col:
-                    with st.spinner("Generando mapa..."):
-                        fig = px.choropleth_mapbox(
-                            df_mapa,
-                            geojson=geojson_dict,
-                            locations='ID_DEPARTAMENTO_GOB',
-                            color='Total',
-                            featureidkey="properties.CODDEPTO",
-                            hover_data=['N_DEPARTAMENTO', 'BENEFICIARIO', 'BENEFICIARIO- CTI', 'Total'],
-                            center={"lat": -31.4, "lon": -64.2},  # Coordenadas aproximadas de Córdoba
-                            zoom=6,  # Nivel de zoom
-                            opacity=0.7,  # Opacidad de los polígonos
-                            mapbox_style="carto-positron",  # Estilo de mapa más limpio
-                            color_continuous_scale="Blues",
-                            labels={'Total': 'Beneficiarios'},
-                            title="Distribución de Beneficiarios"
-                        )
-                        
-                        # Ajustar el diseño
-                        fig.update_layout(
-                            margin={"r":0,"t":50,"l":0,"b":0},
-                            coloraxis_colorbar={
-                                "title": "Cantidad",
-                                "tickformat": ",d"
-                            },
-                            title={
-                                'text': "Beneficiarios por Departamento",
-                                'y':0.97,
-                                'x':0.5,
-                                'xanchor': 'center',
-                                'yanchor': 'top'
-                            },
-                            # Reducir el tamaño para adaptarse a la columna más pequeña
-                            height=400
-                        )
-                        
-                        st.plotly_chart(fig, use_container_width=True)
+            show_inscriptions(df_inscriptos, geojson_data)
         
         with tab_empresas:
         
@@ -788,6 +225,168 @@ def render_dashboard(df_postulantes_empleo,df_inscriptos, df_empresas, geojson_d
             
         
        
+
+def show_postulantes(df_postulantes_empleo):
+    """
+    Display postulantes dashboard with filters, KPIs, and visualizations.
+    
+    Args:
+        df_postulantes_empleo (pd.DataFrame): DataFrame containing postulantes data
+    """
+    try:
+        st.markdown('<div class="section-title">Postulantes EMPLEO +26 [2025]</div>', unsafe_allow_html=True)
+            
+        # Filtros visuales en dos columnas
+        st.markdown('<div class="filter-section">', unsafe_allow_html=True)
+        col_filtro1, col_filtro2 = st.columns(2)
+        
+        # Primera columna: filtro de departamento
+        with col_filtro1:
+            st.markdown('<div class="filter-label">Departamento:</div>', unsafe_allow_html=True)
+            if 'N_DEPARTAMENTO' in df_postulantes_empleo.columns:
+                departamentos = sorted(df_postulantes_empleo['N_DEPARTAMENTO'].dropna().unique())
+                selected_dpto = st.selectbox(
+                    "Seleccionar departamento",
+                    options=["Todos los departamentos"] + departamentos,
+                    label_visibility="collapsed"
+                )
+            else:
+                selected_dpto = "Todos los departamentos"
+
+        # Segunda columna: filtro de localidad dependiente del departamento
+        with col_filtro2:
+            st.markdown('<div class="filter-label">Localidad:</div>', unsafe_allow_html=True)
+            if selected_dpto != "Todos los departamentos" and 'N_LOCALIDAD' in df_postulantes_empleo.columns:
+                localidades = sorted(df_postulantes_empleo[df_postulantes_empleo['N_DEPARTAMENTO'] == selected_dpto]['N_LOCALIDAD'].dropna().unique())
+                selected_loc = st.selectbox(
+                    "Seleccionar localidad",
+                    options=["Todas las localidades"] + localidades,
+                    label_visibility="collapsed"
+                )
+            elif 'N_LOCALIDAD' in df_postulantes_empleo.columns:
+                localidades = sorted(df_postulantes_empleo['N_LOCALIDAD'].dropna().unique())
+                selected_loc = st.selectbox(
+                    "Seleccionar localidad",
+                    options=["Todas las localidades"] + localidades,
+                    label_visibility="collapsed"
+                )
+            else:
+                selected_loc = "Todas las localidades"
+
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        # Aplicar filtros al DataFrame
+        df_filtrado = df_postulantes_empleo.copy()
+        if selected_dpto != "Todos los departamentos":
+            df_filtrado = df_filtrado[df_filtrado['N_DEPARTAMENTO'] == selected_dpto]
+        if selected_loc != "Todas las localidades":
+            df_filtrado = df_filtrado[df_filtrado['N_LOCALIDAD'] == selected_loc]
+
+        # Mostrar mensaje con el número de registros después de aplicar los filtros
+        st.markdown(f'<div class="filter-info">Mostrando {len(df_filtrado)} postulantes</div>', unsafe_allow_html=True)
+
+
+        # KPIs principales
+        total_cuil_unicos = df_filtrado['CUIL'].nunique() if 'CUIL' in df_filtrado.columns else 0
+        cantidad_cvs = df_filtrado['ID_DOCUMENTO_CV'].dropna().nunique() if 'ID_DOCUMENTO_CV' in df_filtrado.columns else 0
+
+        kpi_data = [
+            {
+                "title": "Postulantes (CUIL únicos)",
+                "value_form": f"{total_cuil_unicos:,}".replace(',', '.'),
+                "color_class": "kpi-primary",
+                "tooltip": "Cantidad total de postulantes únicos (basado en CUIL) después de aplicar filtros."
+            },
+            {
+                "title": "Cantidad CVs Cargados",
+                "value_form": f"{cantidad_cvs:,}".replace(',', '.'),
+                "color_class": "kpi-accent-2",
+                "tooltip": "Número de currículums vitae únicos que han sido cargados por los postulantes filtrados."
+            }
+        ]
+        display_kpi_row(kpi_data)
+
+        # Gráficos en dos columnas
+        col_genero, col_edad = st.columns(2)
+
+        with col_genero:
+            st.markdown('<div class="section-title">Distribución por Género</div>', unsafe_allow_html=True)
+            if 'SEXO' in df_filtrado.columns and 'CUIL' in df_filtrado.columns and not df_filtrado['SEXO'].dropna().empty:
+                gender_counts = df_filtrado.groupby('SEXO')['CUIL'].nunique().reset_index()
+                gender_counts.columns = ['SEXO', 'CANTIDAD']
+                
+                fig_gender = px.pie(
+                    gender_counts, 
+                    names='SEXO', 
+                    values='CANTIDAD', 
+                    title='Postulantes por Género (CUILs únicos)',
+                    color_discrete_sequence=px.colors.qualitative.Pastel
+                )
+                fig_gender.update_layout(showlegend=True, title_x=0.5)
+                st.plotly_chart(fig_gender, use_container_width=True)
+            else:
+                st.info("No hay datos de género o CUIL disponibles para mostrar.")
+
+        with col_edad:
+            st.markdown('<div class="section-title">Distribución por Edades</div>', unsafe_allow_html=True)
+            if 'FEC_NACIMIENTO' in df_filtrado.columns and 'CUIL' in df_filtrado.columns:
+                df_edad = df_filtrado[['FEC_NACIMIENTO', 'CUIL']].copy().dropna()
+                if not df_edad.empty:
+                    today = datetime.date.today()
+                    def calcular_edad(fecha_str):
+                        try:
+                            fecha = pd.to_datetime(fecha_str, errors='coerce')
+                            if pd.isnull(fecha):
+                                return None
+                            return today.year - fecha.year - ((today.month, today.day) < (fecha.month, fecha.day))
+                        except:
+                            return None
+                    df_edad['EDAD'] = df_edad['FEC_NACIMIENTO'].apply(calcular_edad)
+                    df_edad = df_edad.dropna(subset=['EDAD'])
+
+                    bins = [18, 25, 31, 41, 51, 61, 101]
+                    labels = ['18-24', '25-30', '31-40', '41-50', '51-60', '60+']
+                    df_edad['RANGO_EDAD'] = pd.cut(df_edad['EDAD'], bins=bins, labels=labels, right=False)
+                    
+                    edad_cuil_counts = df_edad.groupby('RANGO_EDAD')['CUIL'].nunique().reset_index()
+                    edad_cuil_counts.columns = ['Rango de Edad', 'Postulantes Únicos']
+
+                    fig_edades = px.bar(
+                        edad_cuil_counts,
+                        x='Rango de Edad',
+                        y='Postulantes Únicos',
+                        title='Postulantes por Rango de Edad',
+                        color_discrete_sequence=px.colors.qualitative.Vivid
+                    )
+                    fig_edades.update_layout(title_x=0.5)
+                    st.plotly_chart(fig_edades, use_container_width=True)
+                else:
+                    st.info("No hay datos de edad válidos para graficar.")
+            else:
+                st.info("No se encontró la columna FEC_NACIMIENTO o CUIL.")
+
+        # Botón de Descarga
+        st.markdown('<div class="section-title">Descargar Datos</div>', unsafe_allow_html=True)
+        st.write("Usa el siguiente botón para descargar los datos de los postulantes filtrados en formato CSV.")
+
+        @st.cache_data
+        def convert_df_to_csv(df):
+            # IMPORTANT: Cache the conversion to prevent computation on every rerun
+            return df.to_csv(index=False).encode('utf-8')
+
+        csv_data = convert_df_to_csv(df_filtrado)
+
+        st.download_button(
+            label="📥 Descargar Tabla de Postulantes (CSV)",
+            data=csv_data,
+            file_name=f"postulantes_empleo_{datetime.date.today()}.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
+        
+    except Exception as e:
+        st.error(f"Error al mostrar los datos de postulantes: {str(e)}")
+        st.info("Por favor, verifica que los datos estén correctamente cargados.")
 
 def show_companies(df_empresas):
     # Asegúrate de que las columnas numéricas sean del tipo correcto
@@ -1089,19 +688,18 @@ def show_companies(df_empresas):
 
             st.markdown('</div>', unsafe_allow_html=True)
 
-def show_inscriptions(df_inscriptos, file_date):
+def show_inscriptions(df_inscriptos_empleo, geojson_data):
     """
     Muestra la vista de inscripciones con mejor estilo visual
+    Combina la funcionalidad actual con la pestaña de Inscriptos y Beneficiarios
     
     Args:
-        df_inscriptos: DataFrame de VT_REPORTES_PPP_MAS26.parquet
-        df_poblacion: DataFrame de poblacion_departamentos.csv (puede ser None)
+        df_inscriptos_empleo: DataFrame de inscriptos y beneficiarios
         geojson_data: Datos GeoJSON para mapas
-        file_date: Fecha de actualización de los archivos
     """
     
     # Verificar que los DataFrames no estén vacíos
-    if df_inscriptos is None:
+    if df_inscriptos_empleo is None:
         st.markdown("""
             <div class="info-box status-warning">
                 <strong>Información:</strong> Uno o más DataFrames necesarios no están disponibles.
@@ -1111,8 +709,8 @@ def show_inscriptions(df_inscriptos, file_date):
     
     try:
         # Limpiar CUIL
-        if 'CUIL' in df_inscriptos.columns:
-            df_inscriptos['CUIL'] = df_inscriptos['CUIL'].astype(str).str.replace("-", "", regex=False)
+        if 'CUIL' in df_inscriptos_empleo.columns:
+            df_inscriptos_empleo['CUIL'] = df_inscriptos_empleo['CUIL'].astype(str).str.replace("-", "", regex=False)
         
         # Definir mapeo de programas según IDETAPA
         programas = {
@@ -1122,103 +720,424 @@ def show_inscriptions(df_inscriptos, file_date):
             55: "Nueva Oportunidad"
         }
         
-        # Filtrar para obtener solo los registros con IDETAPA válidas
-        if 'IDETAPA' in df_inscriptos.columns:
+        # Mostrar selector de programa si existe la columna IDETAPA
+        programa_seleccionado = None
+        programa_seleccionado_nombre = "Todos los programas"
+        
+        if 'IDETAPA' in df_inscriptos_empleo.columns:
             # Obtener las etapas disponibles en los datos
-            etapas_disponibles = df_inscriptos['IDETAPA'].dropna().unique()
+            etapas_disponibles = df_inscriptos_empleo['IDETAPA'].dropna().unique()
             etapas_validas = [etapa for etapa in etapas_disponibles if etapa in programas.keys()]
             
-            if len(etapas_validas) == 0:
-                st.warning("No se encontraron programas válidos en los datos.")
-                return
+            if len(etapas_validas) > 0:
+                # Crear selector de programa con estilo mejorado
+                st.markdown('<div style="background-color: #f0f2f6; padding: 15px; border-radius: 10px; margin-bottom: 20px;">', unsafe_allow_html=True)
+                st.markdown('<h3 style="font-size: 18px; margin: 0 0 10px 0;">Seleccionar Programa (Opcional)</h3>', unsafe_allow_html=True)
                 
-            # Crear selector de programa con estilo mejorado
-            st.markdown('<div style="background-color: #f0f2f6; padding: 15px; border-radius: 10px; margin-bottom: 20px;">', unsafe_allow_html=True)
-            st.markdown('<h3 style="font-size: 18px; margin: 0 0 10px 0;">Seleccionar Programa</h3>', unsafe_allow_html=True)
+                # Crear opciones para el selector (incluir opción "Todos")
+                opciones_programa = {"Todos los programas": None}
+                opciones_programa.update({programas.get(etapa, f"Programa {etapa}"): etapa for etapa in etapas_validas})
+                
+                # Selector de programa
+                programa_seleccionado_nombre = st.selectbox(
+                    "Programa:",
+                    options=list(opciones_programa.keys()),
+                    index=0,
+                    label_visibility="collapsed"
+                )
+                
+                # Obtener el ID de etapa seleccionado
+                programa_seleccionado = opciones_programa[programa_seleccionado_nombre]
+                
+                st.markdown('</div>', unsafe_allow_html=True)
+
+        # === SECCIÓN 2: FILTROS DE LA PESTAÑA BENEFICIARIOS ===
+        df_inscriptos_filtrado = render_tab_filters(df_inscriptos_empleo, key_prefix="benef_tab")
+        
+        # Aplicar filtro de programa si se seleccionó uno específico
+        if programa_seleccionado is not None:
+            df_inscriptos_filtrado = df_inscriptos_filtrado[df_inscriptos_filtrado['IDETAPA'] == programa_seleccionado]
+            st.info(f"Mostrando datos filtrados para: {programa_seleccionado_nombre}")
+
+        # === SECCIÓN 3: KPIs DEL PROGRAMA SELECCIONADO (funcionalidad original) ===
+        if programa_seleccionado is not None:
+            # Filtrar los datos según el programa seleccionado para KPIs específicos
+            df_programa = df_inscriptos_empleo[df_inscriptos_empleo['IDETAPA'] == programa_seleccionado].copy()
             
-            
-            # Crear opciones para el selector
-            opciones_programa = {programas.get(etapa, f"Programa {etapa}"): etapa for etapa in etapas_validas}
-            
-            # Selector de programa
-            programa_seleccionado_nombre = st.selectbox(
-                "Programa:",
-                options=list(opciones_programa.keys()),
-                index=0,
-                label_visibility="collapsed"
+            # Título dinámico según el programa seleccionado
+            st.markdown(f'<h2 style="font-size: 24px; margin-bottom: 20px;">KPIs de {programa_seleccionado_nombre}</h2>', unsafe_allow_html=True)
+                
+            # Calcular métricas específicas del programa
+            if not df_programa.empty and 'ID_EST_FIC' in df_programa.columns:
+                conteo_estados = df_programa['ID_EST_FIC'].value_counts()
+                total_match = len(df_programa[df_programa['ID_EST_FIC'] == 8]) if 8 in conteo_estados else 0
+                total_empresa_no_apta = conteo_estados.get(2, 0)  
+                total_benef = conteo_estados.get(14, 0)
+                total_validos = conteo_estados.get(13, 0)
+                total_inscriptos = conteo_estados.get(12, 0)
+                total_pendientes = conteo_estados.get(3, 0)
+                total_rechazados = conteo_estados.get(17, 0) + conteo_estados.get(18, 0) + conteo_estados.get(19, 0)
+                
+                # Crear un diccionario con los resultados para pasarlo a la función de KPIs
+                resultados = {
+                    "total_match": total_match,
+                    "total_benef": total_benef,
+                    "total_validos": total_validos,
+                    "total_inscriptos": total_inscriptos,
+                    "total_pendientes": total_pendientes,
+                    "total_rechazados": total_rechazados,
+                    "total_empresa_no_apta": total_empresa_no_apta
+                }
+                
+                # Usar la función para crear los KPIs
+                kpi_data = create_empleo_kpis(resultados, programa_seleccionado_nombre)
+                display_kpi_row(kpi_data)
+
+        # === SECCIÓN 4: TABLA PIVOT DE TODOS LOS PROGRAMAS ===
+        # Conteo de ID_FICHA por PROGRAMA y ESTADO_FICHA
+        if 'PROGRAMA' in df_inscriptos_filtrado.columns and 'N_ESTADO_FICHA' in df_inscriptos_filtrado.columns:
+            pivot_table = df_inscriptos_filtrado.pivot_table(
+                index='PROGRAMA',
+                columns='N_ESTADO_FICHA',
+                values='ID_FICHA',
+                aggfunc='count',
+                fill_value=0
             )
             
-            # Obtener el ID de etapa seleccionado
-            programa_seleccionado = opciones_programa[programa_seleccionado_nombre]
+            # Definir el orden de las columnas por grupos
+            grupo1 = ["POSTULANTE APTO", "INSCRIPTO", "BENEFICIARIO"]
+            grupo2 = ["INSCRIPTO - CTI", "RETENIDO - CTI", "VALIDADO - CTI", "BENEFICIARIO- CTI", "BAJA - CTI"]
+            grupo3 = ["POSTULANTE SIN EMPRESA", "FUERA CUPO DE EMPRESA", "RECHAZO FORMAL", "INSCRIPTO NO ACEPTADO", "DUPLICADO", "EMPRESA NO APTA"]
             
-            st.markdown('</div>', unsafe_allow_html=True)
+            # Crear una lista con todas las columnas en el orden deseado
+            columnas_ordenadas = grupo1 + grupo2 + grupo3
             
-            # Filtrar los datos según el programa seleccionado
-            df_programa = df_inscriptos[df_inscriptos['IDETAPA'] == programa_seleccionado].copy()
-        else:
-            st.warning("No se encontró la columna IDETAPA en los datos.")
-            return
+            # Añadir totales primero para cálculos internos, pero no los mostraremos
+            pivot_table['Total'] = pivot_table.sum(axis=1)
+            pivot_table.loc['Total'] = pivot_table.sum()
             
-        # Título dinámico según el programa seleccionado
-        st.markdown(f'<h2 style="font-size: 24px; margin-bottom: 20px;">Dashboard de {programa_seleccionado_nombre}</h2>', unsafe_allow_html=True)
+            # Reordenar con las columnas existentes más cualquier otra columna y el total al final (para cálculos)
+            pivot_table = pivot_table.reindex(columns=columnas_ordenadas + [col for col in pivot_table.columns if col not in columnas_ordenadas and col != 'Total'] + ['Total'])
             
-        # Filtrar los DataFrames según el programa seleccionado
-        if not df_programa.empty and 'ID_EST_FIC' in df_programa.columns:
-            df_match = df_programa[(df_programa['ID_EST_FIC'] == 8)]
-            df_cti_inscripto = df_programa[(df_programa['ID_EST_FIC'] == 12) & (df_programa['ID_EMP'].notnull())]
-            df_cti_validos = df_programa[df_programa['ID_EST_FIC'] == 13]
-            df_cti_benficiario = df_programa[df_programa['ID_EST_FIC'] == 14]
-        else:
-            df_match = pd.DataFrame()
-            df_cti_inscripto = pd.DataFrame()
-            df_cti_validos = pd.DataFrame()
-            df_cti_benficiario = pd.DataFrame()
-        
+            # Mostrar tabla con estilo mejorado
+            st.markdown('<div class="section-title">Conteo de personas por Programa y Estado</div>', unsafe_allow_html=True)
+            
+            # Convertir pivot table a DataFrame para mejor visualización
+            pivot_df = pivot_table.reset_index()
+            
+            # Separar las columnas por grupos
+            grupo1_cols = [col for col in grupo1 if col in pivot_table.columns]
+            grupo2_cols = [col for col in grupo2 if col in pivot_table.columns]
+            grupo3_cols = [col for col in grupo3 if col in pivot_table.columns]
+            otros_cols = [col for col in pivot_table.columns if col not in grupo1 and col not in grupo2 and col not in grupo3 and col != 'Total' and col != 'PROGRAMA']
+            
+            # Generar tabla HTML principal
+            html_table_main = f"""
+            <div style="overflow-x: auto; margin-bottom: 20px;">
+                <table class="styled-table">
+                    <thead>
+                        <tr>
+                            <th rowspan="2">PROGRAMA</th>
+                            <th colspan="{len(grupo1_cols)}" style="background-color: var(--color-primary); border-right: 2px solid white;">Beneficiarios EL (Entrenamiento Laboral)</th>
+                            <th colspan="{len(grupo2_cols)}" style="background-color: var(--color-secondary); border-right: 2px solid white;">Beneficiarios CTI (Contratados)</th>
+                            <th rowspan="2" style="background-color: #e6f0f7; color: #333;">Totales Beneficiario</th>
+                        </tr>
+                        <tr>
+            """
+            
+            # Agregar las cabeceras de columnas para la tabla principal
+            for col in grupo1_cols + grupo2_cols:
+                # Determinar el estilo según el grupo
+                if col == "BENEFICIARIO":
+                    style = 'style="background-color: #0066a0; color: white;"'
+                elif col == "BENEFICIARIO- CTI":
+                    style = 'style="background-color: #0080b3; color: white;"'
+                elif col in grupo1:
+                    style = 'style="background-color: var(--color-primary);"'
+                elif col in grupo2:
+                    style = 'style="background-color: var(--color-secondary);"'
+                else:
+                    style = 'style="background-color: var(--color-accent-2);"'
+                
+                # Agregar el tooltip si existe para este estado
+                tooltip = ESTADO_TOOLTIPS.get(col, "")
+                if tooltip:
+                    html_table_main += f'<th {style} title="{tooltip}">{col}</th>'
+                else:
+                    html_table_main += f'<th {style}>{col}</th>'
+            
+            html_table_main += """
+                        </tr>
+                    </thead>
+                    <tbody>
+            """
+            
+            # Agregar filas de datos para la tabla principal
+            for index, row in pivot_df.iterrows():
+                html_table_main += '<tr>'
+                
+                # Columna PROGRAMA
+                if row['PROGRAMA'] == 'Total':
+                    html_table_main += f'<td style="font-weight: bold; background-color: #f2f2f2;">{row["PROGRAMA"]}</td>'
+                else:
+                    html_table_main += f'<td>{row["PROGRAMA"]}</td>'
+                
+                # Columnas de datos para grupos 1 y 2
+                for col in grupo1_cols + grupo2_cols:
+                    if row['PROGRAMA'] == 'Total':
+                        # Destacar también las celdas de totales para BENEFICIARIO y BENEFICIARIO- CTI
+                        if col == "BENEFICIARIO":
+                            cell_style = 'style="font-weight: bold; background-color: #e6f0f7; text-align: right;"'
+                        elif col == "BENEFICIARIO- CTI":
+                            cell_style = 'style="font-weight: bold; background-color: #e6f0f7; text-align: right;"'
+                        else:
+                            cell_style = 'style="font-weight: bold; background-color: #f2f2f2; text-align: right;"'
+                    else:
+                        # Destacar las celdas de datos para BENEFICIARIO y BENEFICIARIO- CTI
+                        if col == "BENEFICIARIO":
+                            cell_style = 'style="background-color: #e6f0f7; text-align: right;"'
+                        elif col == "BENEFICIARIO- CTI":
+                            cell_style = 'style="background-color: #e6f0f7; text-align: right;"'
+                        else:
+                            cell_style = 'style="text-align: right;"'
+                    
+                    # Manejar posibles valores NaN antes de convertir a entero
+                    if pd.isna(row[col]):
+                        html_table_main += f'<td {cell_style}>0</td>'
+                    else:
+                        html_table_main += f'<td {cell_style}>{int(row[col]):,}'.replace(',', '.')+'</td>'
+                
+                # Celda Sub total
+                val1 = int(row['BENEFICIARIO']) if 'BENEFICIARIO' in row and not pd.isnull(row['BENEFICIARIO']) else 0
+                val2 = int(row['BENEFICIARIO- CTI']) if 'BENEFICIARIO- CTI' in row and not pd.isnull(row['BENEFICIARIO- CTI']) else 0
+                cell_value = val1 + val2
+                cell_style = 'style="background-color: #e6f0f7; text-align: right; font-weight: bold;"'
+                html_table_main += f'<td {cell_style}>{cell_value:,}'.replace(',', '.')+'</td>'
+                html_table_main += '</tr>'
+            
+            html_table_main += """
+                    </tbody>
+                </table>
+            </div>
+            """
+            
+            # Mostrar la tabla principal
+            st.markdown(html_table_main, unsafe_allow_html=True)
+            
+            # Crear un botón desplegable para mostrar la tabla del grupo 3 y otros
+            if grupo3_cols or otros_cols:
+                with st.expander("Ver casos especiales (Bajas y Rechazos) y otros estados"):
+                    # Generar tabla HTML secundaria para grupo 3 y otros
+                    html_table_grupo3 = """
+                    <div style="overflow-x: auto; margin-bottom: 20px;">
+                        <table class="styled-table">
+                            <thead>
+                                <tr>
+                                    <th>PROGRAMA</th>
+                    """
+                    
+                    # Agregar cabeceras para el grupo 3
+                    for col in grupo3_cols:
+                        style = 'style="background-color: var(--color-accent-3);"'
+                        html_table_grupo3 += f'<th {style}>{col}</th>'
+                    
+                    # Agregar cabeceras para otros
+                    if otros_cols:
+                        otros_nombres = ", ".join(otros_cols)
+                        html_table_grupo3 += f'<th colspan="{len(otros_cols)}" style="background-color: var(--color-accent-2);">Otros (Estados: {otros_nombres})</th>'
+                    
+                    # Si hay columnas en "otros", agregar una segunda fila para los nombres específicos
+                    if otros_cols:
+                        html_table_grupo3 += """
+                                </tr>
+                                <tr>
+                                    <th></th>
+                        """
+                        # Agregar los nombres de cada estado en "otros"
+                        for _ in grupo3_cols:
+                            html_table_grupo3 += "<th></th>"
+                        
+                        for col in otros_cols:
+                            style = 'style="background-color: var(--color-accent-2);"'
+                            html_table_grupo3 += f'<th {style}>{col}</th>'
+                    
+                    html_table_grupo3 += """
+                                </tr>
+                            </thead>
+                            <tbody>
+                    """
+                    
+                    # Agregar filas de datos para la tabla del grupo 3 y otros
+                    for index, row in pivot_df.iterrows():
+                        if row['PROGRAMA'] != 'Total':
+                            html_table_grupo3 += '<tr>'
+                            html_table_grupo3 += f'<td>{row["PROGRAMA"]}</td>'
+                            
+                            # Columnas de datos para el grupo 3
+                            for col in grupo3_cols:
+                                cell_style = 'style="text-align: right;"'
+                                if pd.isna(row[col]):
+                                    html_table_grupo3 += f'<td {cell_style}>0</td>'
+                                else:
+                                    html_table_grupo3 += f'<td {cell_style}>{int(row[col]):,}'.replace(',', '.')+'</td>'
+                            
+                            # Columnas de datos para otros
+                            for col in otros_cols:
+                                cell_style = 'style="text-align: right;"'
+                                if pd.isna(row[col]):
+                                    html_table_grupo3 += f'<td {cell_style}>0</td>'
+                                else:
+                                    html_table_grupo3 += f'<td {cell_style}>{int(row[col]):,}'.replace(',', '.')+'</td>'
+                            
+                            html_table_grupo3 += '</tr>'
+                    
+                    html_table_grupo3 += """
+                            </tbody>
+                        </table>
+                    </div>
+                    """
+                    
+                    # Mostrar la tabla del grupo 3 y otros
+                    st.markdown(html_table_grupo3, unsafe_allow_html=True)
 
+        # === SECCIÓN 5: BENEFICIARIOS POR LOCALIDAD ===
+        st.subheader("Beneficiarios por Localidad")
         
-        # Calcular métricas para el programa seleccionado
-        if not df_match.empty:
-            total_match = len(df_match)
+        # Filtrar solo beneficiarios
+        beneficiarios_estados = ["BENEFICIARIO", "BENEFICIARIO- CTI"]
+        df_beneficiarios = df_inscriptos_filtrado[df_inscriptos_filtrado['N_ESTADO_FICHA'].isin(beneficiarios_estados)]
+        
+        if df_beneficiarios.empty:
+            st.warning("No hay beneficiarios con los filtros seleccionados.")
         else:
-            total_match = 0
+            # Crear dataframes separados por tipo de beneficiario
+            df_beneficiarios_el = df_beneficiarios[df_beneficiarios['N_ESTADO_FICHA'] == "BENEFICIARIO"]
+            df_el_count = df_beneficiarios_el.groupby(['N_DEPARTAMENTO', 'N_LOCALIDAD']).size().reset_index(name='BENEFICIARIO')
+            
+            df_beneficiarios_cti = df_beneficiarios[df_beneficiarios['N_ESTADO_FICHA'] == "BENEFICIARIO- CTI"]
+            df_cti_count = df_beneficiarios_cti.groupby(['N_DEPARTAMENTO', 'N_LOCALIDAD']).size().reset_index(name='BENEFICIARIO- CTI')
+            
+            # Unir los dataframes
+            df_mapa = pd.merge(df_el_count, df_cti_count, on=['N_DEPARTAMENTO', 'N_LOCALIDAD'], how='outer')
+            df_mapa['BENEFICIARIO'] = df_mapa['BENEFICIARIO'].fillna(0).astype(int)
+            df_mapa['BENEFICIARIO- CTI'] = df_mapa['BENEFICIARIO- CTI'].fillna(0).astype(int)
+            df_mapa['TOTAL'] = df_mapa['BENEFICIARIO'] + df_mapa['BENEFICIARIO- CTI']
+            
+            # Ordenar y mostrar tabla
+            df_mapa_sorted = df_mapa.sort_values(['TOTAL', 'N_DEPARTAMENTO'], ascending=[False, True])
+            
+            styled_df = df_mapa_sorted.style \
+                .background_gradient(subset=['BENEFICIARIO', 'BENEFICIARIO- CTI', 'TOTAL'], cmap='Blues') \
+                .format(thousands=".", precision=0)
+            
+            st.dataframe(
+                styled_df,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "N_DEPARTAMENTO": st.column_config.TextColumn("Departamento"),
+                    "N_LOCALIDAD": st.column_config.TextColumn("Localidad"),
+                    "BENEFICIARIO": st.column_config.NumberColumn("Beneficiarios", help="Cantidad de beneficiarios regulares"),
+                    "BENEFICIARIO- CTI": st.column_config.NumberColumn("Beneficiarios CTI", help="Beneficiarios en situación crítica"),
+                    "TOTAL": st.column_config.NumberColumn("Total General", help="Suma total de beneficiarios")
+                },
+                height=400
+            )
 
-        if not df_programa.empty and 'ID_EST_FIC' in df_programa.columns:
-            conteo_estados = df_programa['ID_EST_FIC'].value_counts()
-            total_empresa_no_apta = conteo_estados.get(2, 0)  
-            total_benef = conteo_estados.get(14, 0)
-            total_validos = conteo_estados.get(13, 0)
-            total_inscriptos = conteo_estados.get(12, 0)
-            total_pendientes = conteo_estados.get(3, 0)
-            total_rechazados = conteo_estados.get(17, 0) + conteo_estados.get(18, 0) + conteo_estados.get(19, 0)
-        else:
-            total_empresa_no_apta = 0
-            total_benef = 0
-            total_validos = 0
-            total_inscriptos = 0
-            total_pendientes = 0
-            total_rechazados = 0
-        
-        # Crear un diccionario con los resultados para pasarlo a la función de KPIs
-        resultados = {
-            "total_match": total_match,
-            "total_benef": total_benef,
-            "total_validos": total_validos,
-            "total_inscriptos": total_inscriptos,
-            "total_pendientes": total_pendientes,
-            "total_rechazados": total_rechazados,
-            "total_empresa_no_apta": total_empresa_no_apta
-        }
-        
-        # Usar la función para crear los KPIs
-        kpi_data = create_empleo_kpis(resultados, programa_seleccionado_nombre)
-        display_kpi_row(kpi_data)
-        
-        # Resto del código de visualización con mejoras visuales
-        # Aquí puedes añadir más visualizaciones según sea necesario
+        # === SECCIÓN 6: DISTRIBUCIÓN GEOGRÁFICA ===
+        if geojson_data is not None and 'N_DEPARTAMENTO' in df_inscriptos_filtrado.columns:
+            if df_inscriptos_filtrado['N_DEPARTAMENTO'].nunique() <= 5:  # Mostrar mapa solo si hay pocos departamentos
+                st.markdown('<h3 style="font-size: 20px; margin: 20px 0 15px 0;">Distribución Geográfica</h3>', unsafe_allow_html=True)
+                
+                # Filtrar solo beneficiarios para el mapa
+                df_beneficiarios_mapa = df_inscriptos_filtrado[df_inscriptos_filtrado['N_ESTADO_FICHA'].isin(beneficiarios_estados)]
+                
+                if not df_beneficiarios_mapa.empty and 'ID_DEPARTAMENTO_GOB' in df_beneficiarios_mapa.columns:
+                    # Crear datos para el mapa por departamento
+                    df_beneficiarios_el = df_beneficiarios_mapa[df_beneficiarios_mapa['N_ESTADO_FICHA'] == "BENEFICIARIO"]
+                    df_el_count = df_beneficiarios_el.groupby(['ID_DEPARTAMENTO_GOB', 'N_DEPARTAMENTO']).size().reset_index(name='BENEFICIARIO')
+                    
+                    df_beneficiarios_cti = df_beneficiarios_mapa[df_beneficiarios_mapa['N_ESTADO_FICHA'] == "BENEFICIARIO- CTI"]
+                    df_cti_count = df_beneficiarios_cti.groupby(['ID_DEPARTAMENTO_GOB', 'N_DEPARTAMENTO']).size().reset_index(name='BENEFICIARIO- CTI')
+                    
+                    df_mapa_geo = pd.merge(df_el_count, df_cti_count, on=['ID_DEPARTAMENTO_GOB', 'N_DEPARTAMENTO'], how='outer')
+                    df_mapa_geo['BENEFICIARIO'] = df_mapa_geo['BENEFICIARIO'].fillna(0).astype(int)
+                    df_mapa_geo['BENEFICIARIO- CTI'] = df_mapa_geo['BENEFICIARIO- CTI'].fillna(0).astype(int)
+                    df_mapa_geo['Total'] = df_mapa_geo['BENEFICIARIO'] + df_mapa_geo['BENEFICIARIO- CTI']
+                    
+                    # Convertir ID_DEPARTAMENTO_GOB a string
+                    df_mapa_geo['ID_DEPARTAMENTO_GOB'] = df_mapa_geo['ID_DEPARTAMENTO_GOB'].apply(lambda x: str(int(x)) if pd.notnull(x) else "")
+                    
+                    # Procesar GeoJSON
+                    import geopandas as gpd
+                    geojson_dict = None
+                    if isinstance(geojson_data, (pd.DataFrame, gpd.GeoDataFrame)):
+                        try:
+                            gdf = gpd.GeoDataFrame(geojson_data)
+                            geojson_dict = gdf.__geo_interface__
+                        except Exception as e:
+                            st.error(f"Error convirtiendo DataFrame a GeoJSON: {e}")
+                    elif isinstance(geojson_data, dict) and 'features' in geojson_data:
+                        geojson_dict = geojson_data
+                    
+                    if geojson_dict and 'features' in geojson_dict:
+                        # Normalizar IDs en GeoJSON
+                        for f in geojson_dict['features']:
+                            f['properties']['CODDEPTO'] = str(f['properties']['CODDEPTO']).strip()
+                        
+                        # Crear layout con tabla y mapa
+                        table_col, map_col = st.columns([3, 1])
+                        
+                        with table_col:
+                            st.markdown("### Beneficiarios por Departamento")
+                            df_mapa_display = df_mapa_geo.drop(columns=['ID_DEPARTAMENTO_GOB']).copy()
+                            df_mapa_display = df_mapa_display.rename(columns={
+                                'N_DEPARTAMENTO': 'Departamento',
+                                'BENEFICIARIO': 'Beneficiarios EL',
+                                'BENEFICIARIO- CTI': 'Beneficiarios CTI',
+                                'Total': 'Total Beneficiarios'
+                            })
+                            st.dataframe(df_mapa_display, use_container_width=True)
+
+                        with map_col:
+                            with st.spinner("Generando mapa..."):
+                                fig = px.choropleth_mapbox(
+                                    df_mapa_geo,
+                                    geojson=geojson_dict,
+                                    locations='ID_DEPARTAMENTO_GOB',
+                                    color='Total',
+                                    featureidkey="properties.CODDEPTO",
+                                    hover_data=['N_DEPARTAMENTO', 'BENEFICIARIO', 'BENEFICIARIO- CTI', 'Total'],
+                                    center={"lat": -31.4, "lon": -64.2},
+                                    zoom=6,
+                                    opacity=0.7,
+                                    mapbox_style="carto-positron",
+                                    color_continuous_scale="Blues",
+                                    labels={'Total': 'Beneficiarios'},
+                                    title="Distribución de Beneficiarios"
+                                )
+                                
+                                fig.update_layout(
+                                    margin={"r":0,"t":50,"l":0,"b":0},
+                                    coloraxis_colorbar={
+                                        "title": "Cantidad",
+                                        "tickformat": ",d"
+                                    },
+                                    title={
+                                        'text': "Beneficiarios por Departamento",
+                                        'y':0.97,
+                                        'x':0.5,
+                                        'xanchor': 'center',
+                                        'yanchor': 'top'
+                                    },
+                                    height=400
+                                )
+                                
+                                st.plotly_chart(fig, use_container_width=True)
     
     except Exception as e:
         st.markdown(f"""
             <div class="info-box status-warning">
-                <strong>Información:</strong> Se mostrarán los datos disponibles: {str(e)}
+                <strong>Error:</strong> Se mostrarán los datos disponibles: {str(e)}
             </div>
         """, unsafe_allow_html=True)
