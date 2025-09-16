@@ -38,7 +38,7 @@ if is_local:
 
 # --- Mapeo de Archivos por Módulo ---
 modules = {
-    'bco_gente': ['df_global.parquet', 'df_global_pagados.parquet'],
+    'bco_gente': ['df_global_banco.parquet', 'df_global_pagados.parquet'],
     'cba_capacita': ['df_postulantes_cbamecapacita.parquet','df_alumnos.parquet', 'df_cursos.parquet'],
     'empleo': ['df_postulantes_empleo.parquet','df_inscriptos_empleo.parquet', 'df_empresas.parquet','capa_departamentos_2010.geojson'],
 }
