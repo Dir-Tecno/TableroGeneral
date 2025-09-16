@@ -19,10 +19,10 @@ from moduls import escrituracion
 setup_page()
 st.markdown('<div class="main-header">Tablero General de Reportes</div>', unsafe_allow_html=True)
 # --- Configuración General ---
-FUENTE_DATOS = "gitlab"  # Opciones: 'minio', 'gitlab', 'local'
+FUENTE_DATOS = "local"  # Opciones: 'minio', 'gitlab', 'local'
 REPO_ID = "Dir-Tecno/Repositorio-Reportes"
 BRANCH = "main"
-LOCAL_PATH = r"D:\DESARROLLO\REPORTES\TableroGeneral\Repositorio-Reportes-main"
+LOCAL_PATH = r"D:\DESARROLLO\REPORTES\TableroGeneral\setministerio"
 MINIO_BUCKET = "repositorio-dashboard"
 # --- Determinación del Modo de Ejecución ---
 is_local = path.exists(LOCAL_PATH) and FUENTE_DATOS == "local"
@@ -38,10 +38,9 @@ if is_local:
 
 # --- Mapeo de Archivos por Módulo ---
 modules = {
-    'bco_gente': ['VT_CUMPLIMIENTO_FORMULARIOS.parquet', 'VT_NOMINA_REP_RECUPERO_X_ANIO.parquet', 
-                   'capa_departamentos_2010.geojson', 'LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt'],
-    'cba_capacita': ['VT_ALUMNOS_EN_CURSOS.parquet','VT_INSCRIPCIONES_PRG129.parquet', 'VT_CURSOS_SEDES_GEO.parquet', 'capa_departamentos_2010.geojson'],
-    'empleo': ['VT_INSCRIPCIONES_EMPLEO.parquet','LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt','VT_REPORTES_PPP_MAS26.parquet', 'vt_empresas_ARCA.parquet', 'VT_PUESTOS_X_FICHAS.parquet','capa_departamentos_2010.geojson'],
+    'bco_gente': ['df_global.parquet', 'df_global_pagados.parquet'],
+    'cba_capacita': ['df_postulantes_cbamecapacita.parquet','df_alumnos.parquet', 'df_cursos.parquet'],
+    'empleo': ['df_postulantes_empleo.parquet','df_inscriptos_empleo.parquet', 'df_empresas.parquet','capa_departamentos_2010.geojson'],
 }
 
 

@@ -139,82 +139,14 @@ def show_empleo_dashboard(data, dates, is_development=False):
         from utils.ui_components import show_dev_dataframe_info
         show_dev_dataframe_info(data, modulo_nombre="Empleo", is_development=is_development)
 
-    df_postulantes_empleo, df_inscriptos, df_empresas, geojson_data = load_and_preprocess_data(data, dates, is_development)
-    
+    #df_postulantes_empleo, df_inscriptos, df_empresas, geojson_data = load_and_preprocess_data(data, dates, is_development)
+    df_postulantes_empleo = data.get('df_postulantes_empleo.parquet')
+    df_inscriptos = data.get('df_inscriptos_empleo.parquet')
+    geojson_data = data.get('capa_departamentos_2010.geojson')
+    df_empresas = data.get('df_empresas.parquet')
+
     render_dashboard(df_postulantes_empleo, df_inscriptos, df_empresas, geojson_data)
 
-def load_and_preprocess_data(data, dates=None, is_development=False):
-    """
-    Carga y preprocesa los datos necesarios para el dashboard.
-    """
-    with st.spinner("Cargando y procesando datos de empleo..."):
-        df_postulantes_empleo = data.get('VT_INSCRIPCIONES_EMPLEO.parquet')
-        df_inscriptos_raw = data.get('VT_REPORTES_PPP_MAS26.parquet')
-        geojson_data = data.get('capa_departamentos_2010.geojson')
-        df_circuitos = data.get('LOCALIDAD CIRCUITO ELECTORAL GEO Y ELECTORES - USAR.txt')
-        has_circuitos = df_circuitos is not None and not df_circuitos.empty
-
-        df_emp_ben = (
-            df_inscriptos_raw[
-                (df_inscriptos_raw["IDETAPA"].isin([51, 53, 54, 55,57])) &
-                (df_inscriptos_raw["N_ESTADO_FICHA"] == "BENEFICIARIO")
-            ]
-            .assign(CUIT=lambda df: df["EMP_CUIT"].astype(str).str.replace("-", ""))
-            .groupby("CUIT", as_index=False)
-            .agg(BENEF=("ID_FICHA", "count"))
-        )
-        df_empresas = data.get('vt_empresas_ARCA.parquet')
-
-        if "CUIT" in df_empresas.columns:
-            df_empresas = df_empresas.merge(df_emp_ben, on="CUIT", how="left")
-
-        if df_inscriptos_raw is None or df_inscriptos_raw.empty:
-            st.error("No se pudieron cargar los datos de inscripciones.")
-            return None, None, None, None
-        
-        df_inscriptos = df_inscriptos_raw[df_inscriptos_raw['N_ESTADO_FICHA'] != "ADHERIDO"].copy()
-
-        integer_columns = ["ID_DEPARTAMENTO_GOB", "ID_LOCALIDAD_GOB", "ID_FICHA", "IDETAPA", "CUPO", "ID_MOD_CONT_AFIP", "EDAD"]
-        for col in integer_columns:
-            if col in df_inscriptos.columns:
-                df_inscriptos[col] = df_inscriptos[col].fillna(-1).astype(int)
-                df_inscriptos.loc[df_inscriptos[col] == -1, col] = pd.NA
-        
-        if 'N_DEPARTAMENTO' in df_inscriptos.columns and 'N_LOCALIDAD' in df_inscriptos.columns:
-            capital_mask = df_inscriptos['N_DEPARTAMENTO'] == 'CAPITAL'
-            df_inscriptos.loc[capital_mask, 'N_LOCALIDAD'] = 'CORDOBA'
-        
-        if 'BEN_N_ESTADO' in df_inscriptos.columns:
-            estado_ben_mask = df_inscriptos['BEN_N_ESTADO'] == 'BAJA POR FINALIZACION DE PROGR'
-            df_inscriptos.loc[estado_ben_mask, 'N_ESTADO_FICHA'] = 'BENEFICIARIO FIN PROGRAMA'
-
-        zonas_favorecidas = ['PRESIDENTE ROQUE SAENZ PEÑA', 'GENERAL ROCA', 'RIO SECO', 'TULUMBA', 'POCHO', 'SAN JAVIER', 'SAN ALBERTO', 'MINAS', 'CRUZ DEL EJE', 'TOTORAL', 'SOBREMONTE', 'ISCHILIN']
-        df_inscriptos['ZONA'] = df_inscriptos['N_DEPARTAMENTO'].apply(lambda x: 'ZONA NOC Y SUR' if x in zonas_favorecidas else 'ZONA REGULAR')
-        
-        if 'N_DEPARTAMENTO' in df_empresas.columns:
-            df_empresas['ZONA'] = df_empresas['N_DEPARTAMENTO'].apply(lambda x: 'ZONA NOC Y SUR' if x in zonas_favorecidas else 'ZONA REGULAR')
-
-        df_inscriptos_sin_adherido = df_inscriptos.copy()
-        
-        programas = {53: "Programa Primer Paso", 51: "Más 26", 54: "CBA Mejora", 55: "Nueva Oportunidad", 57: "Más 26 [2025]"}
-        if 'IDETAPA' in df_inscriptos_sin_adherido.columns:
-            df_inscriptos_sin_adherido['PROGRAMA'] = df_inscriptos_sin_adherido['IDETAPA'].map(lambda x: programas.get(x, f"Programa {x}"))
-        else:
-            df_inscriptos_sin_adherido['PROGRAMA'] = "No especificado"
-            
-        if has_circuitos:
-            try:
-                if 'ID_LOCALIDAD' in df_circuitos.columns:
-                    df_circuitos['ID_LOCALIDAD'] = pd.to_numeric(df_circuitos['ID_LOCALIDAD'], errors='coerce')
-                
-                if df_inscriptos is not None and not df_inscriptos.empty:
-                    if 'ID_LOCALIDAD_GOB' in df_inscriptos.columns and 'ID_LOCALIDAD' in df_circuitos.columns:
-                        df_inscriptos = pd.merge(df_inscriptos, df_circuitos, left_on='ID_LOCALIDAD_GOB', right_on='ID_LOCALIDAD', how='left', suffixes=('', '_circuito'))
-
-            except Exception as e:
-                st.error(f"Error al procesar datos de circuitos electorales: {str(e)}")
-
-        return df_postulantes_empleo, df_inscriptos_sin_adherido, df_empresas, geojson_data
 
 def render_dashboard(df_postulantes_empleo,df_inscriptos, df_empresas, geojson_data):
     """
