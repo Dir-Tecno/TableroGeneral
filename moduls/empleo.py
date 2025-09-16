@@ -129,7 +129,7 @@ def show_empleo_dashboard(data, dates, is_development=False):
     Función principal que muestra el dashboard de empleo.
     """
     if dates:
-        show_last_update(dates, 'VT_REPORTES_PPP_MAS26.parquet')
+        show_last_update(dates, 'df_postulantes_empleo.parquet')
     
     if data is None:
         st.error("No se pudieron cargar los datos de Programas de Empleo.")
@@ -1174,15 +1174,7 @@ def show_inscriptions(df_inscriptos, file_date):
             df_cti_validos = pd.DataFrame()
             df_cti_benficiario = pd.DataFrame()
         
-        # REPORTE PPP con mejor estilo
-        file_date_inscripciones = pd.to_datetime(file_date) if file_date else datetime.now()
-        file_date_inscripciones = file_date_inscripciones - timedelta(hours=3)
-        
-        st.markdown(f"""
-            <div style="background-color:#e9ecef; padding:10px; border-radius:5px; margin-bottom:20px; font-size:0.9em;">
-                <i class="fas fa-sync-alt"></i> <strong>Última actualización:</strong> {file_date_inscripciones.strftime('%d/%m/%Y %H:%M')}
-            </div>
-        """, unsafe_allow_html=True)
+
         
         # Calcular métricas para el programa seleccionado
         if not df_match.empty:

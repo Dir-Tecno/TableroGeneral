@@ -246,7 +246,7 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
     """
     # Mostrar última actualización al inicio del dashboard
     if dates:
-        show_last_update(dates, 'VT_INSCRIPCIONES_PRG129.parquet')
+        show_last_update(dates, 'df_postulantes_cbamecapacita.parquet')
     
     if data is None:
         st.error("No se pudieron cargar los datos de CBA ME CAPACITA.")

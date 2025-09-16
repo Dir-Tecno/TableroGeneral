@@ -289,7 +289,7 @@ def show_bco_gente_dashboard(data, dates, is_development=False):
     """
     # Mostrar última actualización al inicio del dashboard
     if dates:
-        show_last_update(dates, 'VT_NOMINA_REP_RECUPERO_X_ANIO.parquet')
+        show_last_update(dates, 'df_global_banco.parquet')
     
     # Mostrar columnas en modo desarrollo
     if is_development:
