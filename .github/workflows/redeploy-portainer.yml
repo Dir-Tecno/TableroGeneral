@@ -3,7 +3,7 @@ name: 🚀 Portainer Webhook
 on:
   push:
     branches:
-      - main
+      - desacoplado
 
 jobs:
   deploy:
@@ -11,9 +11,13 @@ jobs:
     steps:
       - name: 🔄 Activar Webhook de Portainer
         run: |
-          RESPONSE=$(curl -X POST https://5.161.118.67:9443/api/stacks/webhooks/ef2730c1-7b8f-4107-9407-845570cba8fb -k -w "%{http_code}")
+          RESPONSE=$(curl -X POST https://5.161.118.67:9443/api/stacks/webhooks/b5c5a778-e726-4ec6-97c4-8edea4f116d1 -k -w "%{http_code}")
           if [[ "$RESPONSE" != "200" && "$RESPONSE" != "204" ]]; then
             echo "❌ Error al activar webhook. Código de respuesta: $RESPONSE"
             exit 1
           fi
-          echo "✅ Stack produccion actualizado exitosamente "
+          echo "✅ Stack actualizado exitosamente"
+
+          
+
+          

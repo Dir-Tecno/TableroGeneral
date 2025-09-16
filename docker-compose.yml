@@ -1,14 +1,14 @@
 services:
   reportes_cba:
-    container_name: reportes_cba
+    container_name: reportes_cba_test
     build: 
-      context: https://oauth2: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@github.com/Dir-Tecno/TableroGeneral.git
+      context: https://oauth2:token@github.com/Dir-Tecno/TableroGeneral.git#desacoplado
     restart: unless-stopped
     networks:
       front-net:
-        ipv4_address: 172.21.0.4
+        ipv4_address: 172.21.0.8
     ports:
-      - 8501:8501
+      - 8504:8501
     environment:
       - GITLAB_TOKEN=${GITLAB_TOKEN}
       - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
