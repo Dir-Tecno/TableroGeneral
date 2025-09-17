@@ -20,9 +20,9 @@ setup_page()
 st.markdown('<div class="main-header">Tablero General de Reportes</div>', unsafe_allow_html=True)
 # --- Configuración General ---
 FUENTE_DATOS = "gitlab"  # Opciones: 'minio', 'gitlab', 'local'
-REPO_ID = "Dir-Tecno/Repositorio-Reportes"
+REPO_ID = "Dir-Tecno/setministerio"
 BRANCH = "main"
-LOCAL_PATH = r"D:\DESARROLLO\REPORTES\TableroGeneral\Repositorio-Reportes-main"
+LOCAL_PATH = r"D:\DESARROLLO\REPORTES\TableroGeneral\setministerio"
 MINIO_BUCKET = "repositorio-dashboard"
 # --- Determinación del Modo de Ejecución ---
 is_local = path.exists(LOCAL_PATH) and FUENTE_DATOS == "local"
