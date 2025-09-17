@@ -154,8 +154,8 @@ def render_dashboard(df_postulantes_empleo,df_inscriptos, df_empresas, geojson_d
     """
     with st.spinner("Generando visualizaciones..."):
         # Calcular KPIs importantes antes de aplicar filtros
-        total_beneficiarios = df_inscriptos[df_inscriptos['N_ESTADO_FICHA'].isin(["BENEFICIARIO"])].shape[0]
-        total_beneficiarios_fin = df_inscriptos[df_inscriptos['N_ESTADO_FICHA'].isin(["BENEFICIARIO FIN PROGRAMA"])].shape[0]
+        total_beneficiarios = df_inscriptos[df_inscriptos['BEN_N_ESTADO'].isin(["BENEFICIARIO RETENIDO", "ACTIVO", "BAJA PEDIDO POR EMPRESA"])].shape[0]
+        total_beneficiarios_fin = df_inscriptos[df_inscriptos['BEN_N_ESTADO'].isin(["BAJA POR FINALIZACION DE PROGR"])].shape[0]
         total_beneficiarios_cti = df_inscriptos[df_inscriptos['N_ESTADO_FICHA'] == "BENEFICIARIO- CTI"].shape[0]
         total_general = total_beneficiarios + total_beneficiarios_cti
         
@@ -717,7 +717,8 @@ def show_inscriptions(df_inscriptos_empleo, geojson_data):
             53: "Programa Primer Paso",
             51: "Más 26",
             54: "CBA Mejora",
-            55: "Nueva Oportunidad"
+            55: "Nueva Oportunidad",
+            57: "Más 26 [2025]"
         }
         
         # Mostrar selector de programa si existe la columna IDETAPA
