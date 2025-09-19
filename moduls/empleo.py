@@ -542,9 +542,9 @@ def show_companies(df_empresas):
                 programas_sin_benef[programa] = len(cuits_sin_benef)
     
     # Obtener los dos programas principales para mostrar en cada KPI
-    programas_principales = sorted(programas_conteo.items(), key=lambda x: x[1], reverse=True)[:2] if programas_conteo else []
-    programas_con_benef_principales = sorted(programas_con_benef.items(), key=lambda x: x[1], reverse=True)[:2] if programas_con_benef else []
-    programas_sin_benef_principales = sorted(programas_sin_benef.items(), key=lambda x: x[1], reverse=True)[:2] if programas_sin_benef else []
+    programas_principales = sorted(programas_conteo.items(), key=lambda x: x[1], reverse=True)[:3] if programas_conteo else []
+    programas_con_benef_principales = sorted(programas_con_benef.items(), key=lambda x: x[1], reverse=True)[:3] if programas_con_benef else []
+    programas_sin_benef_principales = sorted(programas_sin_benef.items(), key=lambda x: x[1], reverse=True)[:3] if programas_sin_benef else []
     
     # Layout para los KPIs - 3 columnas
     col1, col2, col3 = st.columns(3)
