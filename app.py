@@ -17,10 +17,18 @@ from moduls import escrituracion
 setup_page()
 st.markdown('<div class="main-header">Tablero General de Reportes</div>', unsafe_allow_html=True)
 # --- Configuración General ---
-FUENTE_DATOS = st.secrets["configuraciones"]["FUENTE_DATOS"]
-REPO_ID = st.secrets["configuraciones"]["REPO_ID"]
-BRANCH = st.secrets["configuraciones"]["BRANCH"]
-LOCAL_PATH = st.secrets["configuraciones"]["LOCAL_PATH"]
+try:
+    # Intenta leer desde st.secrets["configuraciones"]
+    FUENTE_DATOS = st.secrets["configuraciones"]["FUENTE_DATOS"]
+    REPO_ID = st.secrets["configuraciones"]["REPO_ID"]
+    BRANCH = st.secrets["configuraciones"]["BRANCH"]
+    LOCAL_PATH = st.secrets["configuraciones"]["LOCAL_PATH"]
+except KeyError:
+    # Si falla, lee directamente de st.secrets (variables de entorno)
+    FUENTE_DATOS = st.secrets.get("FUENTE_DATOS", "gitlab")
+    REPO_ID = st.secrets.get("REPO_ID", "Dir-Tecno/setministerio")
+    BRANCH = st.secrets.get("BRANCH", "main")
+    LOCAL_PATH = st.secrets.get("LOCAL_PATH", "")
 
 # --- Determinación del Modo de Ejecución ---
 from os import path
