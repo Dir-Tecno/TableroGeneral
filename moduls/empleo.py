@@ -73,7 +73,7 @@ def calculate_cupo(cantidad_empleados, empleador, adherido):
             return math.ceil(0.1 * cantidad_empleados)
 
     # Condición para el programa EMPLEO +26
-    elif adherido == "EMPLEO +26":
+    elif adherido == "EMPLEO +26" or adherido == "EMPLEO +26 [2025]":
         if empleador == 'N':
             return 1
         if cantidad_empleados < 1:
