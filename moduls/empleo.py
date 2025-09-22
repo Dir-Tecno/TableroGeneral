@@ -453,22 +453,30 @@ def show_companies(df_empresas):
     else:
         df_empresas['VACANTES'] = 0
 
+    # Verificar si la sesión está inicializada
+    session_ready = st.session_state.get('initialized', False)
+    if not session_ready:
+        st.warning("La sesión no está completamente inicializada. Algunas funcionalidades pueden estar limitadas.")
+        
+    # Crear una copia para trabajar
+    df_display = df_empresas.copy()
+    
     # Calcular la columna 'CUPO'
-    if all(col in df_empresas.columns for col in ['CANTIDAD_EMPLEADOS', 'EMPLEADOR', 'ADHERIDO']):
-        df_empresas['CUPO'] = df_empresas.apply(lambda row: calculate_cupo(row['CANTIDAD_EMPLEADOS'], row['EMPLEADOR'], row['ADHERIDO']), axis=1)
+    if all(col in df_display.columns for col in ['CANTIDAD_EMPLEADOS', 'EMPLEADOR', 'ADHERIDO']):
+        df_display['CUPO'] = df_display.apply(lambda row: calculate_cupo(row['CANTIDAD_EMPLEADOS'], row['EMPLEADOR'], row['ADHERIDO']), axis=1)
     else:
-        df_empresas['CUPO'] = 0
+        df_display['CUPO'] = 0
 
     # Filtrar por CUIT único y eliminar duplicados - usar TODAS las columnas disponibles
-    columns_to_select = list(df_empresas.columns)
+    columns_to_select = list(df_display.columns)
 
-    if 'CUIT' in df_empresas.columns and 'ADHERIDO' in df_empresas.columns:
+    if 'CUIT' in df_display.columns and 'ADHERIDO' in df_display.columns:
         # Guardamos la lista original de programas para cada CUIT antes de agrupar
-        df_empresas['PROGRAMAS_LISTA'] = df_empresas['ADHERIDO']
-        df_empresas['ADHERIDO'] = df_empresas.groupby('CUIT')['ADHERIDO'].transform(lambda x: ', '.join(sorted(set(x))))
+        df_display['PROGRAMAS_LISTA'] = df_display['ADHERIDO']
+        df_display['ADHERIDO'] = df_display.groupby('CUIT')['ADHERIDO'].transform(lambda x: ', '.join(sorted(set(x))))
     
     # Usar columns_to_select para crear df_display correctamente (sin duplicar columnas)
-    df_display = df_empresas[columns_to_select].drop_duplicates(subset='CUIT')
+    df_display = df_display[columns_to_select].drop_duplicates(subset='CUIT')
     df_display = df_display.sort_values(by='CUPO', ascending=False).reset_index(drop=True)
     
     # Extraer todos los programas únicos para el filtro multiselect
