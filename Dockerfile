@@ -64,6 +64,9 @@ exec "$@"' > /app/entrypoint.sh && \
 ENV GITLAB_TOKEN=""
 ENV SLACK_WEBHOOK_URL=""
 ENV SENTRY_DSN=""
+ENV FUENTE_DATOS=gitlab
+ENV REPO_ID=Dir-Tecno/setministerio
+ENV BRANCH=main
 
 # Configuración final
 EXPOSE 8501

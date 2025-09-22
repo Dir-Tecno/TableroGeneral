@@ -13,6 +13,9 @@ services:
       - GITLAB_TOKEN=${GITLAB_TOKEN}
       - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
       - SENTRY_DSN=${SENTRY_DSN}
+      - FUENTE_DATOS=gitlab
+      - REPO_ID=Dir-Tecno/setministerio
+      - BRANCH=main
 networks:
   front-net:                #Gateway: 172.21.0.1
     external: true          #Subnet:      #Subnet: IP_ADDRESS/16

@@ -289,6 +289,9 @@ def show_postulantes(df_postulantes_empleo):
         # KPIs principales
         total_cuil_unicos = df_filtrado['CUIL'].nunique() if 'CUIL' in df_filtrado.columns else 0
         cantidad_cvs = df_filtrado['ID_DOCUMENTO_CV'].dropna().nunique() if 'ID_DOCUMENTO_CV' in df_filtrado.columns else 0
+        
+        # Nuevo KPI: Empresas únicas seleccionadas
+        total_empresas_unicas = df_filtrado['CUIT'].nunique() if 'CUIT' in df_filtrado.columns else 0
 
         kpi_data = [
             {
@@ -302,6 +305,12 @@ def show_postulantes(df_postulantes_empleo):
                 "value_form": f"{cantidad_cvs:,}".replace(',', '.'),
                 "color_class": "kpi-accent-2",
                 "tooltip": "Número de currículums vitae únicos que han sido cargados por los postulantes filtrados."
+            },
+            {
+                "title": "Empresas Seleccionadas",
+                "value_form": f"{total_empresas_unicas:,}".replace(',', '.'),
+                "color_class": "kpi-accent-1",
+                "tooltip": "Cantidad de empresas únicas (basado en CUIT) seleccionadas por los postulantes."
             }
         ]
         display_kpi_row(kpi_data)
@@ -364,6 +373,48 @@ def show_postulantes(df_postulantes_empleo):
                     st.info("No hay datos de edad válidos para graficar.")
             else:
                 st.info("No se encontró la columna FEC_NACIMIENTO o CUIL.")
+        
+        # Nuevo gráfico: TOP 10 de empresas
+        st.markdown('<div class="section-title">TOP 10 Empresas Seleccionadas</div>', unsafe_allow_html=True)
+        if 'CUIT' in df_filtrado.columns and 'N_EMPRESA' in df_filtrado.columns:
+            try:
+                # Contar postulantes por empresa
+                # Primero creamos un DataFrame con valores únicos de CUIT y N_EMPRESA
+                df_empresas_unicas = df_filtrado[['CUIT', 'N_EMPRESA']].drop_duplicates()
+                
+                # Luego hacemos el conteo de postulantes por empresa
+                empresas_counts = df_filtrado.groupby('CUIT')['CUIL'].nunique().reset_index()
+                empresas_counts.columns = ['CUIT', 'Postulantes']
+                
+                # Unimos con la información de empresa
+                empresas_counts = pd.merge(empresas_counts, df_empresas_unicas, on='CUIT', how='left')
+                
+                # Ordenar y tomar el TOP 10
+                top_empresas = empresas_counts.sort_values('Postulantes', ascending=False).head(10)
+                
+                if not top_empresas.empty:
+                    fig_empresas = px.bar(
+                        top_empresas,
+                        y='N_EMPRESA',
+                        x='Postulantes',
+                        title='TOP 10 Empresas por Cantidad de Postulantes',
+                        color='Postulantes',
+                        color_continuous_scale=px.colors.sequential.Viridis,
+                        orientation='h'
+                    )
+                    fig_empresas.update_layout(
+                        title_x=0.5,
+                        yaxis={'categoryorder':'total ascending', 'title': 'Empresa'},
+                        height=500
+                    )
+                    st.plotly_chart(fig_empresas, use_container_width=True)
+                else:
+                    st.info("No hay datos suficientes para mostrar el TOP de empresas.")
+            except Exception as e:
+                st.error(f"Error al generar el gráfico de empresas: {str(e)}")
+                st.info("Verifica que los datos de empresas estén correctamente formateados.")
+        else:
+            st.info("No se encontraron las columnas necesarias para mostrar el TOP de empresas.")
 
         # Botón de Descarga
         st.markdown('<div class="section-title">Descargar Datos</div>', unsafe_allow_html=True)
@@ -542,9 +593,9 @@ def show_companies(df_empresas):
                 programas_sin_benef[programa] = len(cuits_sin_benef)
     
     # Obtener los dos programas principales para mostrar en cada KPI
-    programas_principales = sorted(programas_conteo.items(), key=lambda x: x[1], reverse=True)[:2] if programas_conteo else []
-    programas_con_benef_principales = sorted(programas_con_benef.items(), key=lambda x: x[1], reverse=True)[:2] if programas_con_benef else []
-    programas_sin_benef_principales = sorted(programas_sin_benef.items(), key=lambda x: x[1], reverse=True)[:2] if programas_sin_benef else []
+    programas_principales = sorted(programas_conteo.items(), key=lambda x: x[1], reverse=True)[:3] if programas_conteo else []
+    programas_con_benef_principales = sorted(programas_con_benef.items(), key=lambda x: x[1], reverse=True)[:3] if programas_con_benef else []
+    programas_sin_benef_principales = sorted(programas_sin_benef.items(), key=lambda x: x[1], reverse=True)[:3] if programas_sin_benef else []
     
     # Layout para los KPIs - 3 columnas
     col1, col2, col3 = st.columns(3)
