@@ -8,23 +8,22 @@ from utils.sentry_utils import init_sentry, sentry_wrap, sentry_error, capture_e
 # Inicializar Sentry al principio de la aplicación
 init_sentry()
 
-from moduls.carga import load_data_from_minio, load_data_from_local, load_data_from_gitlab
+from moduls.carga import  load_data_from_local, load_data_from_gitlab
 from moduls import bco_gente, cbamecapacita, empleo, escrituracion
 from utils.styles import setup_page
 from utils.ui_components import render_footer, show_notification_bell
-from minio import Minio
-from os import path
 from moduls import escrituracion
 
 setup_page()
 st.markdown('<div class="main-header">Tablero General de Reportes</div>', unsafe_allow_html=True)
 # --- Configuración General ---
-FUENTE_DATOS = "gitlab"  # Opciones: 'minio', 'gitlab', 'local'
-REPO_ID = "Dir-Tecno/setministerio"
-BRANCH = "main"
-LOCAL_PATH = r"D:\DESARROLLO\REPORTES\TableroGeneral\setministerio"
-MINIO_BUCKET = "repositorio-dashboard"
+FUENTE_DATOS = st.secrets["configuraciones"]["FUENTE_DATOS"]
+REPO_ID = st.secrets["configuraciones"]["REPO_ID"]
+BRANCH = st.secrets["configuraciones"]["BRANCH"]
+LOCAL_PATH = st.secrets["configuraciones"]["LOCAL_PATH"]
+
 # --- Determinación del Modo de Ejecución ---
+from os import path
 is_local = path.exists(LOCAL_PATH) and FUENTE_DATOS == "local"
 
 # --- Botón para Limpiar Caché en Modo Desarrollo ---
@@ -47,22 +46,7 @@ modules = {
 
 # --- Funciones Cacheadas para Rendimiento ---
 
-@st.cache_resource
-def get_minio_client():
-    """Crea y cachea el cliente de MinIO para evitar reconexiones."""
-    try:
-        client = Minio(
-            st.secrets["minio_endpoint"],
-            access_key=st.secrets["minio_access_key"],
-            secret_key=st.secrets["minio_secret_key"],
-            secure=False
-        )
-        # Probar la conexión listando buckets
-        client.list_buckets()
-        return client
-    except Exception as e:
-        st.error(f"Error al conectar con MinIO: {e}")
-        return None
+
 
 @st.cache_data(ttl=3600, show_spinner="Cargando datos del dashboard...")  # Cachear datos por 1 hora
 def load_all_data():
