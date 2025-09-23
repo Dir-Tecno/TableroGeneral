@@ -620,41 +620,39 @@ def show_companies(df_empresas):
                 <div class="metric-label">Empresas Adheridas</div>
                 <div class="metric-value">{:}</div>
                 {}
-                <div class="metric-tooltip" title="{}"></div>
+                
             </div>
-        """.format(empresas_adh, subtexto, TOOLTIPS_DESCRIPTIVOS.get("EMPRESAS ADHERIDAS", "")), unsafe_allow_html=True)
+        """.format(empresas_adh, TOOLTIPS_DESCRIPTIVOS.get("EMPRESAS ADHERIDAS", "")), unsafe_allow_html=True)
     
     with col2:
         # Crear el subtexto con el desglose por programa para empresas con beneficiarios
-        subtexto_con_benef = ""
         if programas_con_benef_principales:
             subtexto_items = [f"{prog}: {count}" for prog, count in programas_con_benef_principales]
-            subtexto_con_benef = f"<div class='metric-subtitle'>{' - '.join(subtexto_items)}</div>"
+            
         
         st.markdown("""
             <div class="metric-card">
                 <div class="metric-label">Empresas con Beneficiarios</div>
                 <div class="metric-value">{:}</div>
-                {}
-                <div class="metric-tooltip" title="{}"></div>
+                {}  
+                
             </div>
-        """.format(empresas_con_benef, subtexto_con_benef, TOOLTIPS_DESCRIPTIVOS.get("EMPRESAS CON BENEFICIARIOS", "")), unsafe_allow_html=True)
+        """.format(empresas_con_benef, TOOLTIPS_DESCRIPTIVOS.get("EMPRESAS CON BENEFICIARIOS", "")), unsafe_allow_html=True)
         
     with col3:
         # Crear el subtexto con el desglose por programa para empresas sin beneficiarios
-        subtexto_sin_benef = ""
         if programas_sin_benef_principales:
             subtexto_items = [f"{prog}: {count}" for prog, count in programas_sin_benef_principales]
-            subtexto_sin_benef = f"<div class='metric-subtitle'>{' - '.join(subtexto_items)}</div>"
+            
         
         st.markdown("""
             <div class="metric-card">
                 <div class="metric-label">Empresas sin Beneficiarios</div>
                 <div class="metric-value">{:}</div>
-                {}
-                <div class="metric-tooltip" title="{}"></div>
+                {}  
+                
             </div>
-        """.format(empresas_sin_benef, subtexto_sin_benef, TOOLTIPS_DESCRIPTIVOS.get("EMPRESAS SIN BENEFICIARIOS", "")), unsafe_allow_html=True)
+        """.format(empresas_sin_benef, TOOLTIPS_DESCRIPTIVOS.get("EMPRESAS SIN BENEFICIARIOS", "")), unsafe_allow_html=True)
 
     st.markdown("""<div class="info-box">Las empresas (Empresas y Monotributistas) en esta tabla se encuentran adheridas a uno o más programas de empleo, han cumplido con los requisitos establecidos por los programas en su momento y salvo omisiones, han proporcionado sus datos a través de los registros de programasempleo.cba.gov.ar</div>""", unsafe_allow_html=True)
 
