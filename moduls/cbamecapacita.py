@@ -712,55 +712,72 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
         if df_cursos is not None and 'POSTULACIONES' in df_cursos.columns:
             st.markdown("### Distribución de Cursos por Cantidad de Postulantes")
             
-            # Crear rangos de postulantes (de 20 en 20)
-            df_cursos['Rango_Postulantes'] = pd.cut(
-                df_cursos['POSTULACIONES'], 
-                bins=range(0, max(df_cursos['POSTULACIONES']) + 21, 20),
-                labels=[f'{i}-{i+19}' for i in range(0, max(df_cursos['POSTULACIONES']), 20)],
-                right=False
-            )
-            
-            # Contar cursos por rango de postulantes
-            df_rangos = df_cursos.groupby('Rango_Postulantes', observed=False).size().reset_index(name='Cantidad_Cursos')
-            
-            # Filtrar rangos con 0 cursos y limpiar datos infinitos/NaN para evitar warnings en Vega-Lite
-            df_rangos = df_rangos[df_rangos['Cantidad_Cursos'] > 0]
-            df_rangos['Cantidad_Cursos'] = df_rangos['Cantidad_Cursos'].replace([float('inf'), float('-inf')], 0)
-            df_rangos = df_rangos.dropna(subset=['Cantidad_Cursos'])
-            df_rangos = df_rangos[df_rangos['Cantidad_Cursos'].notna() & 
+            # Verificar que la columna POSTULACIONES tenga valores válidos
+            if df_cursos['POSTULACIONES'].notna().any() and len(df_cursos['POSTULACIONES']) > 0:
+                # Obtener el valor máximo de POSTULACIONES (solo una vez para evitar cálculos repetidos)
+                max_postulaciones = max(df_cursos['POSTULACIONES'])
+                
+                # Solo proceder si hay valores positivos
+                if max_postulaciones > 0:
+                    # Calcular el número de bins necesarios
+                    bin_edges = list(range(0, max_postulaciones + 21, 20))
+                    
+                    # Crear las etiquetas correctamente (debe haber una etiqueta menos que bordes)
+                    labels = [f'{i}-{i+19}' for i in range(0, max_postulaciones + 1, 20)]
+                    if len(labels) > len(bin_edges) - 1:
+                        labels = labels[:len(bin_edges) - 1]
+                    
+                    # Crear rangos de postulantes (de 20 en 20)
+                    df_cursos['Rango_Postulantes'] = pd.cut(
+                        df_cursos['POSTULACIONES'], 
+                        bins=bin_edges,
+                        labels=labels,
+                        right=False
+                    )
+                    
+                    # Contar cursos por rango de postulantes
+                    df_rangos = df_cursos.groupby('Rango_Postulantes', observed=False).size().reset_index(name='Cantidad_Cursos')
+                    
+                    # Filtrar rangos con 0 cursos y limpiar datos infinitos/NaN para evitar warnings en Vega-Lite
+                    df_rangos = df_rangos[df_rangos['Cantidad_Cursos'] > 0]
+                    df_rangos['Cantidad_Cursos'] = df_rangos['Cantidad_Cursos'].replace([float('inf'), float('-inf')], 0)
+                    df_rangos = df_rangos.dropna(subset=['Cantidad_Cursos'])
+                    df_rangos = df_rangos[df_rangos['Cantidad_Cursos'].notna() & 
                                  (df_rangos['Cantidad_Cursos'] != float('inf')) & 
                                  (df_rangos['Cantidad_Cursos'] != float('-inf'))]
-            
-            # Crear gráfico de mosaico con Altair
-            chart = alt.Chart(df_rangos).mark_bar().encode(
-                x=alt.X('Rango_Postulantes:N', title='Rango de Postulantes por Curso', sort=None),
-                y=alt.Y('Cantidad_Cursos:Q', title='Cantidad de Cursos'),
-                color=alt.Color('Rango_Postulantes:N', 
-                               legend=None,
-                               scale=alt.Scale(scheme='viridis')),
-                tooltip=['Rango_Postulantes', 'Cantidad_Cursos']
-            ).properties(
-                title='Distribución de Cursos por Cantidad de Postulantes',
-                width=600,
-                height=400
-            )
-            
-            # Añadir etiquetas de texto
-            text = chart.mark_text(
-                align='center',
-                baseline='middle',
-                dy=-10,
-                color='white',
-                fontWeight='bold'
-            ).encode(
-                text='Cantidad_Cursos:Q'
-            )
-            
-            # Combinar gráfico y etiquetas
-            final_chart = (chart + text)
-            
-            # Mostrar el gráfico
-            st.altair_chart(final_chart, use_container_width=True)
+                    
+                    # Crear gráfico de mosaico con Altair
+                    chart = alt.Chart(df_rangos).mark_bar().encode(
+                        x=alt.X('Rango_Postulantes:N', title='Rango de Postulantes por Curso', sort=None),
+                        y=alt.Y('Cantidad_Cursos:Q', title='Cantidad de Cursos'),
+                        color=alt.Color('Rango_Postulantes:N', 
+                                       legend=None,
+                                       scale=alt.Scale(scheme='viridis')),
+                        tooltip=['Rango_Postulantes', 'Cantidad_Cursos']
+                    ).properties(
+                        title='Distribución de Cursos por Cantidad de Postulantes',
+                        width=600,
+                        height=400
+                    )
+                    
+                    # Añadir etiquetas de texto
+                    text = chart.mark_text(
+                        align='center',
+                        baseline='middle',
+                        dy=-10,
+                        color='white',
+                        fontWeight='bold'
+                    ).encode(
+                        text='Cantidad_Cursos:Q'
+                    )
+                    
+                    # Combinar gráfico y etiquetas
+                    final_chart = (chart + text)
+                    
+                    # Mostrar el gráfico
+                    st.altair_chart(final_chart, use_container_width=True)
+            else:
+                st.info("No se encontraron valores válidos en la columna POSTULACIONES.")
         
         st.markdown("## Sector Productivos por Departamento")
         # Mostrar DataFrame solo si existe
