@@ -157,6 +157,7 @@ def render_dashboard(df_postulantes_empleo,df_inscriptos, df_empresas, geojson_d
         total_beneficiarios = df_inscriptos[df_inscriptos['BEN_N_ESTADO'].isin(["BENEFICIARIO RETENIDO", "ACTIVO", "BAJA PEDIDO POR EMPRESA"])].shape[0]
         total_beneficiarios_fin = df_inscriptos[df_inscriptos['BEN_N_ESTADO'].isin(["BAJA POR FINALIZACION DE PROGR"])].shape[0]
         total_beneficiarios_cti = df_inscriptos[df_inscriptos['N_ESTADO_FICHA'] == "BENEFICIARIO- CTI"].shape[0]
+        total_match_e26_2025 = df_inscriptos[(df_inscriptos['N_ESTADO_FICHA'] == "INSCRIPTO") & (df_inscriptos['PROGRAMA'] == "Más 26 [2025]")].shape[0]
         total_general = total_beneficiarios + total_beneficiarios_cti
         
         # Calcular beneficiarios por zona
@@ -168,6 +169,12 @@ def render_dashboard(df_postulantes_empleo,df_inscriptos, df_empresas, geojson_d
         st.markdown('<div class="kpi-section">', unsafe_allow_html=True)
         # Usar la función auxiliar para mostrar KPIs
         kpi_data = [
+            {
+                "title": "TOTAL MATCH E26 2025",
+                "value_form": f"{total_match_e26_2025:,}".replace(',', '.'),
+                "color_class": "kpi-accent-5",
+                "tooltip": TOOLTIPS_DESCRIPTIVOS.get("TOTAL MATCH E26 2025", "")
+            },
             {
                 "title": "BENEFICIARIOS TOTALES (activos)",
                 "value_form": f"{total_general:,}".replace(',', '.'),
@@ -200,7 +207,7 @@ def render_dashboard(df_postulantes_empleo,df_inscriptos, df_empresas, geojson_d
             }
         ]
         
-        display_kpi_row(kpi_data, num_columns=5)
+        display_kpi_row(kpi_data, num_columns=6)
         st.markdown('</div>', unsafe_allow_html=True)
         
 
