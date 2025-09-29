@@ -312,18 +312,13 @@ def show_notification_bell(novedades=None):
         # Novedades por defecto si no se proporcionan
         novedades = [
             {
-                "titulo": "FE DE ERRATAS",                
-                "descripcion": "⚠️  Existía un error de conteo en EL (entranamiento laboral) 😔",
-                "fecha": "2025-09-17",
-                "modulo": "Todos"
+                "titulo": "LANAZAMIENTO PPP",                
+                "descripcion": "Se añadió metricas de postulantes y matchs PPP",
+                "fecha": "2025-09-29",
+                "modulo": "EMPLEO"
             },
             
-            {
-                "titulo": "REFACTORIZACIÓN",
-                "descripcion": "Ahora el reporte es más rápido 🚀",
-                "fecha": "2025-09-17",
-                "modulo": "Todos"
-            }
+   
         ]
     
     # Filtrar novedades recientes (últimos 7 días)
