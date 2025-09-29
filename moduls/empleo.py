@@ -241,11 +241,11 @@ def show_postulantes(df_postulantes_empleo):
         df_postulantes_empleo (pd.DataFrame): DataFrame containing postulantes data
     """
     try:
-        st.markdown('<div class="section-title">Postulantes EMPLEO +26 [2025]</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-title">Postulantes EMPLEO +26 y PPP [2025]</div>', unsafe_allow_html=True)
             
         # Filtros visuales en dos columnas
         st.markdown('<div class="filter-section">', unsafe_allow_html=True)
-        col_filtro1, col_filtro2 = st.columns(2)
+        col_filtro1, col_filtro2, col_filtro3 = st.columns(3)
         
         # Primera columna: filtro de departamento
         with col_filtro1:
@@ -279,6 +279,19 @@ def show_postulantes(df_postulantes_empleo):
                 )
             else:
                 selected_loc = "Todas las localidades"
+                
+        # Tercera columna: filtro de programa
+        with col_filtro3:
+            st.markdown('<div class="filter-label">Programa:</div>', unsafe_allow_html=True)
+            if 'DENOM_PROG' in df_postulantes_empleo.columns:
+                programas = sorted(df_postulantes_empleo['DENOM_PROG'].dropna().unique())
+                selected_prog = st.selectbox(
+                    "Seleccionar programa",
+                    options=["Todos los programas"] + programas,
+                    label_visibility="collapsed"
+                )
+            else:
+                selected_prog = "Todos los programas"
 
         st.markdown('</div>', unsafe_allow_html=True)
 
@@ -288,9 +301,11 @@ def show_postulantes(df_postulantes_empleo):
             df_filtrado = df_filtrado[df_filtrado['N_DEPARTAMENTO'] == selected_dpto]
         if selected_loc != "Todas las localidades":
             df_filtrado = df_filtrado[df_filtrado['N_LOCALIDAD'] == selected_loc]
+        if selected_prog != "Todos los programas" and 'DENOM_PROG' in df_filtrado.columns:
+            df_filtrado = df_filtrado[df_filtrado['DENOM_PROG'] == selected_prog]
 
-        # Mostrar mensaje con el número de registros después de aplicar los filtros
-        st.markdown(f'<div class="filter-info">Mostrando {len(df_filtrado)} postulantes</div>', unsafe_allow_html=True)
+       
+       
 
 
         # KPIs principales
@@ -300,9 +315,15 @@ def show_postulantes(df_postulantes_empleo):
         # Nuevo KPI: Empresas únicas seleccionadas
         total_empresas_unicas = df_filtrado['CUIT'].nunique() if 'CUIT' in df_filtrado.columns else 0
 
+        # Determinar el título del KPI según el programa seleccionado
+        if selected_prog != "Todos los programas":
+            kpi_title = f"Postulantes {selected_prog} (CUIL únicos)"
+        else:
+            kpi_title = "Postulantes AMBOS PROGRAMAS (CUIL únicos)"
+            
         kpi_data = [
             {
-                "title": "Postulantes (CUIL únicos)",
+                "title": kpi_title,
                 "value_form": f"{total_cuil_unicos:,}".replace(',', '.'),
                 "color_class": "kpi-primary",
                 "tooltip": "Cantidad total de postulantes únicos (basado en CUIL) después de aplicar filtros."
