@@ -312,8 +312,8 @@ def show_notification_bell(novedades=None):
         # Novedades por defecto si no se proporcionan
         novedades = [
             {
-                "titulo": "LANAZAMIENTO PPP",                
-                "descripcion": "Se añadió metricas de postulantes y matchs PPP",
+                "titulo": "MATCH PPP",                
+                "descripcion": "Se CORRIGIÓ la métrica de matchs PPP",
                 "fecha": "2025-09-29",
                 "modulo": "EMPLEO"
             },
