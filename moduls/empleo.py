@@ -66,7 +66,7 @@ def calculate_cupo(cantidad_empleados, empleador, adherido):
         elif cantidad_empleados <= 10:
             return 2
         elif cantidad_empleados <= 25:
-            return 3
+            return 
         elif cantidad_empleados <= 50:
             return math.ceil(0.2 * cantidad_empleados)
         else:

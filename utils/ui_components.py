@@ -13,6 +13,8 @@ if not safe_session_check("campanita_mostrada"):
 def show_dev_dataframe_info(data, modulo_nombre="Módulo", info_caption=None, is_development=False):
     """
     Muestra información útil de uno o varios DataFrames en modo desarrollo.
+    Incluye un botón para descargar cada DataFrame como archivo CSV.
+    
     Args:
         data: pd.DataFrame o dict de DataFrames
         modulo_nombre: str, nombre del módulo
@@ -22,6 +24,10 @@ def show_dev_dataframe_info(data, modulo_nombre="Módulo", info_caption=None, is
     # Mostrar información solo si estamos en modo desarrollo
     if is_development:
         st.write(f"**{info_caption or f'Información de Desarrollo ({modulo_nombre})'}**")
+        
+        # Función para convertir DataFrame a CSV
+        def convert_df_to_csv(df):
+            return df.to_csv(index=False).encode('utf-8')
         
         def _show_single(df, name):
             if df is None:
@@ -57,10 +63,24 @@ def show_dev_dataframe_info(data, modulo_nombre="Módulo", info_caption=None, is
                             st.dataframe(stats_df)
                         except:
                             st.write("  (No se pueden mostrar estadísticas para este DataFrame)")
+                    
+                    # Añadir botón para descargar CSV
+                    try:
+                        csv = convert_df_to_csv(df)
+                        st.download_button(
+                            label=f"⬇️ Descargar {name} como CSV",
+                            data=csv,
+                            file_name=f"{name.replace(' ', '_').replace('/', '_').replace('\\', '_')}.csv",
+                            mime='text/csv',
+                            help=f"Descargar el DataFrame completo '{name}' en formato CSV"
+                        )
+                    except Exception as e:
+                        st.error(f"Error al generar CSV para descarga: {str(e)}")
             else:
                 # Mostrar como objeto genérico si no es un DataFrame
                 with st.expander(f"🔍 Objeto: {name}", expanded=False):
                     st.write(f"- **Tipo**: {type(df)}")
+                    st.write("- No se puede descargar como CSV (no es un DataFrame).")
         
         if isinstance(data, dict):
             for name, df in data.items():

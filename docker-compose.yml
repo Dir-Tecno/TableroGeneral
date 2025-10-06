@@ -14,7 +14,7 @@ services:
       - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
       - SENTRY_DSN=${SENTRY_DSN}
       - FUENTE_DATOS=gitlab
-      - REPO_ID=Dir-Tecno/setministerio
+      - REPO_ID=Dir-Tecno/df_ministerio
       - BRANCH=main
 networks:
   front-net:                #Gateway: 172.21.0.1
