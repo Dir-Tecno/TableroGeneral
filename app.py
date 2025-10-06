@@ -95,7 +95,6 @@ def load_all_data():
             st.error("❌ El token de GitLab tiene el valor de ejemplo. Por favor, configura tu token real.")
             return {}, {}, {"warnings": ["Token de GitLab no configurado (valor de ejemplo)."], "info": []}
         
-        
         return load_data_from_gitlab(REPO_ID, BRANCH, gitlab_token, modules)
 
     st.error(f"Fuente de datos no reconocida: {FUENTE_DATOS}")
@@ -104,8 +103,29 @@ def load_all_data():
 # --- Carga de Datos ---
 all_data, all_dates, logs = load_all_data()
 
+# --- Inicializar variables de sesión de forma segura ---
+if is_session_initialized():
+    # Inicializar variables de sesión necesarias
+    if not safe_session_check("campanita_mostrada"):
+        safe_session_set("campanita_mostrada", False)
+    if not safe_session_check("mostrar_form_comentario"):
+        safe_session_set("mostrar_form_comentario", False)
+
 # --- Mostrar Campanita de Novedades DESPUÉS de la carga ---
-show_notification_bell()
+if is_session_initialized():
+    show_notification_bell()
+
+# --- Opción para limpiar caché (disponible en todos los modos) ---
+with st.sidebar.expander("🔄 Opciones avanzadas", expanded=False):
+    st.write("Si los datos están desactualizados o hay problemas de rendimiento:")
+    if st.button("🧹 Limpiar caché y recargar datos", key="clear_cache_btn"):
+        st.cache_data.clear()
+        st.cache_resource.clear()
+        st.success("✅ Caché limpiado correctamente. Recargando datos frescos...")
+        st.rerun()
+    
+    # Información adicional
+    st.info("Esta opción elimina los datos almacenados temporalmente y fuerza una recarga completa.")
 
 # --- Definición de Pestañas ---
 tab_names = ["Programas de Empleo", "CBA Me Capacita", "Banco de la Gente",  "Escrituración"]
