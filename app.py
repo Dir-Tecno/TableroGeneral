@@ -116,10 +116,9 @@ if is_session_initialized():
     show_notification_bell()
 
 # --- Opción para limpiar caché (disponible en todos los modos) ---
-# Usar una clave única basada en el tiempo para forzar que siempre esté cerrado
-import time
-expander_key = f"cache_options_{int(time.time())}"
-with st.sidebar.expander("🔄 Opciones avanzadas", expanded=False, key=expander_key):
+# Enfoque simple: solo mostrar el expander sin intentar manipular su estado
+
+with st.sidebar.expander("🔄 Opciones avanzadas", expanded=False):
     st.write("Si los datos están desactualizados o hay problemas de rendimiento:")
     if st.button("🧹 Limpiar caché y recargar datos", key="clear_cache_btn"):
         st.cache_data.clear()
