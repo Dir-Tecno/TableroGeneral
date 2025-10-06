@@ -158,7 +158,7 @@ def render_dashboard(df_postulantes_empleo,df_inscriptos, df_empresas, geojson_d
         total_beneficiarios_fin = df_inscriptos[df_inscriptos['BEN_N_ESTADO'].isin(["BAJA POR FINALIZACION DE PROGR"])].shape[0]
         total_beneficiarios_cti = df_inscriptos[df_inscriptos['N_ESTADO_FICHA'] == "BENEFICIARIO- CTI"].shape[0]
         total_match_e26_2025 = df_inscriptos[(df_inscriptos['N_ESTADO_FICHA'] == "INSCRIPTO") & (df_inscriptos['PROGRAMA'] == "Más 26 [2025]")].shape[0]
-        total_match_ppp_2025 = df_inscriptos[(df_inscriptos['N_ESTADO_FICHA'] == "INSCRIPTO") & (df_inscriptos['PROGRAMA'] == "Programa Primer Paso")].shape[0]
+        total_match_ppp_2025 = df_inscriptos[(df_inscriptos['N_ESTADO_FICHA'] == "INSCRIPTO") & (df_inscriptos['PROGRAMA'] == "Programa Primer Paso [2025]")].shape[0]
         total_general = total_beneficiarios + total_beneficiarios_cti
         
         # Calcular beneficiarios por zona
