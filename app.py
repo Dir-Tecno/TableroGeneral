@@ -115,19 +115,7 @@ if is_session_initialized():
 if is_session_initialized():
     show_notification_bell()
 
-# --- Opción para limpiar caché (disponible en todos los modos) ---
-# Enfoque simple: solo mostrar el expander sin intentar manipular su estado
-
-with st.sidebar.expander("🔄 Opciones avanzadas", expanded=False):
-    st.write("Si los datos están desactualizados o hay problemas de rendimiento:")
-    if st.button("🧹 Limpiar caché y recargar datos", key="clear_cache_btn"):
-        st.cache_data.clear()
-        st.cache_resource.clear()
-        st.success("✅ Caché limpiado correctamente. Recargando datos frescos...")
-        st.rerun()
-    
-    # Información adicional
-    st.info("Esta opción elimina los datos almacenados temporalmente y fuerza una recarga completa.")
+# --- La opción para limpiar caché ahora está en el footer ---
 
 # --- Definición de Pestañas ---
 tab_names = ["Programas de Empleo", "CBA Me Capacita", "Banco de la Gente",  "Escrituración"]

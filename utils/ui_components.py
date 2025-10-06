@@ -195,16 +195,20 @@ def render_footer():
         </div>
     """, unsafe_allow_html=True)
     
-    # Usar expander para el formulario de comentarios (más eficiente que session_state)
-    with st.expander("💬 Dejar comentario", expanded=False):
+    # Crear una fila para los expanders
+    col1, col2 = st.columns([1, 1])
+    
+    # Expander para comentarios
+    with col1.expander("💬 Dejar comentario", expanded=False):
+        # Contenido del expander de comentarios
         # Formulario simplificado en una sola columna
         comentario = st.text_area("Tu comentario:", height=80, placeholder="Comparte tu opinión sobre este dashboard...")
         
-        col1, col2, col3 = st.columns([1, 1, 2])
-        with col1:
+        col_a, col_b, col_c = st.columns([1, 1, 2])
+        with col_a:
             valoracion = st.selectbox("Valoración:", options=[1, 2, 3, 4, 5], index=2, format_func=lambda x: "⭐" * x)
         
-        with col2:
+        with col_b:
             enviar = st.button("Enviar", type="primary", use_container_width=True)
         
         if enviar:
@@ -217,6 +221,18 @@ def render_footer():
                         st.error("Error al enviar. Intenta de nuevo.")
             else:
                 st.warning("Escribe un comentario.")
+    
+    # Expander para opciones avanzadas
+    with col2.expander("🔄 Opciones avanzadas", expanded=False):
+        st.write("Si los datos están desactualizados o hay problemas de rendimiento:")
+        if st.button("🧹 Limpiar caché y recargar datos", key="clear_cache_btn_footer"):
+            st.cache_data.clear()
+            st.cache_resource.clear()
+            st.success("✅ Caché limpiado correctamente. Recargando datos frescos...")
+            st.rerun()
+        
+        # Información adicional
+        st.info("Esta opción elimina los datos almacenados temporalmente y fuerza una recarga completa.")
 
 def create_kpi_card(title, color_class="kpi-primary", delta=None, delta_color="#d4f7d4", tooltip=None, detalle_html=None, value_form=None, value_pers=None):
     """
