@@ -4,6 +4,23 @@ import requests
 import datetime
 from utils.session_helper import safe_session_get, safe_session_set, safe_session_check, is_session_initialized
 
+def insert_google_analytics():
+    """
+    Inserta el script de seguimiento de Google Analytics en la página.
+    Debe llamarse al inicio de la aplicación, después de st.set_page_config().
+    """
+    st.markdown("""
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-5VHFFSTP60"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+
+      gtag('config', 'G-5VHFFSTP60');
+    </script>
+    """, unsafe_allow_html=True)
+
 # Inicializar variables de sesión necesarias
 if not safe_session_check("mostrar_form_comentario"):
     safe_session_set("mostrar_form_comentario", False)
