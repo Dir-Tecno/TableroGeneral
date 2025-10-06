@@ -333,8 +333,8 @@ def show_notification_bell(novedades=None):
         novedades = [
             {
                 "titulo": "MATCH PPP",                
-                "descripcion": "Se CORRIGIÓ la métrica de matchs PPP",
-                "fecha": "2025-09-29",
+                "descripcion": "Se CORRIGIÓ la función de cálculo de métrica de matchs PPP",
+                "fecha": "2025-10-06",
                 "modulo": "EMPLEO"
             },
             
