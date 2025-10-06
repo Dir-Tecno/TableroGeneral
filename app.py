@@ -28,7 +28,7 @@ try:
 except KeyError:
     # Si falla, lee directamente de st.secrets (variables de entorno)
     FUENTE_DATOS = st.secrets.get("FUENTE_DATOS", "gitlab")
-    REPO_ID = st.secrets.get("REPO_ID", "Dir-Tecno/setministerio")
+    REPO_ID = st.secrets.get("REPO_ID", "Dir-Tecno/df_ministerio")
     BRANCH = st.secrets.get("BRANCH", "main")
     LOCAL_PATH = st.secrets.get("LOCAL_PATH", "")
 
