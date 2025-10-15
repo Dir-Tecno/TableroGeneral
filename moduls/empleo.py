@@ -602,8 +602,8 @@ def show_companies(df_empresas):
     empresas_adh = df_filtered['CUIT'].nunique()
     
     # Calcular empresas con y sin beneficiarios
-    empresas_con_benef = df_filtered[df_filtered['BENEF'] > 0]['CUIT'].nunique()
-    empresas_sin_benef = df_filtered[df_filtered['BENEF'].isna()]['CUIT'].nunique()
+    empresas_con_benef = df_filtered[df_filtered['BENEF_COUNT'] > 0]['CUIT'].nunique()
+    empresas_sin_benef = df_filtered[df_filtered['BENEF_COUNT'].isna()]['CUIT'].nunique()
     
     # Calcular empresas por programa para mostrar en los KPIs usando los datos originales
     programas_conteo = {}
@@ -628,11 +628,11 @@ def show_companies(df_empresas):
             
             # Empresas con beneficiarios por programa
             if 'BENEF' in df_empresas_original.columns:
-                cuits_con_benef = empresas_programa[empresas_programa['BENEF'] > 0]['CUIT'].unique()
+                cuits_con_benef = empresas_programa[empresas_programa['BENEF_COUNT'] > 0]['CUIT'].unique()
                 programas_con_benef[programa] = len(cuits_con_benef)
                 
                 # Empresas sin beneficiarios por programa
-                cuits_sin_benef = empresas_programa[empresas_programa['BENEF'].isna()]['CUIT'].unique()
+                cuits_sin_benef = empresas_programa[empresas_programa['BENEF_COUNT'].isna()]['CUIT'].unique()
                 programas_sin_benef[programa] = len(cuits_sin_benef)
     
     # Obtener los dos programas principales para mostrar en cada KPI
@@ -697,7 +697,7 @@ def show_companies(df_empresas):
         columns_to_select = [col for col in ['N_LOCALIDAD', 'N_DEPARTAMENTO', 'CUIT', 'N_EMPRESA', 
                                            'NOMBRE_TIPO_EMPRESA', 'ADHERIDO', 'CANTIDAD_EMPLEADOS', 
                                            'VACANTES', 'CUPO', 'IMP_GANANCIAS', 'IMP_IVA', 'MONOTRIBUTO',
-                                           'INTEGRANTE_SOC', 'EMPLEADOR', 'ACTIVIDAD_MONOTRIBUTO','BENEF', 
+                                           'INTEGRANTE_SOC', 'EMPLEADOR', 'ACTIVIDAD_MONOTRIBUTO','BENEF_COUNT', 
                                            'TELEFONO', 'CELULAR', 'MAIL', 'SITIO_WEB', 'TEL_CONTACTO', 
                                            'EMAIL_CONTACTO', 'NOMBRE_FANTASIA', 'ZONA'] 
                            if col in df_filtered.columns]
