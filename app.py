@@ -107,6 +107,61 @@ if is_session_initialized():
 # --- La opción para limpiar caché ahora está en el footer ---
 
 # --- Definición de Pestañas ---
+@st.cache_data
+def load_data_for_module(module_key):
+    """Carga datos solo para un módulo específico usando lazy loading."""
+    
+    module_files = modules.get(module_key, [])
+    if not module_files:
+        logging.warning(f"No se encontraron archivos definidos para el módulo '{module_key}'")
+        return {}, {}, {"warnings": [f"No se encontraron archivos definidos para el módulo '{module_key}'"], "info": []}
+    
+    logging.info(f"Cargando datos para módulo '{module_key}': {module_files}")
+    
+    if is_local:
+        all_data, all_dates, logs = load_data_from_local(LOCAL_PATH, {module_key: module_files})
+    elif FUENTE_DATOS == "gitlab":
+        # Intenta leer el token desde diferentes ubicaciones
+        gitlab_token = None
+        
+        # Opción 1: Estructura anidada [gitlab] token = "..."
+        if "gitlab" in st.secrets and "token" in st.secrets["gitlab"]:
+            gitlab_token = st.secrets["gitlab"]["token"]
+        
+        all_data, all_dates, logs = load_data_from_gitlab(REPO_ID, BRANCH, gitlab_token, {module_key: module_files})
+    else:
+        error_msg = f"Fuente de datos no reconocida: {FUENTE_DATOS}"
+        logging.error(error_msg)
+        return {}, {}, {"warnings": [error_msg], "info": []}
+    
+    
+    # Filtrar solo los archivos del módulo
+    data_for_module = {file: all_data.get(file) for file in module_files if file in all_data}
+    dates_for_module = {file: all_dates.get(file) for file in module_files if file in all_dates}
+    
+    loaded_files = list(data_for_module.keys())
+    logging.info(f"Datos cargados para '{module_key}': {loaded_files}")
+
+    # Hacer una copia defensiva de los logs para evitar mutar objetos cacheados
+    safe_logs = {}
+    if isinstance(logs, dict):
+        # Copiar listas si existen, o crear claves vacías
+        safe_logs["warnings"] = list(logs.get("warnings", [])) if logs.get("warnings") is not None else []
+        safe_logs["info"] = list(logs.get("info", [])) if logs.get("info") is not None else []
+        # Copiar otras claves si existen
+        for k, v in logs.items():
+            if k not in ("warnings", "info"):
+                safe_logs[k] = v
+    else:
+        safe_logs = {"warnings": [], "info": []}
+
+    if not data_for_module:
+        warning_msg = f"No se pudieron cargar datos para el módulo '{module_key}'"
+        logging.warning(warning_msg)
+        safe_logs.setdefault("warnings", []).append(warning_msg)
+
+    return data_for_module, dates_for_module, safe_logs
+
 tab_names = ["Programas de Empleo", "CBA Me Capacita", "Banco de la Gente",  "Escrituración"]
 tabs = st.tabs(tab_names)
 tab_keys = ['empleo', 'cba_capacita', 'bco_gente', 'escrituracion']
@@ -199,10 +254,23 @@ def load_data_for_module(module_key):
     
     loaded_files = list(data_for_module.keys())
     logging.info(f"Datos cargados para '{module_key}': {loaded_files}")
-    
+
+    # Hacer una copia defensiva de los logs para evitar mutar objetos cacheados
+    safe_logs = {}
+    if isinstance(logs, dict):
+        # Copiar listas si existen, o crear claves vacías
+        safe_logs["warnings"] = list(logs.get("warnings", [])) if logs.get("warnings") is not None else []
+        safe_logs["info"] = list(logs.get("info", [])) if logs.get("info") is not None else []
+        # Copiar otras claves si existen
+        for k, v in logs.items():
+            if k not in ("warnings", "info"):
+                safe_logs[k] = v
+    else:
+        safe_logs = {"warnings": [], "info": []}
+
     if not data_for_module:
         warning_msg = f"No se pudieron cargar datos para el módulo '{module_key}'"
         logging.warning(warning_msg)
-        logs["warnings"].append(warning_msg)
-    
-    return data_for_module, dates_for_module, logs
+        safe_logs.setdefault("warnings", []).append(warning_msg)
+
+    return data_for_module, dates_for_module, safe_logs
