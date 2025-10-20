@@ -61,21 +61,12 @@ modules = {
 
 
 
-@st.cache_data(ttl=3600, show_spinner="Cargando datos del dashboard...")  # Cachear datos por 1 hora
 def load_all_data():
     """Carga todos los datos necesarios para la aplicación desde la fuente configurada."""
     if is_local:
         st.success("Modo de desarrollo: Cargando datos desde carpeta local.")
         return load_data_from_local(LOCAL_PATH, modules)
 
-    if FUENTE_DATOS == "minio":
-        minio_client = get_minio_client()
-        if minio_client:
-            st.success("Modo de producción: Cargando datos desde MinIO.")
-            return load_data_from_minio(minio_client, MINIO_BUCKET, modules)
-        else:
-            st.error("No se pudo establecer la conexión con MinIO. No se pueden cargar los datos.")
-            return {}, {}, {"warnings": ["Fallo en conexión a MinIO"], "info": []}
 
     if FUENTE_DATOS == "gitlab":
         
@@ -86,17 +77,6 @@ def load_all_data():
         if "gitlab" in st.secrets and "token" in st.secrets["gitlab"]:
             gitlab_token = st.secrets["gitlab"]["token"]
         
-        # Validar el token
-        if not gitlab_token:
-            st.error("❌ El token de GitLab no está configurado en los secretos.")
-            st.info("📝 Configura el token en tu archivo `.streamlit/secrets.toml` usando una de estas opciones:")
-            st.code("""# Opción 1 (recomendada):
-                        [gitlab]
-                        token = "tu_token_aqui" """)
-            return {}, {}, {"warnings": ["Token de GitLab no configurado."], "info": []}
-        elif gitlab_token == "TU_TOKEN_DE_GITLAB_AQUI":
-            st.error("❌ El token de GitLab tiene el valor de ejemplo. Por favor, configura tu token real.")
-            return {}, {}, {"warnings": ["Token de GitLab no configurado (valor de ejemplo)."], "info": []}
         
         return load_data_from_gitlab(REPO_ID, BRANCH, gitlab_token, modules)
 

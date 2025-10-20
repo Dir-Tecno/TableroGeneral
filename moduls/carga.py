@@ -529,10 +529,9 @@ def obtener_archivo_gitlab(repo_id, branch, file_name, token, logs=None):
     return None, logs
 
 # Función para carga granular de archivos con su propio cacheo independiente
-@st.cache_data(ttl=3600)
 def load_single_file_from_source(source_type, source_params, archivo):
     """
-    Carga un único archivo con su propio cacheo independiente
+    Carga un único archivo sin cacheo
     
     Args:
         source_type (str): 'gitlab', 'minio' o 'local'
