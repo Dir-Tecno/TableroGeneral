@@ -168,7 +168,6 @@ render_footer()
 @st.cache_data
 def load_data_for_module(module_key):
     """Carga datos solo para un módulo específico usando lazy loading."""
-    log_resource_usage()  # Registrar uso de recursos antes de cargar
     
     module_files = modules.get(module_key, [])
     if not module_files:
@@ -193,7 +192,6 @@ def load_data_for_module(module_key):
         logging.error(error_msg)
         return {}, {}, {"warnings": [error_msg], "info": []}
     
-    log_resource_usage()  # Registrar uso de recursos después de cargar
     
     # Filtrar solo los archivos del módulo
     data_for_module = {file: all_data.get(file) for file in module_files if file in all_data}
