@@ -1,22 +1,10 @@
 import streamlit as st
 import os
-import psutil
 import logging
 
 # --- Configuración de Logging ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-def log_resource_usage():
-    """Registra el uso de recursos del sistema (CPU, memoria, disco)."""
-    try:
-        cpu_percent = psutil.cpu_percent(interval=1)
-        memory = psutil.virtual_memory()
-        disk = psutil.disk_usage('/')
-        
-        logging.info(f"CPU: {cpu_percent}%, Memoria: {memory.percent}%, Disco: {disk.percent}%")
-        logging.info(f"Memoria usada: {memory.used / (1024**3):.2f} GB de {memory.total / (1024**3):.2f} GB")
-    except Exception as e:
-        logging.error(f"Error al registrar uso de recursos: {e}")
 
 # --- Configuración de la Página ---
 st.set_page_config(
