@@ -39,9 +39,9 @@ def convert_numpy_types(df):
 
 class ParquetLoader:
     @staticmethod
-    def load(buffer):
+    def load(buffer, columns=None):
         try:
-            df, error = safe_read_parquet(io.BytesIO(buffer), is_buffer=True)
+            df, error = safe_read_parquet(io.BytesIO(buffer), is_buffer=True, columns=columns)
             if df is not None:
                 df = convert_numpy_types(df)
                 return df
@@ -50,15 +50,15 @@ class ParquetLoader:
         except Exception as e:
             return None
 
-def safe_read_parquet(file_path_or_buffer, is_buffer=False):
+def safe_read_parquet(file_path_or_buffer, is_buffer=False, columns=None):
     try:
         import pyarrow.parquet as pq
         import pyarrow as pa
 
         if is_buffer:
-            table = pq.read_table(file_path_or_buffer)
+            table = pq.read_table(file_path_or_buffer, columns=columns)
         else:
-            table = pq.read_table(file_path_or_buffer)
+            table = pq.read_table(file_path_or_buffer, columns=columns)
 
         try:
             df = table.to_pandas()
@@ -70,20 +70,20 @@ def safe_read_parquet(file_path_or_buffer, is_buffer=False):
     except (ImportError, Exception):
         try:
             if is_buffer:
-                df = pd.read_parquet(file_path_or_buffer, timestamp_as_object=True)
+                df = pd.read_parquet(file_path_or_buffer, timestamp_as_object=True, columns=columns)
             else:
-                df = pd.read_parquet(file_path_or_buffer, timestamp_as_object=True)
+                df = pd.read_parquet(file_path_or_buffer, timestamp_as_object=True, columns=columns)
         except TypeError:
             if is_buffer:
-                df = pd.read_parquet(file_path_or_buffer)
+                df = pd.read_parquet(file_path_or_buffer, columns=columns)
             else:
-                df = pd.read_parquet(file_path_or_buffer)
+                df = pd.read_parquet(file_path_or_buffer, columns=columns)
         except Exception as e:
             if "out of bounds timestamp" in str(e):
                 if is_buffer:
-                    df = pd.read_parquet(file_path_or_buffer, engine='python')
+                    df = pd.read_parquet(file_path_or_buffer, engine='python', columns=columns)
                 else:
-                    df = pd.read_parquet(file_path_or_buffer, engine='python')
+                    df = pd.read_parquet(file_path_or_buffer, engine='python', columns=columns)
             else:
                 raise
 
@@ -95,23 +95,29 @@ def safe_read_parquet(file_path_or_buffer, is_buffer=False):
                 df[col] = df[col].astype(str)
     return df, None
 
-def procesar_archivo(nombre, contenido, es_buffer, logs=None):
+def procesar_archivo(nombre, contenido, es_buffer, logs=None, columns=None):
     if logs is None:
         logs = {"warnings": [], "info": []}
     try:
         add_breadcrumb(
             category="data_processing",
             message=f"Procesando archivo: {nombre}",
-            data={"es_buffer": es_buffer}
+            data={"es_buffer": es_buffer, "columns": columns}
         )
-        
+
         if nombre.endswith('.parquet'):
             if es_buffer:
-                df = ParquetLoader.load(contenido)
+                df = ParquetLoader.load(contenido, columns=columns)
                 fecha = datetime.datetime.now()
             else:
-                df, error = safe_read_parquet(contenido)
+                df, error = safe_read_parquet(contenido, columns=columns)
                 fecha = datetime.datetime.now()
+            
+            # Optimizar DataFrame después de cargarlo
+            if df is not None:
+                from utils.parquet_utils import optimize_dataframe
+                df = optimize_dataframe(df)
+                
             return df, fecha
         elif nombre.endswith('.xlsx'):
             if es_buffer:
@@ -182,15 +188,23 @@ def load_data_from_local(local_path, modules):
         data={"local_path": local_path}
     )
     
+    # Importar columnas necesarias para carga selectiva
+    try:
+        from moduls.carga_optimized import COLUMNAS_NECESARIAS
+    except ImportError:
+        COLUMNAS_NECESARIAS = {}
+
     for i, nombre in enumerate(all_files):
         file_path = os.path.join(local_path, nombre)
-        
+
         if not os.path.exists(file_path):
             logs["warnings"].append(f"Archivo no encontrado en ruta local: {file_path}")
             continue
-            
+
         try:
-            df, fecha = procesar_archivo(nombre, file_path, es_buffer=False, logs=logs)
+            # Obtener columnas necesarias para este archivo
+            columns = COLUMNAS_NECESARIAS.get(nombre, None)
+            df, fecha = procesar_archivo(nombre, file_path, es_buffer=False, logs=logs, columns=columns)
             if df is not None:
                 all_data[nombre] = df
                 all_dates[nombre] = fecha
@@ -207,16 +221,116 @@ def load_data_from_local(local_path, modules):
     return all_data, all_dates, logs
 
 @sentry_wrap(module_name="carga", operation="load_data_from_gitlab")
-def load_data_from_gitlab(repo_id, branch, token, modules):
+def load_data_from_gitlab_with_cache(repo_id, branch, token, modules):
     """
-    Carga datos desde GitLab.
-    
+    Carga datos desde GitLab usando caché en disco.
+    Solo descarga archivos cuando no existen o han sido actualizados.
+
     Args:
         repo_id (str): ID del repositorio en formato "namespace/project".
         branch (str): Rama del repositorio.
         token (str): Token de acceso a GitLab.
         modules (dict): Diccionario con los módulos y sus archivos.
-        
+
+    Returns:
+        tuple: (all_data, all_dates, logs) con los datos, fechas de actualización y logs.
+    """
+    from moduls.disk_cache_manager import get_cache_manager
+
+    all_data = {}
+    all_dates = {}
+    logs = {"warnings": [], "info": []}
+
+    cache_manager = get_cache_manager()
+
+    # Iniciar verificador de actualizaciones en background
+    cache_manager.start_background_checker(token)
+
+    # Importar columnas necesarias para carga selectiva
+    try:
+        from moduls.carga_optimized import COLUMNAS_NECESARIAS
+    except ImportError:
+        COLUMNAS_NECESARIAS = {}
+
+    # Obtener lista de todos los archivos solicitados
+    archivos_solicitados = []
+    for modulo, archivos in modules.items():
+        for archivo in archivos:
+            archivo_normalizado = archivo.replace('\\', '/')
+            archivos_solicitados.append(archivo_normalizado)
+
+    add_breadcrumb(
+        category="data_loading",
+        message=f"Cargando {len(archivos_solicitados)} archivos con caché en disco",
+        data={"repo_id": repo_id, "branch": branch}
+    )
+
+    # Procesar cada archivo solicitado
+    for archivo in archivos_solicitados:
+        try:
+            # Verificar si está en caché
+            if cache_manager.is_cached(archivo):
+                # Cargar desde caché
+                cache_path = cache_manager.get_cached_file(archivo)
+                logs["info"].append(f"Cargando {archivo} desde caché en disco")
+
+                # Obtener columnas necesarias
+                columns = COLUMNAS_NECESARIAS.get(archivo, None)
+
+                # Procesar desde disco
+                df, _ = procesar_archivo(archivo, str(cache_path), False, logs, columns=columns)
+
+                if df is not None:
+                    all_data[archivo] = df
+                    all_dates[archivo] = datetime.datetime.now()
+                    logs["info"].append(f"✓ {archivo} cargado desde caché")
+                else:
+                    logs["warnings"].append(f"Error al procesar {archivo} desde caché")
+            else:
+                # Descargar y cachear
+                logs["info"].append(f"Descargando {archivo} a caché...")
+                success, error = cache_manager.download_and_cache(archivo, repo_id, branch, token)
+
+                if success:
+                    # Cargar desde caché recién descargado
+                    cache_path = cache_manager.get_cached_file(archivo)
+                    columns = COLUMNAS_NECESARIAS.get(archivo, None)
+                    df, _ = procesar_archivo(archivo, str(cache_path), False, logs, columns=columns)
+
+                    if df is not None:
+                        all_data[archivo] = df
+                        all_dates[archivo] = datetime.datetime.now()
+                        logs["info"].append(f"✓ {archivo} descargado y cacheado")
+                    else:
+                        logs["warnings"].append(f"Error al procesar {archivo} después de descargar")
+                else:
+                    logs["warnings"].append(f"Error al descargar {archivo}: {error}")
+
+        except Exception as e:
+            logs["warnings"].append(f"Error al cargar {archivo}: {str(e)}")
+            capture_exception(e, extra_data={
+                "archivo": archivo,
+                "repo_id": repo_id,
+                "branch": branch
+            })
+
+    # Información de caché
+    cache_info = cache_manager.get_cache_info()
+    logs["info"].append(f"Caché: {cache_info['file_count']} archivos, {cache_info['total_size_mb']:.2f} MB")
+
+    return all_data, all_dates, logs
+
+
+def load_data_from_gitlab(repo_id, branch, token, modules):
+    """
+    Carga datos desde GitLab.
+
+    Args:
+        repo_id (str): ID del repositorio en formato "namespace/project".
+        branch (str): Rama del repositorio.
+        token (str): Token de acceso a GitLab.
+        modules (dict): Diccionario con los módulos y sus archivos.
+
     Returns:
         tuple: (all_data, all_dates, logs) con los datos, fechas de actualización y logs.
     """
@@ -260,13 +374,19 @@ def load_data_from_gitlab(repo_id, branch, token, modules):
             message=f"Procesando {len(archivos_solicitados)} archivos solicitados por módulos",
             data={"archivos_disponibles": len(archivos_disponibles)}
         )
-        
+
+        # Importar columnas necesarias para carga selectiva
+        try:
+            from moduls.carga_optimized import COLUMNAS_NECESARIAS
+        except ImportError:
+            COLUMNAS_NECESARIAS = {}
+
         # Procesar cada archivo de todos los módulos
         for modulo, archivos in modules.items():
             for archivo in archivos:
                 # En GitLab, los paths pueden venir con estructura de directorios
                 archivo_gitlab = archivo.replace('\\', '/')
-                
+
                 if archivo_gitlab in archivos_disponibles:
                     try:
                         # Obtener y procesar archivo
@@ -274,7 +394,9 @@ def load_data_from_gitlab(repo_id, branch, token, modules):
                         if contenido:
                             # Obtener fecha real del commit
                             fecha_commit = obtener_fecha_commit_gitlab(repo_id, branch, archivo_gitlab, token, logs)
-                            df, _ = procesar_archivo(archivo, contenido, True, logs)
+                            # Obtener columnas necesarias para este archivo
+                            columns = COLUMNAS_NECESARIAS.get(archivo, None)
+                            df, _ = procesar_archivo(archivo, contenido, True, logs, columns=columns)
                             if df is not None:
                                 all_data[archivo] = df
                                 all_dates[archivo] = fecha_commit or datetime.datetime.now()
@@ -529,9 +651,10 @@ def obtener_archivo_gitlab(repo_id, branch, file_name, token, logs=None):
     return None, logs
 
 # Función para carga granular de archivos con su propio cacheo independiente
+@st.cache_data(ttl=1800, max_entries=3)
 def load_single_file_from_source(source_type, source_params, archivo):
     """
-    Carga un único archivo sin cacheo
+    Carga un único archivo con su propio cacheo independiente
     
     Args:
         source_type (str): 'gitlab', 'minio' o 'local'

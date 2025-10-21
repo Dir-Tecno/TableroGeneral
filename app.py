@@ -1,11 +1,6 @@
 import streamlit as st
+import pandas as pd
 import os
-import logging
-
-# --- Configuración de Logging ---
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
-
 # --- Configuración de la Página ---
 st.set_page_config(
     page_title="Dashboard Resumen del Ministerio de Desarrollo Social y Promoción del Empleo",
@@ -16,7 +11,8 @@ from utils.sentry_utils import init_sentry, sentry_wrap, sentry_error, capture_e
 # Inicializar Sentry al principio de la aplicación
 init_sentry()
 
-from moduls.carga import load_data_from_local, load_data_from_gitlab
+from moduls.carga import load_data_from_local, load_data_from_gitlab, load_data_from_gitlab_with_cache
+from moduls.carga_optimized import cleanup_memory, optimize_dataframe
 from moduls import bco_gente, cbamecapacita, empleo, escrituracion
 from utils.styles import setup_page
 from utils.ui_components import render_footer, show_notification_bell, insert_google_analytics
@@ -46,9 +42,55 @@ from os import path
 is_local = path.exists(LOCAL_PATH) and FUENTE_DATOS == "local"
 
 # --- Botón para Limpiar Caché en Modo Desarrollo ---
+st.sidebar.title("🗂️ Gestión de Caché")
+
+# Mostrar información de caché en disco
+try:
+    from moduls.disk_cache_manager import get_cache_manager
+    cache_manager = get_cache_manager()
+    cache_info = cache_manager.get_cache_info()
+
+    st.sidebar.metric(
+        "Archivos en caché",
+        cache_info['file_count'],
+        f"{cache_info['total_size_mb']:.1f} MB en disco"
+    )
+
+    col1, col2 = st.sidebar.columns(2)
+    with col1:
+        if st.button("🔄 Limpiar Caché"):
+            cache_manager.clear_cache()
+            st.cache_data.clear()
+            st.cache_resource.clear()
+            st.success("✓ Caché limpiada")
+            st.rerun()
+
+    with col2:
+        if st.button("📥 Ver detalles"):
+            with st.sidebar.expander("Archivos en caché", expanded=True):
+                for filename in cache_info['files']:
+                    st.text(f"• {filename}")
+except:
+    pass
+
 if is_local:
     st.sidebar.title("🛠️ Opciones de Desarrollo")
-    if st.sidebar.button("Limpiar Caché y Recargar"):
+
+    # Mostrar uso de RAM
+    try:
+        import psutil
+        process = psutil.Process(os.getpid())
+        ram_gb = process.memory_info().rss / 1024**3
+        ram_percent = process.memory_percent()
+        st.sidebar.metric(
+            "Uso de RAM",
+            f"{ram_gb:.2f} GB",
+            f"{ram_percent:.1f}%"
+        )
+    except ImportError:
+        pass  # psutil no instalado
+
+    if st.sidebar.button("Recargar Datos"):
         st.cache_data.clear()
         st.cache_resource.clear()
         st.success("Caché limpiado. La página se recargará con datos frescos.")
@@ -64,15 +106,76 @@ modules = {
 
 
 # --- Funciones Cacheadas para Rendimiento ---
+# OPTIMIZACIÓN APLICADA: Carga lazy por módulo para reducir uso de RAM
+# - TTL reducido de 3600s a 1800s (30 min)
+# - Máximo 10 entradas en caché por módulo
+# - Solo carga datos cuando se accede a una pestaña específica
 
+@st.cache_data(ttl=1800, max_entries=10, show_spinner="Cargando datos del módulo...")
+def load_module_data(module_key):
+    """Carga datos específicos para un módulo individual (carga lazy)."""
+    module_files = modules.get(module_key, [])
+    if not module_files:
+        return {}, {}, {"warnings": [f"No hay archivos definidos para el módulo {module_key}"], "info": []}
 
+    # Crear un diccionario temporal solo con los archivos de este módulo
+    temp_modules = {module_key: module_files}
 
+    if is_local:
+        data, dates, logs = load_data_from_local(LOCAL_PATH, temp_modules)
+        # Optimizar DataFrames después de cargarlos
+        for key, df in data.items():
+            if isinstance(df, pd.DataFrame):
+                data[key] = optimize_dataframe(df)
+        return data, dates, logs
+
+    if FUENTE_DATOS == "minio":
+        minio_client = get_minio_client()
+        if minio_client:
+            data, dates, logs = load_data_from_minio(minio_client, MINIO_BUCKET, temp_modules)
+            # Optimizar DataFrames después de cargarlos
+            for key, df in data.items():
+                if isinstance(df, pd.DataFrame):
+                    data[key] = optimize_dataframe(df)
+            return data, dates, logs
+        else:
+            return {}, {}, {"warnings": ["Fallo en conexión a MinIO"], "info": []}
+
+    if FUENTE_DATOS == "gitlab":
+        gitlab_token = None
+        if "gitlab" in st.secrets and "token" in st.secrets["gitlab"]:
+            gitlab_token = st.secrets["gitlab"]["token"]
+
+        if not gitlab_token:
+            return {}, {}, {"warnings": ["Token de GitLab no configurado."], "info": []}
+        elif gitlab_token == "TU_TOKEN_DE_GITLAB_AQUI":
+            return {}, {}, {"warnings": ["Token de GitLab no configurado (valor de ejemplo)."], "info": []}
+
+        # USAR CACHÉ EN DISCO - Descarga solo cuando es necesario
+        data, dates, logs = load_data_from_gitlab_with_cache(REPO_ID, BRANCH, gitlab_token, temp_modules)
+        # Optimizar DataFrames después de cargarlos
+        for key, df in data.items():
+            if isinstance(df, pd.DataFrame):
+                data[key] = optimize_dataframe(df)
+        return data, dates, logs
+
+    return {}, {}, {"warnings": [f"Fuente de datos no reconocida: {FUENTE_DATOS}"], "info": []}
+
+@st.cache_data(ttl=1800, max_entries=5, show_spinner="Cargando datos del dashboard...")  # Cachear datos por 30 min, máximo 5 entradas
 def load_all_data():
     """Carga todos los datos necesarios para la aplicación desde la fuente configurada."""
     if is_local:
         st.success("Modo de desarrollo: Cargando datos desde carpeta local.")
         return load_data_from_local(LOCAL_PATH, modules)
 
+    if FUENTE_DATOS == "minio":
+        minio_client = get_minio_client()
+        if minio_client:
+            st.success("Modo de producción: Cargando datos desde MinIO.")
+            return load_data_from_minio(minio_client, MINIO_BUCKET, modules)
+        else:
+            st.error("No se pudo establecer la conexión con MinIO. No se pueden cargar los datos.")
+            return {}, {}, {"warnings": ["Fallo en conexión a MinIO"], "info": []}
 
     if FUENTE_DATOS == "gitlab":
         
@@ -83,14 +186,26 @@ def load_all_data():
         if "gitlab" in st.secrets and "token" in st.secrets["gitlab"]:
             gitlab_token = st.secrets["gitlab"]["token"]
         
+        # Validar el token
+        if not gitlab_token:
+            st.error("❌ El token de GitLab no está configurado en los secretos.")
+            st.info("📝 Configura el token en tu archivo `.streamlit/secrets.toml` usando una de estas opciones:")
+            st.code("""# Opción 1 (recomendada):
+                        [gitlab]
+                        token = "tu_token_aqui" """)
+            return {}, {}, {"warnings": ["Token de GitLab no configurado."], "info": []}
+        elif gitlab_token == "TU_TOKEN_DE_GITLAB_AQUI":
+            st.error("❌ El token de GitLab tiene el valor de ejemplo. Por favor, configura tu token real.")
+            return {}, {}, {"warnings": ["Token de GitLab no configurado (valor de ejemplo)."], "info": []}
         
         return load_data_from_gitlab(REPO_ID, BRANCH, gitlab_token, modules)
 
     st.error(f"Fuente de datos no reconocida: {FUENTE_DATOS}")
     return {}, {}, {"warnings": [f"Fuente de datos no reconocida: {FUENTE_DATOS}"], "info": []}
 
-# --- Carga de Datos ---
-all_data, all_dates, logs = load_all_data()
+# --- Carga de Datos (Solo para inicialización) ---
+# Nota: Ahora usamos carga lazy por módulo, pero mantenemos esta función para compatibilidad
+all_data, all_dates, logs = {}, {}, {"warnings": [], "info": ["Usando carga lazy por módulo"]}
 
 # --- Inicializar variables de sesión de forma segura ---
 if is_session_initialized():
@@ -107,61 +222,6 @@ if is_session_initialized():
 # --- La opción para limpiar caché ahora está en el footer ---
 
 # --- Definición de Pestañas ---
-@st.cache_data
-def load_data_for_module(module_key):
-    """Carga datos solo para un módulo específico usando lazy loading."""
-    
-    module_files = modules.get(module_key, [])
-    if not module_files:
-        logging.warning(f"No se encontraron archivos definidos para el módulo '{module_key}'")
-        return {}, {}, {"warnings": [f"No se encontraron archivos definidos para el módulo '{module_key}'"], "info": []}
-    
-    logging.info(f"Cargando datos para módulo '{module_key}': {module_files}")
-    
-    if is_local:
-        all_data, all_dates, logs = load_data_from_local(LOCAL_PATH, {module_key: module_files})
-    elif FUENTE_DATOS == "gitlab":
-        # Intenta leer el token desde diferentes ubicaciones
-        gitlab_token = None
-        
-        # Opción 1: Estructura anidada [gitlab] token = "..."
-        if "gitlab" in st.secrets and "token" in st.secrets["gitlab"]:
-            gitlab_token = st.secrets["gitlab"]["token"]
-        
-        all_data, all_dates, logs = load_data_from_gitlab(REPO_ID, BRANCH, gitlab_token, {module_key: module_files})
-    else:
-        error_msg = f"Fuente de datos no reconocida: {FUENTE_DATOS}"
-        logging.error(error_msg)
-        return {}, {}, {"warnings": [error_msg], "info": []}
-    
-    
-    # Filtrar solo los archivos del módulo
-    data_for_module = {file: all_data.get(file) for file in module_files if file in all_data}
-    dates_for_module = {file: all_dates.get(file) for file in module_files if file in all_dates}
-    
-    loaded_files = list(data_for_module.keys())
-    logging.info(f"Datos cargados para '{module_key}': {loaded_files}")
-
-    # Hacer una copia defensiva de los logs para evitar mutar objetos cacheados
-    safe_logs = {}
-    if isinstance(logs, dict):
-        # Copiar listas si existen, o crear claves vacías
-        safe_logs["warnings"] = list(logs.get("warnings", [])) if logs.get("warnings") is not None else []
-        safe_logs["info"] = list(logs.get("info", [])) if logs.get("info") is not None else []
-        # Copiar otras claves si existen
-        for k, v in logs.items():
-            if k not in ("warnings", "info"):
-                safe_logs[k] = v
-    else:
-        safe_logs = {"warnings": [], "info": []}
-
-    if not data_for_module:
-        warning_msg = f"No se pudieron cargar datos para el módulo '{module_key}'"
-        logging.warning(warning_msg)
-        safe_logs.setdefault("warnings", []).append(warning_msg)
-
-    return data_for_module, dates_for_module, safe_logs
-
 tab_names = ["Programas de Empleo", "CBA Me Capacita", "Banco de la Gente",  "Escrituración"]
 tabs = st.tabs(tab_names)
 tab_keys = ['empleo', 'cba_capacita', 'bco_gente', 'escrituracion']
@@ -180,8 +240,16 @@ for idx, tab in enumerate(tabs):
         
         st.markdown(f'<div class="tab-subheader">{tab_names[idx]}</div>', unsafe_allow_html=True)
         
-        # Cargar datos solo para este módulo cuando se accede a la pestaña
-        data_for_module, dates_for_module, logs_module = load_data_for_module(module_key)
+        # Carga lazy: solo cargar datos cuando se accede al módulo
+        try:
+            module_data, module_dates, module_logs = load_module_data(module_key)
+            data_for_module = module_data
+            dates_for_module = module_dates
+        except Exception as e:
+            st.error(f"Error al cargar datos para {tab_names[idx]}: {str(e)}")
+            data_for_module = {}
+            dates_for_module = {}
+            module_logs = {"warnings": [f"Error de carga: {str(e)}"], "info": []}
 
         # Si no hay datos, mostrar el warning SÓLO para módulos que realmente requieren archivos.
         # Para 'escrituracion' queremos mostrar siempre la vista (redirige a un servicio externo).
@@ -191,86 +259,32 @@ for idx, tab in enumerate(tabs):
                 module_files = modules.get(module_key, [])
                 st.write(f"**Archivos esperados para {module_key}:**")
                 st.write(module_files)
-                st.write(f"**Archivos cargados:**")
+                st.write(f"**Archivos cargados para este módulo:**")
                 st.write(list(data_for_module.keys()))
-                st.write(f"**Archivos coincidentes:**")
-                coincidentes = [f for f in module_files if f in data_for_module]
-                st.write(coincidentes if coincidentes else "Ninguno")
                 
                 # Mostrar logs de carga del módulo
-                if logs_module:
-                    st.write("**Logs de carga:**")
-                    if logs_module.get("warnings"):
+                if module_logs:
+                    st.write("**Logs de carga del módulo:**")
+                    if module_logs.get("warnings"):
                         st.error("Warnings:")
-                        for warning in logs_module["warnings"]:
+                        for warning in module_logs["warnings"]:
                             st.write(f"⚠️ {warning}")
-                    if logs_module.get("info"):
+                    if module_logs.get("info"):
                         st.info("Info:")
-                        for info in logs_module["info"]:
+                        for info in module_logs["info"]:
                             st.write(f"ℹ️ {info}")
             continue
 
         try:
-            # Pasar los datos cargados a la función del dashboard del módulo
+            # Pasar los datos filtrados a la función del dashboard del módulo
             show_func(data_for_module, dates_for_module, is_local)
         except Exception as e:
             st.error(f"Error al renderizar el dashboard '{tab_names[idx]}': {e}")
             st.exception(e)
 
+# --- Limpieza de Memoria ---
+# Liberar memoria después de renderizar todas las pestañas
+cleanup_memory()
+
 # --- Footer ---
 render_footer()
-
-@st.cache_data
-def load_data_for_module(module_key):
-    """Carga datos solo para un módulo específico usando lazy loading."""
-    
-    module_files = modules.get(module_key, [])
-    if not module_files:
-        logging.warning(f"No se encontraron archivos definidos para el módulo '{module_key}'")
-        return {}, {}, {"warnings": [f"No se encontraron archivos definidos para el módulo '{module_key}'"], "info": []}
-    
-    logging.info(f"Cargando datos para módulo '{module_key}': {module_files}")
-    
-    if is_local:
-        all_data, all_dates, logs = load_data_from_local(LOCAL_PATH, {module_key: module_files})
-    elif FUENTE_DATOS == "gitlab":
-        # Intenta leer el token desde diferentes ubicaciones
-        gitlab_token = None
-        
-        # Opción 1: Estructura anidada [gitlab] token = "..."
-        if "gitlab" in st.secrets and "token" in st.secrets["gitlab"]:
-            gitlab_token = st.secrets["gitlab"]["token"]
-        
-        all_data, all_dates, logs = load_data_from_gitlab(REPO_ID, BRANCH, gitlab_token, {module_key: module_files})
-    else:
-        error_msg = f"Fuente de datos no reconocida: {FUENTE_DATOS}"
-        logging.error(error_msg)
-        return {}, {}, {"warnings": [error_msg], "info": []}
-    
-    
-    # Filtrar solo los archivos del módulo
-    data_for_module = {file: all_data.get(file) for file in module_files if file in all_data}
-    dates_for_module = {file: all_dates.get(file) for file in module_files if file in all_dates}
-    
-    loaded_files = list(data_for_module.keys())
-    logging.info(f"Datos cargados para '{module_key}': {loaded_files}")
-
-    # Hacer una copia defensiva de los logs para evitar mutar objetos cacheados
-    safe_logs = {}
-    if isinstance(logs, dict):
-        # Copiar listas si existen, o crear claves vacías
-        safe_logs["warnings"] = list(logs.get("warnings", [])) if logs.get("warnings") is not None else []
-        safe_logs["info"] = list(logs.get("info", [])) if logs.get("info") is not None else []
-        # Copiar otras claves si existen
-        for k, v in logs.items():
-            if k not in ("warnings", "info"):
-                safe_logs[k] = v
-    else:
-        safe_logs = {"warnings": [], "info": []}
-
-    if not data_for_module:
-        warning_msg = f"No se pudieron cargar datos para el módulo '{module_key}'"
-        logging.warning(warning_msg)
-        safe_logs.setdefault("warnings", []).append(warning_msg)
-
-    return data_for_module, dates_for_module, safe_logs

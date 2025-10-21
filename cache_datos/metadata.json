@@ -1,0 +1,74 @@
+{
+  "df_inscriptos_empleo.parquet": {
+    "downloaded_at": "2025-10-21T10:17:06.950790",
+    "last_checked": "2025-10-21T10:17:06.950790",
+    "remote_etag": "255724fec7fa430c040f41d39613765081c5a195",
+    "repo_id": "Dir-Tecno/df_ministerio",
+    "branch": "main",
+    "size": 2207151
+  },
+  "df_empresas.parquet": {
+    "downloaded_at": "2025-10-21T10:17:12.795819",
+    "last_checked": "2025-10-21T10:17:12.795819",
+    "remote_etag": "cab2209b9b58db3e5a3038a7b9984eb213cd1c08",
+    "repo_id": "Dir-Tecno/df_ministerio",
+    "branch": "main",
+    "size": 2498438
+  },
+  "capa_departamentos_2010.geojson": {
+    "downloaded_at": "2025-10-20T17:41:40.991870",
+    "last_checked": "2025-10-21T10:17:14.192053",
+    "remote_etag": "6b268cf4b1c089ae1bc24b78984b5698f64766d3",
+    "repo_id": "Dir-Tecno/df_ministerio",
+    "branch": "main",
+    "size": 2064482
+  },
+  "df_postulantes_empleo.parquet": {
+    "downloaded_at": "2025-10-21T10:17:28.375477",
+    "last_checked": "2025-10-21T10:17:28.375477",
+    "remote_etag": "255724fec7fa430c040f41d39613765081c5a195",
+    "repo_id": "Dir-Tecno/df_ministerio",
+    "branch": "main",
+    "size": 4680812
+  },
+  "df_postulantes_cbamecapacita.parquet": {
+    "downloaded_at": "2025-10-21T10:17:36.141338",
+    "last_checked": "2025-10-21T10:17:36.141338",
+    "remote_etag": "255724fec7fa430c040f41d39613765081c5a195",
+    "repo_id": "Dir-Tecno/df_ministerio",
+    "branch": "main",
+    "size": 1472198
+  },
+  "df_alumnos.parquet": {
+    "downloaded_at": "2025-10-21T10:17:39.771142",
+    "last_checked": "2025-10-21T10:17:39.771142",
+    "remote_etag": "255724fec7fa430c040f41d39613765081c5a195",
+    "repo_id": "Dir-Tecno/df_ministerio",
+    "branch": "main",
+    "size": 679967
+  },
+  "df_cursos.parquet": {
+    "downloaded_at": "2025-10-21T10:17:43.184127",
+    "last_checked": "2025-10-21T10:17:43.184127",
+    "remote_etag": "255724fec7fa430c040f41d39613765081c5a195",
+    "repo_id": "Dir-Tecno/df_ministerio",
+    "branch": "main",
+    "size": 136989
+  },
+  "df_global_banco.parquet": {
+    "downloaded_at": "2025-10-21T10:19:51.004455",
+    "last_checked": "2025-10-21T10:19:51.004455",
+    "remote_etag": "005431f3f8be425c6cdda0b4b991b0e95bb14533",
+    "repo_id": "Dir-Tecno/df_ministerio",
+    "branch": "main",
+    "size": 30883418
+  },
+  "df_global_pagados.parquet": {
+    "downloaded_at": "2025-10-21T10:19:59.931288",
+    "last_checked": "2025-10-21T10:19:59.931288",
+    "remote_etag": "005431f3f8be425c6cdda0b4b991b0e95bb14533",
+    "repo_id": "Dir-Tecno/df_ministerio",
+    "branch": "main",
+    "size": 16715998
+  }
+}

@@ -301,13 +301,14 @@ def apply_styles():
 
     .metric-label {
         font-size: 14px;
-        color: #6c757d;
+        color: #333333;
         margin-bottom: 5px;
+        font-weight: 600;
     }
-    
+
     .metric-subtitle {
         font-size: 12px;
-        color: #6c757d;
+        color: #333333;
         margin-top: 5px;
     }
 
@@ -355,7 +356,7 @@ def apply_styles():
 
     /* Section headers */
     .section-title {
-        color: var(--color-primary);
+        color: #333333 !important;
         font-size: 20px;
         font-weight: 600;
         margin: 20px 0 15px 0;
@@ -380,6 +381,7 @@ def apply_styles():
         margin-bottom: 15px;
         border-radius: 4px;
         font-size: 14px;
+        color: #333333;
     }
     
     /* Filtros */
@@ -396,7 +398,7 @@ def apply_styles():
     .filter-label {
         font-size: 14px;
         font-weight: 600;
-        color: var(--color-primary);
+        color: #333333;
         margin-bottom: 5px;
     }
     

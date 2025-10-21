@@ -11,5 +11,3 @@ setministerio
 Dockerfile
 docker-compose.yml
 .github\workflows\redeploy-portainer.yml
-.env.local
-.env.example
