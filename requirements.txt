@@ -2,11 +2,16 @@
 gspread
 oauth2client
 
-# Dependencias base
+# Dependencias base (compatibles con Python 3.12)
+numpy>=1.26.0
 pyarrow>=15.0.0
-pandas==2.2.2
+pandas>=2.1.0
 
-# Dependencias geoespaciales
+# Dependencias geoespaciales (versiones estables con wheels precompilados)
+geopandas>=0.12.0,<0.15.0
+shapely>=1.8.0,<3.0.0
+fiona>=1.8.0,<2.0.0
+pyproj>=3.3.0,<4.0.0
 
 # Dependencias principales
 streamlit==1.37.1
@@ -37,5 +42,6 @@ huggingface-hub==0.20.3
 wordcloud
 
 # Herramientas de desarrollo
+psutil
 
 minio

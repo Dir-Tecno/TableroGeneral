@@ -149,7 +149,7 @@ def show_last_update(dates, file_substring, mensaje="Última actualización"):
         fecha_formateada = latest_date.strftime('%d/%m/%Y %H:%M')
         
         st.markdown(f"""
-            <div style="background-color:#e9ecef; padding:10px; border-radius:5px; margin-bottom:20px; font-size:0.9em;">
+            <div style="background-color:#e9ecef; padding:10px; border-radius:5px; margin-bottom:20px; font-size:0.9em; color:#333333;">
                 <i class="fas fa-sync-alt"></i> <strong>{mensaje}:</strong> {fecha_formateada} (Hora Argentina)
             </div>
         """, unsafe_allow_html=True)
