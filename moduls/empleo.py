@@ -451,25 +451,6 @@ def show_postulantes(df_postulantes_empleo):
         else:
             st.info("No se encontraron las columnas necesarias para mostrar el TOP de empresas.")
 
-        # Botón de Descarga
-        st.markdown('<div class="section-title">Descargar Datos</div>', unsafe_allow_html=True)
-        st.write("Usa el siguiente botón para descargar los datos de los postulantes filtrados en formato CSV.")
-
-        @st.cache_data
-        def convert_df_to_csv(df):
-            # IMPORTANT: Cache the conversion to prevent computation on every rerun
-            return df.to_csv(index=False).encode('utf-8')
-
-        csv_data = convert_df_to_csv(df_filtrado)
-
-        st.download_button(
-            label="📥 Descargar Tabla de Postulantes (CSV)",
-            data=csv_data,
-            file_name=f"postulantes_empleo_{datetime.date.today()}.csv",
-            mime="text/csv",
-            use_container_width=True
-        )
-        
     except Exception as e:
         st.error(f"Error al mostrar los datos de postulantes: {str(e)}")
         st.info("Por favor, verifica que los datos estén correctamente cargados.")

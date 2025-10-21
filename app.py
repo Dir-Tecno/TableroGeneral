@@ -42,36 +42,37 @@ from os import path
 is_local = path.exists(LOCAL_PATH) and FUENTE_DATOS == "local"
 
 # --- Botón para Limpiar Caché en Modo Desarrollo ---
-st.sidebar.title("🗂️ Gestión de Caché")
+# COMENTADO: Sección de gestión de caché deshabilitada
+# st.sidebar.title("🗂️ Gestión de Caché")
 
-# Mostrar información de caché en disco
-try:
-    from moduls.disk_cache_manager import get_cache_manager
-    cache_manager = get_cache_manager()
-    cache_info = cache_manager.get_cache_info()
+# # Mostrar información de caché en disco
+# try:
+#     from moduls.disk_cache_manager import get_cache_manager
+#     cache_manager = get_cache_manager()
+#     cache_info = cache_manager.get_cache_info()
 
-    st.sidebar.metric(
-        "Archivos en caché",
-        cache_info['file_count'],
-        f"{cache_info['total_size_mb']:.1f} MB en disco"
-    )
+#     st.sidebar.metric(
+#         "Archivos en caché",
+#         cache_info['file_count'],
+#         f"{cache_info['total_size_mb']:.1f} MB en disco"
+#     )
 
-    col1, col2 = st.sidebar.columns(2)
-    with col1:
-        if st.button("🔄 Limpiar Caché"):
-            cache_manager.clear_cache()
-            st.cache_data.clear()
-            st.cache_resource.clear()
-            st.success("✓ Caché limpiada")
-            st.rerun()
+#     col1, col2 = st.sidebar.columns(2)
+#     with col1:
+#         if st.button("🔄 Limpiar Caché"):
+#             cache_manager.clear_cache()
+#             st.cache_data.clear()
+#             st.cache_resource.clear()
+#             st.success("✓ Caché limpiada")
+#             st.rerun()
 
-    with col2:
-        if st.button("📥 Ver detalles"):
-            with st.sidebar.expander("Archivos en caché", expanded=True):
-                for filename in cache_info['files']:
-                    st.text(f"• {filename}")
-except:
-    pass
+#     with col2:
+#         if st.button("📥 Ver detalles"):
+#             with st.sidebar.expander("Archivos en caché", expanded=True):
+#                 for filename in cache_info['files']:
+#                     st.text(f"• {filename}")
+# except:
+#     pass
 
 if is_local:
     st.sidebar.title("🛠️ Opciones de Desarrollo")
