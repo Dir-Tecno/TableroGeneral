@@ -10,4 +10,10 @@ credenciales.json
 setministerio
 Dockerfile
 docker-compose.yml
-.github\workflows\redeploy-portainer.yml
+
+.github\
+.venv/
+cache_datos/
+data/
+logs/
+
