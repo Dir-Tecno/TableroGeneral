@@ -115,7 +115,7 @@ def mostrar_kpis_fiscales(df_global):
                 st.info(f"No existe la columna {campo} en los datos.")
                 continue
             df_campo = df_categoria_estados[df_categoria_estados[campo].notnull()]
-            group = df_campo.groupby(campo)["CUIL"].nunique().reset_index()
+            group = df_campo.groupby(campo, observed=True)["CUIL"].nunique().reset_index()
             group = group.rename(columns={"CUIL": "CUILs únicos", campo: campo})
             group = group.sort_values("CUILs únicos", ascending=False)
             st.dataframe(group, use_container_width=True, hide_index=True)
@@ -468,7 +468,7 @@ def mostrar_global(df_filtrado_global, tooltips_categorias):
     # Crear el conteo de estados
     try:
         conteo_estados = (
-            df_filtrado_global.groupby("N_ESTADO_PRESTAMO")
+            df_filtrado_global.groupby("N_ESTADO_PRESTAMO", observed=True)
             .size()
             .rename("conteo")
             .reset_index()
@@ -732,7 +732,7 @@ def mostrar_global(df_filtrado_global, tooltips_categorias):
             df_filtrado_torta = df_filtrado_global[df_filtrado_global['CATEGORIA'].isin(categorias_mostrar)]
             
             # Agrupar el DataFrame filtrado por línea de préstamo
-            grafico_torta = df_filtrado_torta.groupby('N_LINEA_PRESTAMO').size().reset_index(name='Cantidad')
+            grafico_torta = df_filtrado_torta.groupby('N_LINEA_PRESTAMO', observed=True).size().reset_index(name='Cantidad')
             
             if grafico_torta.empty:
                 st.info("No hay datos en las categorías seleccionadas para mostrar en el gráfico.")
@@ -774,7 +774,7 @@ def mostrar_global(df_filtrado_global, tooltips_categorias):
                     st.warning("No hay datos disponibles para el gráfico de sexo después de filtrar NaNs.")
                 else:
                     # Agregar una columna que indique la categoría para el hover
-                    df_sexo_con_categoria = df_sexo.groupby(['N_SEXO', 'CATEGORIA']).size().reset_index(name='Cantidad')
+                    df_sexo_con_categoria = df_sexo.groupby(['N_SEXO', 'CATEGORIA'], observed=True).size().reset_index(name='Cantidad')
                     
                     # Agrupar por sexo para el gráfico principal
                     sexo_counts = df_sexo['N_SEXO'].value_counts().reset_index()
@@ -899,8 +899,22 @@ def mostrar_global(df_filtrado_global, tooltips_categorias):
                 if selected_categorias_edades:
                     df_edades = df_edades[df_edades['CATEGORIA'].isin(selected_categorias_edades)]
                 # Convertir a datetime y quitar hora
-                df_edades['FEC_NACIMIENTO'] = pd.to_datetime(df_edades['FEC_NACIMIENTO'], errors='coerce').dt.date
-                df_edades['FEC_FORM'] = pd.to_datetime(df_edades['FEC_FORM'], errors='coerce').dt.date
+                # Convertir a datetime y asegurar tz-naive antes de extraer .date
+                df_edades['FEC_NACIMIENTO'] = pd.to_datetime(df_edades['FEC_NACIMIENTO'], errors='coerce')
+                try:
+                    if pd.api.types.is_datetime64tz_dtype(df_edades['FEC_NACIMIENTO']):
+                        df_edades['FEC_NACIMIENTO'] = df_edades['FEC_NACIMIENTO'].dt.tz_localize(None)
+                except Exception:
+                    pass
+                df_edades['FEC_NACIMIENTO'] = df_edades['FEC_NACIMIENTO'].dt.date
+
+                df_edades['FEC_FORM'] = pd.to_datetime(df_edades['FEC_FORM'], errors='coerce')
+                try:
+                    if pd.api.types.is_datetime64tz_dtype(df_edades['FEC_FORM']):
+                        df_edades['FEC_FORM'] = df_edades['FEC_FORM'].dt.tz_localize(None)
+                except Exception:
+                    pass
+                df_edades['FEC_FORM'] = df_edades['FEC_FORM'].dt.date
                 # Calcular edad usando FEC_FORM en lugar de la fecha actual
                 df_edades['EDAD'] = df_edades.apply(
                     lambda row: row['FEC_FORM'].year - row['FEC_NACIMIENTO'].year - 
@@ -997,7 +1011,13 @@ def mostrar_global(df_filtrado_global, tooltips_categorias):
             aplicar_filtro_fecha = st.checkbox('Aplicar filtro por Fecha de Inicio de Pago', value=False, help="Este filtro solo afecta a préstamos que tienen fecha de inicio de pago (principalmente categoría 'Pagados')")
             
             if aplicar_filtro_fecha and 'FEC_INICIO_PAGO' in df_categoria_estados.columns:
+                # Asegurar tz-naive antes de usar .dt.date
                 df_categoria_estados['FEC_INICIO_PAGO'] = pd.to_datetime(df_categoria_estados['FEC_INICIO_PAGO'], errors='coerce')
+                try:
+                    if pd.api.types.is_datetime64tz_dtype(df_categoria_estados['FEC_INICIO_PAGO']):
+                        df_categoria_estados['FEC_INICIO_PAGO'] = df_categoria_estados['FEC_INICIO_PAGO'].dt.tz_localize(None)
+                except Exception:
+                    pass
                 fechas_validas = df_categoria_estados['FEC_INICIO_PAGO'].dropna().dt.date.unique()
                 fechas_validas = sorted(fechas_validas)
                 if fechas_validas:
@@ -1036,7 +1056,7 @@ def mostrar_global(df_filtrado_global, tooltips_categorias):
             if not df_categoria_estados.empty:
                 # Realizar el agrupamiento
                 df_grouped = df_categoria_estados.groupby(
-                    ['N_DEPARTAMENTO', 'N_LOCALIDAD', 'CATEGORIA', 'N_LINEA_PRESTAMO']
+                    ['N_DEPARTAMENTO', 'N_LOCALIDAD', 'CATEGORIA', 'N_LINEA_PRESTAMO'], observed=True
                 ).agg({
                     'NRO_SOLICITUD': 'count',
                     'MONTO_OTORGADO': 'sum'
@@ -1127,7 +1147,7 @@ def mostrar_global(df_filtrado_global, tooltips_categorias):
 
             # Agrupar para obtener el conteo y la suma de montos
             df_descarga_grouped = df_para_descarga.groupby(
-                ['N_DEPARTAMENTO', 'N_LOCALIDAD', 'N_LINEA_PRESTAMO'] + columnas_extra + ['CATEGORIA']
+                ['N_DEPARTAMENTO', 'N_LOCALIDAD', 'N_LINEA_PRESTAMO'] + columnas_extra + ['CATEGORIA'], observed=True
             ).agg({
                 'NRO_SOLICITUD': 'count',
                 'MONTO_OTORGADO': 'sum'
@@ -1138,6 +1158,23 @@ def mostrar_global(df_filtrado_global, tooltips_categorias):
                 'NRO_SOLICITUD': 'Cantidad',
                 'MONTO_OTORGADO': 'Monto Total'
             })
+            
+            # Convertir columnas datetime con timezone a timezone-naive para Excel
+            for col in df_descarga_grouped.columns:
+                if pd.api.types.is_datetime64_any_dtype(df_descarga_grouped[col]):
+                    try:
+                        # Si la columna tiene timezone, removerla
+                        if hasattr(df_descarga_grouped[col].dtype, 'tz') and df_descarga_grouped[col].dtype.tz is not None:
+                            df_descarga_grouped[col] = df_descarga_grouped[col].dt.tz_localize(None)
+                        elif hasattr(df_descarga_grouped[col].dt, 'tz') and df_descarga_grouped[col].dt.tz is not None:
+                            df_descarga_grouped[col] = df_descarga_grouped[col].dt.tz_localize(None)
+                    except Exception:
+                        # Si hay algún error, intentar convertir de forma general
+                        try:
+                            df_descarga_grouped[col] = pd.to_datetime(df_descarga_grouped[col]).dt.tz_localize(None)
+                        except Exception:
+                            pass  # Si no se puede convertir, dejar como está
+            
             # --- Botón de descarga Excel con ícono ---
             import io
             excel_buffer = io.BytesIO()
@@ -1186,6 +1223,23 @@ def mostrar_global(df_filtrado_global, tooltips_categorias):
                 df_fechas = df_filtrado_global[['FEC_FORM']].copy()
                 df_fechas['FEC_FORM'] = pd.to_datetime(df_fechas['FEC_FORM'], errors='coerce')
                 df_fechas.dropna(subset=['FEC_FORM'], inplace=True)
+                # Normalizar timezone: convertir a tz-naive para evitar comparaciones tz-aware vs tz-naive
+                try:
+                    if pd.api.types.is_datetime64tz_dtype(df_fechas['FEC_FORM']):
+                        df_fechas['FEC_FORM'] = df_fechas['FEC_FORM'].dt.tz_localize(None)
+                    else:
+                        # Intentar eliminar cualquier tz implícita
+                        try:
+                            if hasattr(df_fechas['FEC_FORM'].dt, 'tz') and df_fechas['FEC_FORM'].dt.tz is not None:
+                                df_fechas['FEC_FORM'] = df_fechas['FEC_FORM'].dt.tz_localize(None)
+                        except Exception:
+                            pass
+                except Exception:
+                    # Fallback general: intentar reconvertir y eliminar tz
+                    try:
+                        df_fechas['FEC_FORM'] = pd.to_datetime(df_fechas['FEC_FORM']).dt.tz_localize(None)
+                    except Exception:
+                        pass
                 fecha_actual = datetime.now()
                 df_fechas = df_fechas[df_fechas['FEC_FORM'] <= fecha_actual]
                 fecha_min_valida = pd.to_datetime('1678-01-01')
@@ -1196,6 +1250,21 @@ def mostrar_global(df_filtrado_global, tooltips_categorias):
                     df_fechas_pago = df_filtrado_global[['FEC_INICIO_PAGO']].copy()
                     df_fechas_pago['FEC_INICIO_PAGO'] = pd.to_datetime(df_fechas_pago['FEC_INICIO_PAGO'], errors='coerce')
                     df_fechas_pago.dropna(subset=['FEC_INICIO_PAGO'], inplace=True)
+                    # Normalizar timezone para FEC_INICIO_PAGO
+                    try:
+                        if pd.api.types.is_datetime64tz_dtype(df_fechas_pago['FEC_INICIO_PAGO']):
+                            df_fechas_pago['FEC_INICIO_PAGO'] = df_fechas_pago['FEC_INICIO_PAGO'].dt.tz_localize(None)
+                        else:
+                            try:
+                                if hasattr(df_fechas_pago['FEC_INICIO_PAGO'].dt, 'tz') and df_fechas_pago['FEC_INICIO_PAGO'].dt.tz is not None:
+                                    df_fechas_pago['FEC_INICIO_PAGO'] = df_fechas_pago['FEC_INICIO_PAGO'].dt.tz_localize(None)
+                            except Exception:
+                                pass
+                    except Exception:
+                        try:
+                            df_fechas_pago['FEC_INICIO_PAGO'] = pd.to_datetime(df_fechas_pago['FEC_INICIO_PAGO']).dt.tz_localize(None)
+                        except Exception:
+                            pass
                     df_fechas_pago = df_fechas_pago[df_fechas_pago['FEC_INICIO_PAGO'] <= fecha_actual]
                     df_fechas_pago = df_fechas_pago[df_fechas_pago['FEC_INICIO_PAGO'] >= fecha_min_valida].copy()
                     tiene_datos_pago = not df_fechas_pago.empty
@@ -1247,14 +1316,14 @@ def mostrar_global(df_filtrado_global, tooltips_categorias):
                             # Preparar serie histórica de formularios
                             if not df_fechas_seleccionado.empty:
                                 df_fechas_seleccionado['AÑO_MES'] = df_fechas_seleccionado['FEC_FORM'].dt.to_period('M')
-                                serie_historica = df_fechas_seleccionado.groupby('AÑO_MES').size().reset_index(name='Cantidad')
+                                serie_historica = df_fechas_seleccionado.groupby('AÑO_MES', observed=True).size().reset_index(name='Cantidad')
                                 serie_historica['FECHA'] = serie_historica['AÑO_MES'].dt.to_timestamp()
                                 serie_historica = serie_historica.sort_values('FECHA')
                             
                             # Preparar serie histórica de inicio de pagos
                             if tiene_datos_pago_filtrados:
                                 df_fechas_pago_seleccionado['AÑO_MES'] = df_fechas_pago_seleccionado['FEC_INICIO_PAGO'].dt.to_period('M')
-                                serie_historica_pago = df_fechas_pago_seleccionado.groupby('AÑO_MES').size().reset_index(name='Cantidad')
+                                serie_historica_pago = df_fechas_pago_seleccionado.groupby('AÑO_MES', observed=True).size().reset_index(name='Cantidad')
                                 serie_historica_pago['FECHA'] = serie_historica_pago['AÑO_MES'].dt.to_timestamp()
                                 serie_historica_pago = serie_historica_pago.sort_values('FECHA')
 
@@ -1323,7 +1392,7 @@ def mostrar_global(df_filtrado_global, tooltips_categorias):
                                 if not df_fechas_seleccionado.empty:
                                     tabla_data_form = serie_historica[['FECHA', 'Cantidad']].copy()
                                     tabla_data_form['Año'] = tabla_data_form['FECHA'].dt.year
-                                    tabla_data_form_agrupada = tabla_data_form.groupby('Año', as_index=False)['Cantidad'].sum()
+                                    tabla_data_form_agrupada = tabla_data_form.groupby('Año', as_index=False, observed=True)['Cantidad'].sum()
                                     
                                     # Guardar datos de formularios en el diccionario
                                     for _, row in tabla_data_form_agrupada.iterrows():
@@ -1336,7 +1405,7 @@ def mostrar_global(df_filtrado_global, tooltips_categorias):
                                 if tiene_datos_pago_filtrados:
                                     tabla_data_pago = serie_historica_pago[['FECHA', 'Cantidad']].copy()
                                     tabla_data_pago['Año'] = tabla_data_pago['FECHA'].dt.year
-                                    tabla_data_pago_agrupada = tabla_data_pago.groupby('Año', as_index=False)['Cantidad'].sum()
+                                    tabla_data_pago_agrupada = tabla_data_pago.groupby('Año', as_index=False, observed=True)['Cantidad'].sum()
                                     
                                     # Guardar datos de inicio de pagos en el diccionario
                                     for _, row in tabla_data_pago_agrupada.iterrows():
@@ -1413,7 +1482,26 @@ def mostrar_recupero(df_filtrado_recupero=None, is_development=False):
     with col1:
         # Función para convertir el DataFrame a CSV
         def convert_df_to_csv(df):
-            return df.to_csv(index=False).encode('utf-8')
+            # Crear una copia para no modificar el original
+            df_csv = df.copy()
+            
+            # Convertir columnas datetime con timezone a timezone-naive para CSV
+            for col in df_csv.columns:
+                if df_csv[col].dtype == 'object':
+                    try:
+                        # Intentar convertir a datetime y verificar si tiene timezone
+                        temp_col = pd.to_datetime(df_csv[col], errors='coerce')
+                        if temp_col.dt.tz is not None:
+                            df_csv[col] = temp_col.dt.tz_localize(None)
+                    except:
+                        pass
+                elif hasattr(df_csv[col], 'dt') and hasattr(df_csv[col].dt, 'tz') and df_csv[col].dt.tz is not None:
+                    try:
+                        df_csv[col] = df_csv[col].dt.tz_localize(None)
+                    except:
+                        pass
+            
+            return df_csv.to_csv(index=False).encode('utf-8')
         
         # Botón de descarga - solo mostrar si df_filtrado_recupero no es None
         if df_filtrado_recupero is not None and not df_filtrado_recupero.empty:
@@ -1690,7 +1778,7 @@ def mostrar_recupero(df_filtrado_recupero=None, is_development=False):
     else:
         # Agrupar y agregar (usando el df_filtrado_pagados)
         # Agrupamos por Departamento y Localidad para el desglose.
-        df_agrupado = df_filtrado_pagados.groupby(['N_DEPARTAMENTO', 'N_LOCALIDAD']).agg(
+        df_agrupado = df_filtrado_pagados.groupby(['N_DEPARTAMENTO', 'N_LOCALIDAD'], observed=True).agg(
             Cantidad_Solicitudes=('NRO_SOLICITUD', 'count'),
             Total_Deuda_Vencida=('DEUDA_VENCIDA', 'sum'),
             Total_Deuda_No_Vencida=('DEUDA_NO_VENCIDA', 'sum'),

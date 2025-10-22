@@ -8,6 +8,46 @@ from utils.kpi_tooltips import TOOLTIPS_DESCRIPTIVOS
 import geopandas as gpd
 import json
 
+
+def _normalize_datetime_columns(df):
+    """Convierte todas las columnas datetime del DataFrame a timezone-naive.
+
+    - Convierte strings a datetime cuando sea posible.
+    - Si la columna tiene tz, la elimina (.dt.tz_localize(None)).
+    - Devuelve el DataFrame modificado (copia superficial).
+    """
+    if df is None:
+        return df
+    df = df.copy()
+    for col in df.columns:
+        try:
+            # Si ya es dtype datetime
+            if pd.api.types.is_datetime64_any_dtype(df[col]):
+                # Remover timezone si existe
+                try:
+                    if hasattr(df[col].dtype, 'tz') and df[col].dtype.tz is not None:
+                        df[col] = df[col].dt.tz_localize(None)
+                except Exception:
+                    # En algunos casos usar dt.tz_convert
+                    try:
+                        df[col] = df[col].dt.tz_convert(None)
+                    except Exception:
+                        pass
+            elif df[col].dtype == 'object':
+                # Intentar convertir strings a datetime
+                temp = pd.to_datetime(df[col], errors='coerce')
+                if temp.notna().any():
+                    df[col] = temp
+                    try:
+                        if hasattr(df[col].dt, 'tz') and df[col].dt.tz is not None:
+                            df[col] = df[col].dt.tz_localize(None)
+                    except Exception:
+                        pass
+        except Exception:
+            # Si falla para una columna, seguimos con la siguiente
+            continue
+    return df
+
 def create_cbamecapacita_kpi(resultados):
     """
     Crea los KPIs específicos para el módulo CBA Me Capacita.
@@ -91,6 +131,14 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
     df_postulantes = data.get('df_postulantes_cbamecapacita.parquet')
     df_alumnos = data.get('df_alumnos.parquet')
     df_cursos = data.get('df_cursos.parquet')
+
+    # Normalizar datetime en todos los dataframes cargados para evitar conflictos de timezone
+    if df_postulantes is not None:
+        df_postulantes = _normalize_datetime_columns(df_postulantes)
+    if df_alumnos is not None:
+        df_alumnos = _normalize_datetime_columns(df_alumnos)
+    if df_cursos is not None:
+        df_cursos = _normalize_datetime_columns(df_cursos)
 
 
     # KPIs reales usando VT_INSCRIPCIONES_PRG129.parquet (postulantes) y VT_CURSOS_SEDES_GEO.parquet (cursos)
@@ -201,17 +249,20 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
             # 1. Cantidad de Postulaciones y Participantes por N_DEPARTAMENTO y N_LOCALIDAD
             st.subheader("Cantidad de Postulaciones y Participantes por Departamento y Localidad")
             # Agrupar por N_DEPARTAMENTO y N_LOCALIDAD, contando CUILs únicos y ALUMNO not null
-            df_group = df_filtered.groupby(['N_DEPARTAMENTO', 'N_LOCALIDAD']).agg(
+            df_group = df_filtered.groupby(['N_DEPARTAMENTO', 'N_LOCALIDAD'], observed=True).agg(
                 POSTULACIONES=('CUIL', 'nunique'),
                 ALUMNOS=('ALUMNO', lambda x: x.notnull().sum())
             ).reset_index()
             st.dataframe(df_group, use_container_width=True, hide_index=True)
             # 2. Distribución por rangos de edad
             st.subheader("Distribución por Rangos de Edad")
-            today = pd.Timestamp.today()
+            today = pd.Timestamp.today().tz_localize(None)  # Hacer tz-naive
             if 'FEC_NACIMIENTO' in df_filtered.columns:
                 df_filtered = df_filtered.copy()
                 df_filtered['FEC_NACIMIENTO'] = pd.to_datetime(df_filtered['FEC_NACIMIENTO'], errors='coerce')
+                # Asegurar que FEC_NACIMIENTO sea tz-naive
+                if df_filtered['FEC_NACIMIENTO'].dt.tz is not None:
+                    df_filtered['FEC_NACIMIENTO'] = df_filtered['FEC_NACIMIENTO'].dt.tz_localize(None)
                 df_filtered['EDAD'] = ((today - df_filtered['FEC_NACIMIENTO']).dt.days // 365).astype('Int64')
                 bins = [0, 17, 29, 39, 49, 59, 69, 200]
                 labels = ['<18', '18-29', '30-39', '40-49', '50-59', '60-69','70+']
@@ -736,7 +787,7 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                     )
                     
                     # Contar cursos por rango de postulantes
-                    df_rangos = df_cursos.groupby('Rango_Postulantes', observed=False).size().reset_index(name='Cantidad_Cursos')
+                    df_rangos = df_cursos.groupby('Rango_Postulantes', observed=True).size().reset_index(name='Cantidad_Cursos')
                     
                     # Filtrar rangos con 0 cursos y limpiar datos infinitos/NaN para evitar warnings en Vega-Lite
                     df_rangos = df_rangos[df_rangos['Cantidad_Cursos'] > 0]
@@ -804,6 +855,23 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
             # Filtrar solo columnas existentes
             columnas_existentes = [col for col in columnas_exportar if col in df_cursos.columns]
             df_export = df_cursos[columnas_existentes].copy()
+            
+            # Convertir columnas datetime con timezone a timezone-naive para Excel
+            for col in df_export.columns:
+                if pd.api.types.is_datetime64_any_dtype(df_export[col]):
+                    try:
+                        # Si la columna tiene timezone, removerla
+                        if hasattr(df_export[col].dtype, 'tz') and df_export[col].dtype.tz is not None:
+                            df_export[col] = df_export[col].dt.tz_localize(None)
+                        # También intentar con dt.tz_convert(None) si existe zona horaria
+                        elif hasattr(df_export[col].dt, 'tz') and df_export[col].dt.tz is not None:
+                            df_export[col] = df_export[col].dt.tz_localize(None)
+                    except Exception:
+                        # Si hay algún error, intentar convertir de forma general
+                        try:
+                            df_export[col] = pd.to_datetime(df_export[col]).dt.tz_localize(None)
+                        except Exception:
+                            pass  # Si no se puede convertir, dejar como está
             
             # Mostrar tabla con estilos
             st.markdown("### Tabla de Cursos")
@@ -883,10 +951,20 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                 df_cursos[col] = df_cursos[col].str.extract(r"(-?\d+\.\d+)").astype(float)
                 df_cursos = df_cursos.dropna(subset=["LATITUD", "LONGITUD"])
 
+            # Reducir precisión de coordenadas para agrupar de forma más eficiente
+            # (evita que pequeñas diferencias formen grupos únicos y exploten memoria)
+            if 'LATITUD' in df_cursos.columns and 'LONGITUD' in df_cursos.columns:
+                try:
+                    df_cursos['LATITUD'] = df_cursos['LATITUD'].round(4)
+                    df_cursos['LONGITUD'] = df_cursos['LONGITUD'].round(4)
+                except Exception:
+                    # Si falla el round (valores no numéricos), ignorar y continuar
+                    pass
+
             # Agrupar y contar para tabla (incluye ID_DEPARTAMENTO para relación con geojson)
             df_agrupado_tabla = df_cursos.groupby([
                 "ID_DEPARTAMENTO", "N_DEPARTAMENTO", "N_SECTOR_PRODUCTIVO"
-            ]).agg(
+            ], observed=True).agg(
                 Cantidad=("N_SECTOR_PRODUCTIVO", "size"),
                 POSTULACIONES =("POSTULACIONES","sum"),
                 ALUMNOS =("ALUMNOS","sum")
@@ -895,9 +973,9 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
             # --- NUEVO MAPA: Choropleth por Departamento ---
             if geojson_departamentos is not None and 'ID_DEPARTAMENTO' in df_agrupado_tabla.columns:
                 # Sumar cantidad por departamento
-                choropleth_data = df_agrupado_tabla.groupby(['ID_DEPARTAMENTO', 'N_DEPARTAMENTO'], as_index=False)["Cantidad"].sum()
+                choropleth_data = df_agrupado_tabla.groupby(['ID_DEPARTAMENTO', 'N_DEPARTAMENTO'], as_index=False, observed=True)["Cantidad"].sum()
                 # Agregar columna de sectores productivos agregados por departamento
-                sectores_por_depto = df_agrupado_tabla.groupby(['ID_DEPARTAMENTO', 'N_DEPARTAMENTO'])['N_SECTOR_PRODUCTIVO'].apply(lambda x: ', '.join(sorted(set(x)))).reset_index(name='SectoresProductivos')
+                sectores_por_depto = df_agrupado_tabla.groupby(['ID_DEPARTAMENTO', 'N_DEPARTAMENTO'], observed=True)['N_SECTOR_PRODUCTIVO'].apply(lambda x: ', '.join(sorted(set(x)))).reset_index(name='SectoresProductivos')
                 choropleth_data = choropleth_data.merge(sectores_por_depto, on=['ID_DEPARTAMENTO', 'N_DEPARTAMENTO'], how='left')
                 col_map_depto, col_tabla_depto = st.columns([2, 3])
                 with col_map_depto:
@@ -934,7 +1012,7 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
             # Agrupar y contar para mapa de sedes
             df_agrupado_mapa = df_cursos.groupby([
                 "N_SEDE", "N_LOCALIDAD", "N_DEPARTAMENTO", "LATITUD", "LONGITUD"
-            ]).size().reset_index(name="Cantidad")
+            ], observed=True).size().reset_index(name="Cantidad")
 
             # Mapa de sedes
             col_mapa, col_tabla = st.columns([1, 3])
@@ -988,7 +1066,7 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                 st.markdown("### Cantidad de Cursos por Departamento y Localidad")
                 df_cursos_depto_loc = df_cursos.groupby([
                     "N_DEPARTAMENTO", "N_LOCALIDAD"
-                ]).size().reset_index(name="Cantidad")
+                ], observed=True).size().reset_index(name="Cantidad")
                 styled_table = (
                     df_cursos_depto_loc[["N_DEPARTAMENTO", "N_LOCALIDAD", "Cantidad"]].style
                     .background_gradient(cmap="Blues")

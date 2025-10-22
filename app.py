@@ -130,17 +130,7 @@ def load_module_data(module_key):
                 data[key] = optimize_dataframe(df)
         return data, dates, logs
 
-    if FUENTE_DATOS == "minio":
-        minio_client = get_minio_client()
-        if minio_client:
-            data, dates, logs = load_data_from_minio(minio_client, MINIO_BUCKET, temp_modules)
-            # Optimizar DataFrames después de cargarlos
-            for key, df in data.items():
-                if isinstance(df, pd.DataFrame):
-                    data[key] = optimize_dataframe(df)
-            return data, dates, logs
-        else:
-            return {}, {}, {"warnings": ["Fallo en conexión a MinIO"], "info": []}
+    # MINIO SUPPORT REMOVED - only local and gitlab sources supported
 
     if FUENTE_DATOS == "gitlab":
         gitlab_token = None
@@ -169,14 +159,7 @@ def load_all_data():
         st.success("Modo de desarrollo: Cargando datos desde carpeta local.")
         return load_data_from_local(LOCAL_PATH, modules)
 
-    if FUENTE_DATOS == "minio":
-        minio_client = get_minio_client()
-        if minio_client:
-            st.success("Modo de producción: Cargando datos desde MinIO.")
-            return load_data_from_minio(minio_client, MINIO_BUCKET, modules)
-        else:
-            st.error("No se pudo establecer la conexión con MinIO. No se pueden cargar los datos.")
-            return {}, {}, {"warnings": ["Fallo en conexión a MinIO"], "info": []}
+    # MINIO SUPPORT REMOVED - only local and gitlab sources supported
 
     if FUENTE_DATOS == "gitlab":
         

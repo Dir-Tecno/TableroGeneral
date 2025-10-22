@@ -44,4 +44,4 @@ wordcloud
 # Herramientas de desarrollo
 psutil
 
-minio
+# minio  # REMOVED: Minio support disabled

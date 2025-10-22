@@ -19,7 +19,7 @@ import requests
 import os
 import gc
 from typing import Dict, List, Tuple, Optional, Any
-from minio import Minio
+# from minio import Minio  # REMOVED: Minio support disabled
 
 # Importar utilidades de Sentry
 from utils.sentry_utils import (
@@ -298,7 +298,7 @@ def load_module_data_optimized(module_key: str,
 
     Args:
         module_key: Clave del módulo ('empleo', 'bco_gente', etc.)
-        source_type: Tipo de fuente ('local', 'gitlab', 'minio')
+        source_type: Tipo de fuente ('local', 'gitlab') - minio no soportado
         source_params: Parámetros de la fuente
 
     Returns:

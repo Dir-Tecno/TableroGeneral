@@ -356,7 +356,7 @@ def show_postulantes(df_postulantes_empleo):
         with col_genero:
             st.markdown('<div class="section-title">Distribución por Género</div>', unsafe_allow_html=True)
             if 'SEXO' in df_filtrado.columns and 'CUIL' in df_filtrado.columns and not df_filtrado['SEXO'].dropna().empty:
-                gender_counts = df_filtrado.groupby('SEXO')['CUIL'].nunique().reset_index()
+                gender_counts = df_filtrado.groupby('SEXO', observed=True)['CUIL'].nunique().reset_index()
                 gender_counts.columns = ['SEXO', 'CANTIDAD']
                 
                 fig_gender = px.pie(
@@ -382,7 +382,12 @@ def show_postulantes(df_postulantes_empleo):
                             fecha = pd.to_datetime(fecha_str, errors='coerce')
                             if pd.isnull(fecha):
                                 return None
-                            return today.year - fecha.year - ((today.month, today.day) < (fecha.month, fecha.day))
+                            # Asegurar que la fecha sea tz-naive para evitar problemas
+                            if hasattr(fecha, 'tz') and fecha.tz is not None:
+                                fecha = fecha.tz_localize(None)
+                            # Convertir a date para comparación segura
+                            fecha_date = fecha.date() if hasattr(fecha, 'date') else fecha
+                            return today.year - fecha_date.year - ((today.month, today.day) < (fecha_date.month, fecha_date.day))
                         except:
                             return None
                     df_edad['EDAD'] = df_edad['FEC_NACIMIENTO'].apply(calcular_edad)
@@ -418,7 +423,7 @@ def show_postulantes(df_postulantes_empleo):
                 df_empresas_unicas = df_filtrado[['CUIT', 'N_EMPRESA']].drop_duplicates()
                 
                 # Luego hacemos el conteo de postulantes por empresa
-                empresas_counts = df_filtrado.groupby('CUIT')['CUIL'].nunique().reset_index()
+                empresas_counts = df_filtrado.groupby('CUIT', observed=True)['CUIL'].nunique().reset_index()
                 empresas_counts.columns = ['CUIT', 'Postulantes']
                 
                 # Unimos con la información de empresa
@@ -493,7 +498,7 @@ def show_companies(df_empresas):
     if 'CUIT' in df_display.columns and 'ADHERIDO' in df_display.columns:
         # Guardamos la lista original de programas para cada CUIT antes de agrupar
         df_display['PROGRAMAS_LISTA'] = df_display['ADHERIDO']
-        df_display['ADHERIDO'] = df_display.groupby('CUIT')['ADHERIDO'].transform(lambda x: ', '.join(sorted(set(x))))
+        df_display['ADHERIDO'] = df_display.groupby('CUIT', observed=True)['ADHERIDO'].transform(lambda x: ', '.join(sorted(set(x))))
     
     # Usar columns_to_select para crear df_display correctamente (sin duplicar columnas)
     df_display = df_display[columns_to_select].drop_duplicates(subset='CUIT')
@@ -721,7 +726,7 @@ def show_companies(df_empresas):
             st.markdown('<h3 style="font-size: 18px; margin-bottom: 15px;">Puestos y Categorías Demandadas por Empresa</h3>', unsafe_allow_html=True)
             # Gráfico de torta por tipo de empresa
             if 'N_CATEGORIA_EMPLEO' in df_perfil_demanda.columns and 'CUIT' in df_perfil_demanda.columns:
-                df_actividad = df_perfil_demanda.groupby('N_CATEGORIA_EMPLEO')['CUIT'].nunique().reset_index()
+                df_actividad = df_perfil_demanda.groupby('N_CATEGORIA_EMPLEO', observed=True)['CUIT'].nunique().reset_index()
                 df_actividad.columns = ['Actividad Principal', 'Cantidad de Empresas']
                 df_actividad = df_actividad.sort_values(by='Cantidad de Empresas', ascending=False).head(10)
                 
@@ -744,7 +749,7 @@ def show_companies(df_empresas):
             st.markdown('<h3 style="font-size: 18px; margin-bottom: 15px;">Top 10 - Categorías de Empleo por Nº de Empresas</h3>', unsafe_allow_html=True)
 
             if 'N_PUESTO_EMPLEO' in df_perfil_demanda.columns and 'CUIT' in df_perfil_demanda.columns:
-                categoria_counts = df_perfil_demanda.groupby('N_PUESTO_EMPLEO')['CUIT'].nunique().reset_index()
+                categoria_counts = df_perfil_demanda.groupby('N_PUESTO_EMPLEO', observed=True)['CUIT'].nunique().reset_index()
                 categoria_counts.columns = ['Puesto', 'Nº de Empresas']
                 
                 top_10_categorias = categoria_counts.sort_values(by='Nº de Empresas', ascending=False).head(10)
@@ -1091,10 +1096,10 @@ def show_inscriptions(df_inscriptos_empleo, geojson_data):
         else:
             # Crear dataframes separados por tipo de beneficiario
             df_beneficiarios_el = df_beneficiarios[df_beneficiarios['N_ESTADO_FICHA'] == "BENEFICIARIO"]
-            df_el_count = df_beneficiarios_el.groupby(['N_DEPARTAMENTO', 'N_LOCALIDAD']).size().reset_index(name='BENEFICIARIO')
+            df_el_count = df_beneficiarios_el.groupby(['N_DEPARTAMENTO', 'N_LOCALIDAD'], observed=True).size().reset_index(name='BENEFICIARIO')
             
             df_beneficiarios_cti = df_beneficiarios[df_beneficiarios['N_ESTADO_FICHA'] == "BENEFICIARIO- CTI"]
-            df_cti_count = df_beneficiarios_cti.groupby(['N_DEPARTAMENTO', 'N_LOCALIDAD']).size().reset_index(name='BENEFICIARIO- CTI')
+            df_cti_count = df_beneficiarios_cti.groupby(['N_DEPARTAMENTO', 'N_LOCALIDAD'], observed=True).size().reset_index(name='BENEFICIARIO- CTI')
             
             # Unir los dataframes
             df_mapa = pd.merge(df_el_count, df_cti_count, on=['N_DEPARTAMENTO', 'N_LOCALIDAD'], how='outer')
@@ -1134,10 +1139,10 @@ def show_inscriptions(df_inscriptos_empleo, geojson_data):
                 if not df_beneficiarios_mapa.empty and 'ID_DEPARTAMENTO_GOB' in df_beneficiarios_mapa.columns:
                     # Crear datos para el mapa por departamento
                     df_beneficiarios_el = df_beneficiarios_mapa[df_beneficiarios_mapa['N_ESTADO_FICHA'] == "BENEFICIARIO"]
-                    df_el_count = df_beneficiarios_el.groupby(['ID_DEPARTAMENTO_GOB', 'N_DEPARTAMENTO']).size().reset_index(name='BENEFICIARIO')
+                    df_el_count = df_beneficiarios_el.groupby(['ID_DEPARTAMENTO_GOB', 'N_DEPARTAMENTO'], observed=True).size().reset_index(name='BENEFICIARIO')
                     
                     df_beneficiarios_cti = df_beneficiarios_mapa[df_beneficiarios_mapa['N_ESTADO_FICHA'] == "BENEFICIARIO- CTI"]
-                    df_cti_count = df_beneficiarios_cti.groupby(['ID_DEPARTAMENTO_GOB', 'N_DEPARTAMENTO']).size().reset_index(name='BENEFICIARIO- CTI')
+                    df_cti_count = df_beneficiarios_cti.groupby(['ID_DEPARTAMENTO_GOB', 'N_DEPARTAMENTO'], observed=True).size().reset_index(name='BENEFICIARIO- CTI')
                     
                     df_mapa_geo = pd.merge(df_el_count, df_cti_count, on=['ID_DEPARTAMENTO_GOB', 'N_DEPARTAMENTO'], how='outer')
                     df_mapa_geo['BENEFICIARIO'] = df_mapa_geo['BENEFICIARIO'].fillna(0).astype(int)

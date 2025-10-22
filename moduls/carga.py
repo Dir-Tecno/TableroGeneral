@@ -6,7 +6,7 @@ import datetime
 import numpy as np
 import requests
 import os
-from minio import Minio
+# from minio import Minio  # REMOVED: Minio support disabled
 import os 
 # Importar utilidades de Sentry
 from utils.sentry_utils import (
@@ -657,7 +657,7 @@ def load_single_file_from_source(source_type, source_params, archivo):
     Carga un único archivo con su propio cacheo independiente
     
     Args:
-        source_type (str): 'gitlab', 'minio' o 'local'
+        source_type (str): 'gitlab' o 'local' (minio no soportado)
         source_params (dict): Parámetros específicos de la fuente (ej: repo_id, branch, token)
         archivo (str): Ruta al archivo
         
@@ -688,20 +688,20 @@ def load_single_file_from_source(source_type, source_params, archivo):
                 if df is not None:
                     return df, fecha, logs
                     
-        elif source_type == 'minio':
-            minio_client = source_params.get('minio_client')
-            bucket = source_params.get('bucket')
-            
-            try:
-                response = minio_client.get_object(bucket, archivo)
-                contenido = response.read()
-                response.close()
-                response.release_conn()
-                df, fecha = procesar_archivo(archivo, contenido, es_buffer=True, logs=logs)
-                if df is not None:
-                    return df, fecha, logs
-            except Exception as e:
-                logs["warnings"].append(f"Error al obtener {archivo} de MinIO: {str(e)}")
+        # elif source_type == 'minio':  # REMOVED: Minio support disabled
+        #     minio_client = source_params.get('minio_client')
+        #     bucket = source_params.get('bucket')
+        #     
+        #     try:
+        #         response = minio_client.get_object(bucket, archivo)
+        #         contenido = response.read()
+        #         response.close()
+        #         response.release_conn()
+        #         df, fecha = procesar_archivo(archivo, contenido, es_buffer=True, logs=logs)
+        #         if df is not None:
+        #             return df, fecha, logs
+        #     except Exception as e:
+        #         logs["warnings"].append(f"Error al obtener {archivo} de MinIO: {str(e)}")
                 
     except Exception as e:
         logs["warnings"].append(f"Error al cargar {archivo}: {str(e)}")
