@@ -118,7 +118,7 @@ def mostrar_kpis_fiscales(df_global):
             group = df_campo.groupby(campo, observed=True)["CUIL"].nunique().reset_index()
             group = group.rename(columns={"CUIL": "CUILs únicos", campo: campo})
             group = group.sort_values("CUILs únicos", ascending=False)
-            st.dataframe(group, use_container_width=True, hide_index=True)
+            st.dataframe(group, hide_index=True)
 
 # --- RESUMEN DE CREDITOS: Tabla de conteo de campos fiscales para líneas seleccionadas ---
 def mostrar_resumen_creditos(df_global):
@@ -197,13 +197,13 @@ def mostrar_resumen_creditos(df_global):
     cols = st.columns(3)
     with cols[0]:
         st.markdown(f"**{resumen_df.iloc[0]['Línea de Crédito']}**")
-        st.plotly_chart(figs[0], use_container_width=True)
+        st.plotly_chart(figs[0])
     with cols[1]:
         st.markdown(f"**{resumen_df.iloc[1]['Línea de Crédito']}**")
-        st.plotly_chart(figs[1], use_container_width=True)
+        st.plotly_chart(figs[1])
     with cols[2]:
         st.markdown("**Tabla resumen**")
-        st.dataframe(resumen_df, use_container_width=True, hide_index=True)
+        st.dataframe(resumen_df, hide_index=True)
         import io
         csv_buffer = io.StringIO()
         resumen_df.to_csv(csv_buffer, index=False, encoding='utf-8')
@@ -753,7 +753,7 @@ def mostrar_global(df_filtrado_global, tooltips_categorias):
                             title="Distribución por Linea",
                             margin=dict(l=20, r=20, t=30, b=20)
                         )
-                st.plotly_chart(fig_torta, use_container_width=True)
+                st.plotly_chart(fig_torta)
         except Exception as e:
             st.error(f"Error al generar el gráfico de categoría: {e}")
 
@@ -820,7 +820,7 @@ def mostrar_global(df_filtrado_global, tooltips_categorias):
                             title="Distribución por Sexo (Pagados, En proceso y Finalizados)",
                             margin=dict(l=20, r=20, t=30, b=20)
                         )
-                        st.plotly_chart(fig_sexo, use_container_width=True)
+                        st.plotly_chart(fig_sexo)
             else:
                 st.write("Columnas disponibles:", df_filtrado_global.columns.tolist())
                 st.warning("La columna 'N_SEXO' no está presente en el DataFrame.")
@@ -845,7 +845,7 @@ def mostrar_global(df_filtrado_global, tooltips_categorias):
                     empleado_counts.columns = ['Estado de Empleo', 'Cantidad']
                     
                     # Reemplazar valores numéricos por etiquetas descriptivas
-                    empleado_counts['Estado de Empleo'] = empleado_counts['Estado de Empleo'].replace({
+                    empleado_counts['Estado de Empleo'] = empleado_counts['Estado de Empleo'].map({
                         'S': 'Empleado',
                         'N': 'No Empleado'
                     })
@@ -869,7 +869,7 @@ def mostrar_global(df_filtrado_global, tooltips_categorias):
                             title="Distribución por Estado de Empleo EN CREDITOS PAGADOS",
                             margin=dict(l=20, r=20, t=30, b=20)
                         )
-                        st.plotly_chart(fig_empleado, use_container_width=True)
+                        st.plotly_chart(fig_empleado)
             else:
                 st.warning("La columna 'EMPLEADO' no está presente en el DataFrame.")
         except Exception as e:
@@ -938,7 +938,7 @@ def mostrar_global(df_filtrado_global, tooltips_categorias):
                     color_discrete_sequence=px.colors.qualitative.Pastel
                 )
                 fig_edades.update_layout(margin=dict(l=20, r=20, t=30, b=20))
-                st.plotly_chart(fig_edades, use_container_width=True)
+                st.plotly_chart(fig_edades)
             else:
                 st.warning("No hay datos de FEC_NACIMIENTO o N_ESTADO_PRESTAMO disponibles en df_filtrado_global.")
         except Exception as e:
@@ -1125,7 +1125,7 @@ def mostrar_global(df_filtrado_global, tooltips_categorias):
                 return ['background-color: #f2f2f2; font-weight: bold' if is_total_row else '' for _ in s]
             
             styled_df = pivot_df_filtered.style.apply(highlight_total_rows, axis=1)
-            st.dataframe(styled_df, use_container_width=True, hide_index=True)
+            st.dataframe(styled_df, hide_index=True)
             
             # --- Generar DataFrame extendido para descarga (con todas las categorías) ---
             columnas_extra = [
@@ -1367,7 +1367,7 @@ def mostrar_global(df_filtrado_global, tooltips_categorias):
                                     title='Evolución por Mes (Período Seleccionado)',
                                     xaxis_title='Fecha',
                                     yaxis_title='Cantidad',
-                                    xaxis_tickformat='%b %Y',
+                                    xaxis_tickformat='%B %Y',
                                     plot_bgcolor='white',
                                     legend=dict(
                                         orientation="h",
@@ -1379,7 +1379,7 @@ def mostrar_global(df_filtrado_global, tooltips_categorias):
                                     hovermode='x unified'
                                 )
                                 
-                                st.plotly_chart(fig_historia, use_container_width=True)
+                                st.plotly_chart(fig_historia)
                             except Exception as e:
                                 st.error(f"Error al generar el gráfico de serie histórica: {str(e)}")
                                 st.exception(e)  # Muestra el traceback completo para depuración
@@ -1701,7 +1701,6 @@ def mostrar_recupero(df_filtrado_recupero=None, is_development=False):
                 title='Histograma de Días de Cumplimiento con Curva Normal Superpuesta',
                 xaxis_title='Días de Cumplimiento (Mayor número = Menor cumplimiento)',
                 yaxis_title='Frecuencia',
-                xaxis_tickformat='%b %Y',
                 plot_bgcolor='white',
                 legend=dict(
                     orientation="h",
@@ -1747,7 +1746,7 @@ def mostrar_recupero(df_filtrado_recupero=None, is_development=False):
             )
             
             # Mostrar gráfico
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig)
             
             
             # Agregar explicación sobre la importancia del análisis
@@ -1808,6 +1807,6 @@ def mostrar_recupero(df_filtrado_recupero=None, is_development=False):
         }, inplace=True)
         
         # Mostrar tabla
-        st.dataframe(df_agrupado, use_container_width=True)
+        st.dataframe(df_agrupado)
         
     st.markdown("--- ") # Separador para la siguiente sección

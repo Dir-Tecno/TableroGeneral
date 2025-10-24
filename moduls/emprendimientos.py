@@ -102,15 +102,15 @@ def apply_filters(df):
     col1, col2, col3, col4, col5 = st.columns(5)
     
     with col1:
-        anio_sel = st.selectbox('Año', options=['Todos'] + sorted(df['año'].dropna().unique().astype(int).tolist()))
+        anio_sel = st.selectbox('Año', options=['Todos'] + sorted(df['año'].dropna().unique().astype(int).tolist()), key='empr_anio_sel')
     with col2:
-        depto_sel = st.selectbox('Departamento', options=['Todos'] + sorted(df['Departamento'].dropna().unique()))
+        depto_sel = st.selectbox('Departamento', options=['Todos'] + sorted(df['Departamento'].dropna().unique()), key='empr_depto_sel')
     with col3:
-        Localidad_sel = st.selectbox('Localidad', options=['Todos'] + sorted(df['Localidad'].dropna().unique()))
+        Localidad_sel = st.selectbox('Localidad', options=['Todos'] + sorted(df['Localidad'].dropna().unique()), key='empr_localidad_sel')
     with col4:
-        etapa_sel = st.selectbox('Etapa del emprendimiento', options=['Todos'] + sorted(df['Etapa del emprendimiento'].dropna().unique()))
+        etapa_sel = st.selectbox('Etapa del emprendimiento', options=['Todos'] + sorted(df['Etapa del emprendimiento'].dropna().unique()), key='empr_etapa_sel')
     with col5:
-        genero_sel = st.selectbox('Género', options=['Todos'] + sorted(df['Genero'].dropna().unique()))
+        genero_sel = st.selectbox('Género', options=['Todos'] + sorted(df['Genero'].dropna().unique()), key='empr_genero_sel')
 
     df_filtrado = df.copy()
     if anio_sel != 'Todos':

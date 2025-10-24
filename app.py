@@ -35,44 +35,12 @@ except KeyError:
     FUENTE_DATOS = st.secrets.get("FUENTE_DATOS", "gitlab")
     REPO_ID = st.secrets.get("REPO_ID", "Dir-Tecno/df_ministerio")
     BRANCH = st.secrets.get("BRANCH", "main")
-    LOCAL_PATH = st.secrets.get("LOCAL_PATH", "")
+    LOCAL_PATH = st.secrets.get("LOCAL_PATH", "df_ministerio")
 
 # --- Determinación del Modo de Ejecución ---
 from os import path
 is_local = path.exists(LOCAL_PATH) and FUENTE_DATOS == "local"
 
-# --- Botón para Limpiar Caché en Modo Desarrollo ---
-# COMENTADO: Sección de gestión de caché deshabilitada
-# st.sidebar.title("🗂️ Gestión de Caché")
-
-# # Mostrar información de caché en disco
-# try:
-#     from moduls.disk_cache_manager import get_cache_manager
-#     cache_manager = get_cache_manager()
-#     cache_info = cache_manager.get_cache_info()
-
-#     st.sidebar.metric(
-#         "Archivos en caché",
-#         cache_info['file_count'],
-#         f"{cache_info['total_size_mb']:.1f} MB en disco"
-#     )
-
-#     col1, col2 = st.sidebar.columns(2)
-#     with col1:
-#         if st.button("🔄 Limpiar Caché"):
-#             cache_manager.clear_cache()
-#             st.cache_data.clear()
-#             st.cache_resource.clear()
-#             st.success("✓ Caché limpiada")
-#             st.rerun()
-
-#     with col2:
-#         if st.button("📥 Ver detalles"):
-#             with st.sidebar.expander("Archivos en caché", expanded=True):
-#                 for filename in cache_info['files']:
-#                     st.text(f"• {filename}")
-# except:
-#     pass
 
 if is_local:
     st.sidebar.title("🛠️ Opciones de Desarrollo")
@@ -96,6 +64,41 @@ if is_local:
         st.cache_resource.clear()
         st.success("Caché limpiado. La página se recargará con datos frescos.")
         st.rerun()
+
+# Señal visual prominente para modo desarrollo/local
+if is_local:
+    try:
+        local_exists = path.exists(LOCAL_PATH)
+    except Exception:
+        local_exists = False
+
+    st.markdown(
+        f"""
+        <div style="background:#fff3cd;padding:12px;border-left:6px solid #ffc107;border-radius:4px;margin-bottom:10px">
+            <strong>⚠️ Modo Desarrollo (LOCAL) activo</strong><br/>
+            Fuente de datos: <code>{FUENTE_DATOS}</code> — Ruta local: <code>{LOCAL_PATH}</code><br/>
+            Ruta accesible: <strong>{'Sí' if local_exists else 'No'}</strong>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    with st.expander("🔍 Debug rápido (información local)", expanded=True):
+        st.write({
+            "is_local": is_local,
+            "FUENTE_DATOS": FUENTE_DATOS,
+            "LOCAL_PATH": LOCAL_PATH,
+            "LOCAL_PATH_exists": local_exists,
+        })
+        # Mostrar contenido de la carpeta local (si existe)
+        if local_exists:
+            try:
+                files = os.listdir(LOCAL_PATH)
+                st.write(f"Archivos en {LOCAL_PATH}:", files)
+            except Exception as e:
+                st.write(f"No se pudo listar {LOCAL_PATH}: {e}")
+        else:
+            st.info("La ruta local configurada no existe o no es accesible desde este entorno.")
 
 # --- Mapeo de Archivos por Módulo ---
 modules = {

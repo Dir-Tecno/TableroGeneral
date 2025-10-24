@@ -121,6 +121,6 @@ def display_map(fig):
         fig: Figura de Plotly
     """
     if fig is not None:
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig)
     else:
         st.error("No se pudo crear el mapa.")

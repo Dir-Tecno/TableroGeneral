@@ -4,6 +4,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import altair as alt
 from utils.ui_components import display_kpi_row, show_dev_dataframe_info, show_last_update
+from utils.plot_styles import apply_base_style, set_shared_yaxis
 from utils.kpi_tooltips import TOOLTIPS_DESCRIPTIVOS
 import geopandas as gpd
 import json
@@ -196,30 +197,36 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
             # Ordenar por cantidad descendente
             alumnos_por_estado = alumnos_por_estado.sort_values('Cantidad', ascending=False)
             
-            # Crear paleta de colores para los estados
-            color_sequence_estados = px.colors.qualitative.Bold
-            
-            # Crear gráfico de barras para estados de alumnos
+            # Crear gráfico de barras horizontales para mejor estética
             fig_estados = px.bar(
                 alumnos_por_estado, 
-                x='Estado', 
-                y='Cantidad',
+                y='Estado',  # Barras horizontales
+                x='Cantidad',
                 text='Cantidad',
                 title='Distribución de Alumnos por Estado',
-                color='Estado',
-                color_discrete_sequence=color_sequence_estados
+                color='Cantidad',  # Color continuo basado en cantidad
+                color_continuous_scale='Viridis',  # Paleta atractiva
+                orientation='h'  # Horizontal
             )
             
             # Mejorar diseño del gráfico
-            fig_estados.update_traces(texttemplate='%{text:,}', textposition='outside')
+            fig_estados.update_traces(
+                texttemplate='%{text:,}', 
+                textposition='inside',  # Texto dentro de las barras
+                textfont=dict(color='white', size=12),  # Texto blanco para contraste
+                hovertemplate='<b>%{y}</b><br>Cantidad: %{x:,}<extra></extra>'  # Mejor hover
+            )
             fig_estados.update_layout(
-                xaxis_title='Estado',
-                yaxis_title='Cantidad de Alumnos',
-                xaxis={'categoryorder':'total descending'}
+                xaxis_title='Cantidad de Alumnos',
+                yaxis_title='Estado',
+                yaxis={'categoryorder':'total ascending'},  # Orden descendente en horizontal
+                coloraxis_showscale=False,  # Ocultar barra de color para simplicidad
+                margin=dict(l=20, r=20, t=60, b=20)  # Márgenes ajustados
             )
             
             # Mostrar el gráfico
-            st.plotly_chart(fig_estados, use_container_width=True)
+            apply_base_style(fig_estados, rotate_x=False, showlegend=False, height=400, text_inside=True)
+            st.plotly_chart(fig_estados)
             
             # Añadir una tabla con los porcentajes
             total_alumnos = alumnos_por_estado['Cantidad'].sum()
@@ -237,10 +244,10 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
             col1, col2 = st.columns(2)
             with col1:
                 departamentos = sorted(df_postulantes['N_DEPARTAMENTO'].dropna().unique())
-                selected_dpto = st.selectbox("Departamento:", ["Todos"] + departamentos)
+                selected_dpto = st.selectbox("Departamento:", ["Todos"] + departamentos, key="cbame_postulantes_dpto")
             with col2:
                 localidades = sorted(df_postulantes['N_LOCALIDAD'].dropna().unique())
-                selected_loc = st.selectbox("Localidad:", ["Todos"] + localidades)
+                selected_loc = st.selectbox("Localidad:", ["Todos"] + localidades, key="cbame_postulantes_loc")
             df_filtered = df_postulantes.copy()
             if selected_dpto != "Todos":
                 df_filtered = df_filtered[df_filtered['N_DEPARTAMENTO'] == selected_dpto]
@@ -253,7 +260,7 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                 POSTULACIONES=('CUIL', 'nunique'),
                 ALUMNOS=('ALUMNO', lambda x: x.notnull().sum())
             ).reset_index()
-            st.dataframe(df_group, use_container_width=True, hide_index=True)
+            st.dataframe(df_group, hide_index=True)
             # 2. Distribución por rangos de edad
             st.subheader("Distribución por Rangos de Edad")
             today = pd.Timestamp.today().tz_localize(None)  # Hacer tz-naive
@@ -313,7 +320,8 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                     legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1)
                 )
                 
-                st.plotly_chart(fig_edad, use_container_width=True)
+                apply_base_style(fig_edad, rotate_x=False, showlegend=True, height=380)
+                st.plotly_chart(fig_edad)
             else:
                 st.info("No se encontró la columna FEC_NACIMIENTO para calcular edades.")
             # 3. TOP 10 de CAPACITACIONES: Comparación entre postulaciones y capacitaciones con alumnos
@@ -338,7 +346,8 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                         xaxis_title='Capacitación',
                         yaxis_title='Cantidad de Postulaciones'
                     )
-                    st.plotly_chart(fig_topcap_post, use_container_width=True)
+                    apply_base_style(fig_topcap_post, rotate_x=True, showlegend=False, height=360)
+                    st.plotly_chart(fig_topcap_post)
                     
                 with col2:
                     # Top 10 de capacitaciones efectivamente activas con alumnos
@@ -359,10 +368,18 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                             xaxis_title='Capacitación',
                             yaxis_title='Cantidad de Alumnos'
                         )
-                        st.plotly_chart(fig_topcap_activas, use_container_width=True)
+                        apply_base_style(fig_topcap_activas, rotate_x=True, showlegend=False, height=360)
+                        st.plotly_chart(fig_topcap_activas)
                     else:
                         st.info("No se encontraron capacitaciones con alumnos asignados.")
                         
+                # Alinear eje Y entre ambos top-10 si ambos existen
+                try:
+                    if 'fig_topcap_post' in locals() and 'fig_topcap_activas' in locals():
+                        set_shared_yaxis([fig_topcap_post, fig_topcap_activas], pad=0.12)
+                except Exception:
+                    pass
+
                 # Añadir un expander con la tabla comparativa detallada
                 with st.expander("Ver tabla comparativa de capacitaciones"):
                     # Obtener todas las capacitaciones únicas de ambos top 10
@@ -417,7 +434,7 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                 
                 fig_edu = px.pie(edu_group, names='Educación', values='Cantidad', title='Nivel Educativo',
                                  color='Educación', color_discrete_map=edu_colors)
-                cols[0].plotly_chart(fig_edu, use_container_width=True)
+                cols[0].plotly_chart(fig_edu)
                 
                 # Tabla TOP 10 cursos por cada Nivel Educativo
                 if 'N_CERTIFICACION' in df_filtered.columns:
@@ -425,7 +442,7 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                     for nivel in df_filtered['EDUCACION'].dropna().unique():
                         top_cursos = (
                             df_filtered[df_filtered['EDUCACION'] == nivel]
-                            .groupby('N_CERTIFICACION')
+                            .groupby('N_CERTIFICACION', observed=True)
                             .size()
                             .reset_index(name='Cantidad')
                             .sort_values('Cantidad', ascending=False)
@@ -470,7 +487,8 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                                     yaxis=dict(autorange="reversed")  # Invertir el eje Y para que el mayor valor esté arriba
                                 )
                                 
-                                st.plotly_chart(fig, use_container_width=True)
+                                apply_base_style(fig, rotate_x=True, showlegend=False, height=380, text_inside=True)
+                                st.plotly_chart(fig)
                             else:
                                 st.info("No hay datos disponibles para este nivel educativo.")
                 else:
@@ -491,7 +509,7 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                 
                 fig_tipo = px.pie(tipo_group, names='Tipo de Trabajo', values='Cantidad', title='Tipo de Trabajo',
                                   color='Tipo de Trabajo', color_discrete_map=trabajo_colors)
-                cols[1].plotly_chart(fig_tipo, use_container_width=True)
+                cols[1].plotly_chart(fig_tipo)
                 
                 # Tabla TOP 10 cursos por cada Tipo de Trabajo
                 if 'N_CERTIFICACION' in df_filtered.columns:
@@ -499,7 +517,7 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                     for tipo in df_filtered['TIPO_TRABAJO'].dropna().unique():
                         top_cursos = (
                             df_filtered[df_filtered['TIPO_TRABAJO'] == tipo]
-                            .groupby('N_CERTIFICACION')
+                            .groupby('N_CERTIFICACION', observed=True)
                             .size()
                             .reset_index(name='Cantidad')
                             .sort_values('Cantidad', ascending=False)
@@ -544,7 +562,8 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                                     yaxis=dict(autorange="reversed")  # Invertir el eje Y para que el mayor valor esté arriba
                                 )
                                 
-                                st.plotly_chart(fig, use_container_width=True)
+                                apply_base_style(fig, rotate_x=True, showlegend=False, height=380, text_inside=True)
+                                st.plotly_chart(fig)
                             else:
                                 st.info("No hay datos disponibles para este tipo de trabajo.")
                 else:
@@ -589,7 +608,7 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                 
                 fig_sexo = px.pie(sexo_group, names='Sexo', values='Cantidad', title='Distribución por Género',
                                  color='Sexo', color_discrete_map=sexo_colors)
-                cols[2].plotly_chart(fig_sexo, use_container_width=True)
+                cols[2].plotly_chart(fig_sexo)
                 
                 # Tabla TOP 10 cursos por cada Sexo
                 if 'N_CERTIFICACION' in df_filtered.columns:
@@ -597,7 +616,7 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                     for sexo in df_filtered['SEXO'].dropna().unique():
                         top_cursos = (
                             df_filtered[df_filtered['SEXO'] == sexo]
-                            .groupby('N_CERTIFICACION')
+                            .groupby('N_CERTIFICACION', observed=True)
                             .size()
                             .reset_index(name='Cantidad')
                             .sort_values('Cantidad', ascending=False)
@@ -642,7 +661,8 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                                     yaxis=dict(autorange="reversed")  # Invertir el eje Y para que el mayor valor esté arriba
                                 )
                                 
-                                st.plotly_chart(fig, use_container_width=True)
+                                apply_base_style(fig, rotate_x=True, showlegend=False, height=380, text_inside=True)
+                                st.plotly_chart(fig)
                             else:
                                 st.info("No hay datos disponibles para este sexo.")
                 else:
@@ -705,18 +725,32 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
             col1, col2 = st.columns([1, 1])
             
             with col1:
-                # Crear gráfico de barras para mostrar cantidad de cursos por categoría de ocupación
+                # Crear gráfico de barras horizontales para mostrar cantidad de cursos por categoría de ocupación
                 fig_barras = px.bar(
                     df_ocupacion,
-                    x='Categoría',
-                    y='Cantidad',
-                    color='Categoría',
-                    text_auto=True,
+                    y='Categoría',  # Barras horizontales
+                    x='Cantidad',
+                    text='Cantidad',
                     title='Distribución de Cursos por Nivel de Ocupación',
-                    color_discrete_sequence=['#FF5252', '#FFA726', '#FFEB3B', '#66BB6A']
+                    color='Cantidad',  # Color continuo basado en cantidad
+                    color_continuous_scale='Viridis',  # Paleta atractiva
+                    orientation='h'  # Horizontal
                 )
-                fig_barras.update_layout(xaxis_title=None)
-                st.plotly_chart(fig_barras, use_container_width=True)
+                fig_barras.update_traces(
+                    texttemplate='%{text:,}', 
+                    textposition='inside',  # Texto dentro de las barras
+                    textfont=dict(color='white', size=12),  # Texto blanco para contraste
+                    hovertemplate='<b>%{y}</b><br>Cantidad: %{x:,}<extra></extra>'  # Mejor hover
+                )
+                fig_barras.update_layout(
+                    xaxis_title='Cantidad de Cursos',
+                    yaxis_title='Nivel de Ocupación',
+                    yaxis={'categoryorder':'array', 'categoryarray': orden_categorias},  # Mantener orden lógico
+                    coloraxis_showscale=False,  # Ocultar barra de color para simplicidad
+                    margin=dict(l=20, r=20, t=60, b=20)  # Márgenes ajustados
+                )
+                apply_base_style(fig_barras, rotate_x=False, showlegend=False, height=360, text_inside=True)
+                st.plotly_chart(fig_barras)
                 
                 # Mostrar estadísticas de alta ocupación debajo del gráfico
                 st.metric(
@@ -755,7 +789,8 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                     margin=dict(l=20, r=20, t=50, b=20)
                 )
                 
-                st.plotly_chart(fig_gauge, use_container_width=True)
+                apply_base_style(fig_gauge, rotate_x=False, showlegend=False, height=300)
+                st.plotly_chart(fig_gauge)
                 
                 # Ya no necesitamos este indicador métrico aquí, lo hemos movido a la columna 1
         
@@ -790,43 +825,80 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                     df_rangos = df_cursos.groupby('Rango_Postulantes', observed=True).size().reset_index(name='Cantidad_Cursos')
                     
                     # Filtrar rangos con 0 cursos y limpiar datos infinitos/NaN para evitar warnings en Vega-Lite
-                    df_rangos = df_rangos[df_rangos['Cantidad_Cursos'] > 0]
-                    df_rangos['Cantidad_Cursos'] = df_rangos['Cantidad_Cursos'].replace([float('inf'), float('-inf')], 0)
+                    import numpy as np
+                    # Asegurar tipo numérico
+                    df_rangos['Cantidad_Cursos'] = pd.to_numeric(df_rangos['Cantidad_Cursos'], errors='coerce')
+                    # Reemplazar inf por NaN y eliminar nulos
+                    df_rangos['Cantidad_Cursos'] = df_rangos['Cantidad_Cursos'].replace([np.inf, -np.inf], np.nan)
                     df_rangos = df_rangos.dropna(subset=['Cantidad_Cursos'])
-                    df_rangos = df_rangos[df_rangos['Cantidad_Cursos'].notna() & 
-                                 (df_rangos['Cantidad_Cursos'] != float('inf')) & 
-                                 (df_rangos['Cantidad_Cursos'] != float('-inf'))]
-                    
-                    # Crear gráfico de mosaico con Altair
-                    chart = alt.Chart(df_rangos).mark_bar().encode(
-                        x=alt.X('Rango_Postulantes:N', title='Rango de Postulantes por Curso', sort=None),
-                        y=alt.Y('Cantidad_Cursos:Q', title='Cantidad de Cursos'),
-                        color=alt.Color('Rango_Postulantes:N', 
-                                       legend=None,
-                                       scale=alt.Scale(scheme='viridis')),
-                        tooltip=['Rango_Postulantes', 'Cantidad_Cursos']
-                    ).properties(
-                        title='Distribución de Cursos por Cantidad de Postulantes',
-                        width=600,
-                        height=400
-                    )
-                    
-                    # Añadir etiquetas de texto
-                    text = chart.mark_text(
-                        align='center',
-                        baseline='middle',
-                        dy=-10,
-                        color='white',
-                        fontWeight='bold'
-                    ).encode(
-                        text='Cantidad_Cursos:Q'
-                    )
-                    
-                    # Combinar gráfico y etiquetas
-                    final_chart = (chart + text)
-                    
-                    # Mostrar el gráfico
-                    st.altair_chart(final_chart, use_container_width=True)
+                    # Filtrar solo valores positivos (si así se desea) y finitos
+                    df_rangos = df_rangos[df_rangos['Cantidad_Cursos'] > 0]
+                    df_rangos = df_rangos[np.isfinite(df_rangos['Cantidad_Cursos'])]
+                    # Asegurar tipo float
+                    if not df_rangos.empty:
+                        df_rangos['Cantidad_Cursos'] = df_rangos['Cantidad_Cursos'].astype(float)
+
+                    # Si después del saneamiento no hay datos válidos, evitar crear la spec y mostrar mensaje
+                    if df_rangos.empty:
+                        st.info("No hay cursos con datos válidos para mostrar la distribución por postulantes.")
+                    else:
+                        # Crear gráfico de barras con Plotly (evita Vega-Lite/Altair y problemas de dominio)
+                        # Asegurar que las categorías son strings y que los valores son finitos
+                        df_rangos['Rango_Postulantes'] = df_rangos['Rango_Postulantes'].astype(str)
+                        df_rangos['Cantidad_Cursos'] = pd.to_numeric(df_rangos['Cantidad_Cursos'], errors='coerce')
+                        df_rangos = df_rangos[df_rangos['Cantidad_Cursos'].notna() & np.isfinite(df_rangos['Cantidad_Cursos'])]
+
+                        if df_rangos.empty:
+                            st.info("No hay cursos con datos válidos para mostrar la distribución por postulantes.")
+                        else:
+                            # Ordenar por cantidad para un aspecto más natural (barras descendentes)
+                            df_rangos = df_rangos.sort_values('Cantidad_Cursos', ascending=False)
+
+                            # Usar Plotly Express con color continuo para dar profundidad visual
+                            fig_bar = px.bar(
+                                df_rangos,
+                                x='Rango_Postulantes',
+                                y='Cantidad_Cursos',
+                                text='Cantidad_Cursos',
+                                title='Distribución de Cursos por Cantidad de Postulantes',
+                                color='Cantidad_Cursos',
+                                color_continuous_scale='Viridis',
+                                category_orders={"Rango_Postulantes": df_rangos['Rango_Postulantes'].tolist()}
+                            )
+
+                            # Diseño y legibilidad
+                            fig_bar.update_traces(
+                                texttemplate='%{text:.0f}',
+                                textposition='inside',
+                                marker_line_width=0,
+                                insidetextanchor='middle',
+                                selector=dict(type='bar')
+                            )
+
+                            fig_bar.update_layout(
+                                xaxis_title='Rango de Postulantes por Curso',
+                                yaxis_title='Cantidad de Cursos',
+                                showlegend=False,
+                                template='plotly_white',
+                                margin=dict(l=20, r=20, t=60, b=140),
+                                height=420,
+                                coloraxis_showscale=False,
+                                bargap=0.15
+                            )
+
+                            # Rotar etiquetas si son muchas y forzar fuente más pequeña para evitar solapamiento
+                            fig_bar.update_xaxes(tickangle=-35, tickfont=dict(size=11))
+
+                            # Mejor tooltip
+                            fig_bar.update_traces(hovertemplate='<b>%{x}</b><br>Cursos: %{y}<extra></extra>')
+
+                            # El gráfico ya fue estilizado al construir fig_bar (se aplicó apply_base_style ahí),
+                            # pero por consistencia podemos volver a asegurar el estilo antes de renderizar.
+                            try:
+                                apply_base_style(fig_bar, rotate_x=True, showlegend=False, height=420, text_inside=True)
+                            except Exception:
+                                pass
+                            st.plotly_chart(fig_bar)
             else:
                 st.info("No se encontraron valores válidos en la columna POSTULACIONES.")
         
@@ -911,7 +983,7 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
             # Mostrar la tabla con estilos
             st.dataframe(
                 styled_display,
-                use_container_width=True,
+                width='stretch',
                 hide_index=True
             )
             
@@ -998,16 +1070,21 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                         center={"lat":-31.4, "lon":-64.2}, # Córdoba centro aprox
                     )
                     fig_choro.update_layout(margin={"r":0,"t":30,"l":0,"b":0})
-                    st.plotly_chart(fig_choro, use_container_width=True)
+                    # Aplicar colorbar estandarizado (en vez de ocultarlo) para evitar que el layout se desplace
+                    try:
+                        apply_base_style(fig_choro, rotate_x=False, showlegend=False, height=420, colorbar_thickness=10, colorbar_len=0.32, colorbar_x=1.02)
+                    except Exception:
+                        pass
+                    st.plotly_chart(fig_choro)
                 with col_tabla_depto:
                     st.markdown("### Tabla Sector Productivo por Departamento")
                     st.dataframe(
                         df_agrupado_tabla[["N_DEPARTAMENTO", "N_SECTOR_PRODUCTIVO", "Cantidad", "POSTULACIONES", "ALUMNOS"]],
-                        use_container_width=True,
+                        width='stretch',
                         hide_index=True
                     )
             else:
-                st.dataframe(df_agrupado_tabla[["N_DEPARTAMENTO", "N_SECTOR_PRODUCTIVO", "Cantidad"]], use_container_width=True, hide_index=True)
+                st.dataframe(df_agrupado_tabla[["N_DEPARTAMENTO", "N_SECTOR_PRODUCTIVO", "Cantidad"]], hide_index=True)
 
             # Agrupar y contar para mapa de sedes
             df_agrupado_mapa = df_cursos.groupby([
@@ -1060,7 +1137,11 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                             }
                         ] + existing_layers
                     )
-                st.plotly_chart(fig, use_container_width=True)
+                    try:
+                        apply_base_style(fig, rotate_x=False, showlegend=False, height=420, colorbar_thickness=10, colorbar_len=0.32, colorbar_x=1.02)
+                    except Exception:
+                        pass
+                    st.plotly_chart(fig)
 
             with col_tabla:
                 st.markdown("### Cantidad de Cursos por Departamento y Localidad")
@@ -1074,7 +1155,7 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                 )
                 st.dataframe(
                     styled_table,
-                    use_container_width=True,
+                    width='stretch',
                     hide_index=True  # Si tu Streamlit es 1.22 o superior
                 )
         else:

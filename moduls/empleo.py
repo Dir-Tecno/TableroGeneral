@@ -166,10 +166,18 @@ def render_dashboard(df_postulantes_empleo,df_inscriptos, df_empresas, geojson_d
                                         (df_inscriptos['BEN_N_ESTADO'].isin(["BENEFICIARIO RETENIDO", "ACTIVO", "BAJA PEDIDO POR EMPRESA"])))&
                                         (df_inscriptos['ZONA'] == 'ZONA NOC Y SUR')].shape[0]
         
-        # Mostrar KPIs en la parte superior
+        # Calcular total de beneficiarios Empleo+26 2025
+        beneficiarios_e26_2025 = df_inscriptos[
+            (df_inscriptos['PROGRAMA'] == "Más 26 [2025]") & 
+            ((df_inscriptos['N_ESTADO_FICHA'] == "BENEFICIARIO") | 
+             (df_inscriptos['BEN_N_ESTADO'].isin(["BENEFICIARIO RETENIDO", "ACTIVO", "BAJA PEDIDO POR EMPRESA"])))
+        ].shape[0]
+        
+        # Mostrar KPIs en dos filas para mejor distribución visual
         st.markdown('<div class="kpi-section">', unsafe_allow_html=True)
-        # Usar la función auxiliar para mostrar KPIs
-        kpi_data = [
+        
+        # Primera fila de KPIs
+        kpi_data_row1 = [
             {
                 "title": "TOTAL MATCH PPP 2025",
                 "value_form": f"{total_match_ppp_2025:,}".replace(',', '.'),
@@ -189,16 +197,30 @@ def render_dashboard(df_postulantes_empleo,df_inscriptos, df_empresas, geojson_d
                 "tooltip": TOOLTIPS_DESCRIPTIVOS.get("BENEFICIARIOS TOTALES", "")
             },
             {
+                "title": "BENEFICIARIOS COMPLETARON PROGRAMA",
+                "value_form": f"{total_beneficiarios_fin:,}".replace(',', '.'),
+                "color_class": "kpi-accent-1",
+                "tooltip": TOOLTIPS_DESCRIPTIVOS.get("BENEFICIARIOS FIN", "")
+            }
+        ]
+        
+        display_kpi_row(kpi_data_row1, num_columns=4)
+        
+        st.markdown("<div style='margin: 15px 0;'></div>", unsafe_allow_html=True)
+        
+        # Segunda fila de KPIs
+        kpi_data_row2 = [
+            {
                 "title": "BENEFICIARIOS EL (activos)",
                 "value_form": f"{total_beneficiarios:,}".replace(',', '.'),
                 "color_class": "kpi-secondary",
                 "tooltip": TOOLTIPS_DESCRIPTIVOS.get("BENEFICIARIOS EL", "")
             },
             {
-                "title": "BENEFICIARIOS COMPLETARON PROGRAMA",
-                "value_form": f"{total_beneficiarios_fin:,}".replace(',', '.'),
-                "color_class": "kpi-accent-1",
-                "tooltip": TOOLTIPS_DESCRIPTIVOS.get("BENEFICIARIOS FIN", "")
+                "title": "BENEFICIARIOS CTI (activos)",
+                "value_form": f"{total_beneficiarios_cti:,}".replace(',', '.'),
+                "color_class": "kpi-accent-4",
+                "tooltip": TOOLTIPS_DESCRIPTIVOS.get("BENEFICIARIOS CTI", "")
             },
             {
                 "title": "ZONA FAVORECIDA (activos)",
@@ -207,14 +229,14 @@ def render_dashboard(df_postulantes_empleo,df_inscriptos, df_empresas, geojson_d
                 "tooltip": TOOLTIPS_DESCRIPTIVOS.get("ZONA FAVORECIDA", "")
             },
             {
-                "title": "BENEFICIARIOS CTI (activos)",
-                "value_form": f"{total_beneficiarios_cti:,}".replace(',', '.'),
-                "color_class": "kpi-accent-4",
-                "tooltip": TOOLTIPS_DESCRIPTIVOS.get("BENEFICIARIOS CTI", "")
+                "title": "BENEFICIARIOS E26 2025 (activos)",
+                "value_form": f"{beneficiarios_e26_2025:,}".replace(',', '.'),
+                "color_class": "kpi-accent-2",
+                "tooltip": "Total de beneficiarios activos del programa Empleo+26 2025"
             }
         ]
         
-        display_kpi_row(kpi_data, num_columns=7)
+        display_kpi_row(kpi_data_row2, num_columns=4)
         st.markdown('</div>', unsafe_allow_html=True)
         
 
@@ -262,7 +284,8 @@ def show_postulantes(df_postulantes_empleo):
                 selected_dpto = st.selectbox(
                     "Seleccionar departamento",
                     options=["Todos los departamentos"] + departamentos,
-                    label_visibility="collapsed"
+                    label_visibility="collapsed",
+                    key="postulantes_dpto"
                 )
             else:
                 selected_dpto = "Todos los departamentos"
@@ -275,14 +298,16 @@ def show_postulantes(df_postulantes_empleo):
                 selected_loc = st.selectbox(
                     "Seleccionar localidad",
                     options=["Todas las localidades"] + localidades,
-                    label_visibility="collapsed"
+                    label_visibility="collapsed",
+                    key="postulantes_loc"
                 )
             elif 'N_LOCALIDAD' in df_postulantes_empleo.columns:
                 localidades = sorted(df_postulantes_empleo['N_LOCALIDAD'].dropna().unique())
                 selected_loc = st.selectbox(
                     "Seleccionar localidad",
                     options=["Todas las localidades"] + localidades,
-                    label_visibility="collapsed"
+                    label_visibility="collapsed",
+                    key="postulantes_loc_all"
                 )
             else:
                 selected_loc = "Todas las localidades"
@@ -295,7 +320,8 @@ def show_postulantes(df_postulantes_empleo):
                 selected_prog = st.selectbox(
                     "Seleccionar programa",
                     options=["Todos los programas"] + programas,
-                    label_visibility="collapsed"
+                    label_visibility="collapsed",
+                    key="postulantes_prog"
                 )
             else:
                 selected_prog = "Todos los programas"
@@ -367,7 +393,7 @@ def show_postulantes(df_postulantes_empleo):
                     color_discrete_sequence=px.colors.qualitative.Pastel
                 )
                 fig_gender.update_layout(showlegend=True, title_x=0.5)
-                st.plotly_chart(fig_gender, use_container_width=True)
+                st.plotly_chart(fig_gender)
             else:
                 st.info("No hay datos de género o CUIL disponibles para mostrar.")
 
@@ -408,7 +434,7 @@ def show_postulantes(df_postulantes_empleo):
                         color_discrete_sequence=px.colors.qualitative.Vivid
                     )
                     fig_edades.update_layout(title_x=0.5)
-                    st.plotly_chart(fig_edades, use_container_width=True)
+                    st.plotly_chart(fig_edades)
                 else:
                     st.info("No hay datos de edad válidos para graficar.")
             else:
@@ -447,7 +473,7 @@ def show_postulantes(df_postulantes_empleo):
                         yaxis={'categoryorder':'total ascending', 'title': 'Empresa'},
                         height=500
                     )
-                    st.plotly_chart(fig_empresas, use_container_width=True)
+                    st.plotly_chart(fig_empresas)
                 else:
                     st.info("No hay datos suficientes para mostrar el TOP de empresas.")
             except Exception as e:
@@ -738,7 +764,7 @@ def show_companies(df_empresas):
                     color_discrete_sequence=px.colors.qualitative.Pastel
                 )
                 fig_actividad.update_layout(showlegend=True, title_x=0.5)
-                st.plotly_chart(fig_actividad, use_container_width=True)
+                st.plotly_chart(fig_actividad)
             else:
                 st.info("No hay datos de tipo de empresa para graficar.")
             st.markdown('</div>', unsafe_allow_html=True)
@@ -764,7 +790,7 @@ def show_companies(df_empresas):
                     color_discrete_sequence=px.colors.qualitative.Vivid
                 )
                 fig_bar.update_layout(yaxis={'categoryorder':'total ascending'}, title_x=0.5)
-                st.plotly_chart(fig_bar, use_container_width=True)
+                st.plotly_chart(fig_bar)
             else:
                 st.info("No hay datos de puestos de empleo para graficar.")
 
@@ -827,7 +853,8 @@ def show_inscriptions(df_inscriptos_empleo, geojson_data):
                     "Programa:",
                     options=list(opciones_programa.keys()),
                     index=0,
-                    label_visibility="collapsed"
+                    label_visibility="collapsed",
+                    key="insc_programa_selector"
                 )
                 
                 # Obtener el ID de etapa seleccionado
@@ -1217,7 +1244,7 @@ def show_inscriptions(df_inscriptos_empleo, geojson_data):
                                     height=400
                                 )
                                 
-                                st.plotly_chart(fig, use_container_width=True)
+                                st.plotly_chart(fig)
     
     except Exception as e:
         st.markdown(f"""
