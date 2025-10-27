@@ -181,7 +181,7 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
     display_kpi_row(kpi_data)
 
     # Crear pestañas para diferentes vistas
-    tab1, tab2 = st.tabs(["Alumnos", "Cursos"])
+    tab1, tab2, tab3 = st.tabs(["Alumnos", "Cursos", "Gestión Cursos"])
     
     with tab1:
         st.subheader("Análisis de Postulantes y alumnos")
@@ -1163,3 +1163,19 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                 )
         else:
             st.warning("No se encontró el DataFrame de cursos con la estructura esperada.")
+    
+    with tab3:
+        st.markdown("Accede al sistema de gestión de capacitaciones:")
+        
+        # Crear un botón estilizado igual al de escrituracion
+        st.markdown(
+            f'<div style="text-align:center; margin-top:20px;">'
+            f'<a href="https://gestion-capacitaciones.duckdns.org/" target="_blank" rel="noopener noreferrer">'
+            f'<button style="background:#2980b9;color:#fff;border:none;padding:12px 20px;border-radius:8px;font-size:16px;cursor:pointer;margin-bottom:20px;">'
+            f'Abrir Gestión de Cursos'
+            f'</button>'
+            f'</a>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+        
