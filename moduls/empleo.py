@@ -197,11 +197,12 @@ def render_dashboard(df_postulantes_empleo,df_inscriptos, df_empresas, geojson_d
                 "tooltip": TOOLTIPS_DESCRIPTIVOS.get("BENEFICIARIOS TOTALES", "")
             },
             {
-                "title": "BENEFICIARIOS COMPLETARON PROGRAMA",
-                "value_form": f"{total_beneficiarios_fin:,}".replace(',', '.'),
-                "color_class": "kpi-accent-1",
-                "tooltip": TOOLTIPS_DESCRIPTIVOS.get("BENEFICIARIOS FIN", "")
+                "title": "BENEFICIARIOS E26 2025 (activos)",
+                "value_form": f"{beneficiarios_e26_2025:,}".replace(',', '.'),
+                "color_class": "kpi-accent-2",
+                "tooltip": "Total de beneficiarios activos del programa Empleo+26 2025"
             }
+            
         ]
         
         display_kpi_row(kpi_data_row1, num_columns=4)
@@ -228,11 +229,12 @@ def render_dashboard(df_postulantes_empleo,df_inscriptos, df_empresas, geojson_d
                 "color_class": "kpi-accent-3",
                 "tooltip": TOOLTIPS_DESCRIPTIVOS.get("ZONA FAVORECIDA", "")
             },
+            
             {
-                "title": "BENEFICIARIOS E26 2025 (activos)",
-                "value_form": f"{beneficiarios_e26_2025:,}".replace(',', '.'),
-                "color_class": "kpi-accent-2",
-                "tooltip": "Total de beneficiarios activos del programa Empleo+26 2025"
+                "title": "BENEFICIARIOS COMPLETARON PROGRAMA",
+                "value_form": f"{total_beneficiarios_fin:,}".replace(',', '.'),
+                "color_class": "kpi-accent-1",
+                "tooltip": TOOLTIPS_DESCRIPTIVOS.get("BENEFICIARIOS FIN", "")
             }
         ]
         
@@ -405,7 +407,11 @@ def show_postulantes(df_postulantes_empleo):
                     today = datetime.date.today()
                     def calcular_edad(fecha_str):
                         try:
-                            fecha = pd.to_datetime(fecha_str, errors='coerce')
+                            # Especificar formatos comunes para evitar la advertencia de dateutil
+                            fecha = pd.to_datetime(fecha_str, format='%d/%m/%Y', errors='coerce')
+                            if pd.isnull(fecha):
+                                # Intentar con formato YYYY-MM-DD si el primero falla
+                                fecha = pd.to_datetime(fecha_str, format='%Y-%m-%d', errors='coerce')
                             if pd.isnull(fecha):
                                 return None
                             # Asegurar que la fecha sea tz-naive para evitar problemas

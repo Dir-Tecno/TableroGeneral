@@ -10,11 +10,9 @@ credenciales.json
 setministerio
 Dockerfile
 docker-compose.yml
-
 .github\
 .venv/
 cache_datos/
 data/
 logs/
-
 df_ministerio/

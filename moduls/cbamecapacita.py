@@ -266,7 +266,10 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
             today = pd.Timestamp.today().tz_localize(None)  # Hacer tz-naive
             if 'FEC_NACIMIENTO' in df_filtered.columns:
                 df_filtered = df_filtered.copy()
-                df_filtered['FEC_NACIMIENTO'] = pd.to_datetime(df_filtered['FEC_NACIMIENTO'], errors='coerce')
+                df_filtered['FEC_NACIMIENTO'] = pd.to_datetime(df_filtered['FEC_NACIMIENTO'], format='%d/%m/%Y', errors='coerce')
+                # Si el formato DD/MM/YYYY falla, intentar con YYYY-MM-DD
+                if df_filtered['FEC_NACIMIENTO'].isna().all():
+                    df_filtered['FEC_NACIMIENTO'] = pd.to_datetime(df_filtered['FEC_NACIMIENTO'], format='%Y-%m-%d', errors='coerce')
                 # Asegurar que FEC_NACIMIENTO sea tz-naive
                 if df_filtered['FEC_NACIMIENTO'].dt.tz is not None:
                     df_filtered['FEC_NACIMIENTO'] = df_filtered['FEC_NACIMIENTO'].dt.tz_localize(None)

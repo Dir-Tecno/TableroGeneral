@@ -900,7 +900,9 @@ def mostrar_global(df_filtrado_global, tooltips_categorias):
                     df_edades = df_edades[df_edades['CATEGORIA'].isin(selected_categorias_edades)]
                 # Convertir a datetime y quitar hora
                 # Convertir a datetime y asegurar tz-naive antes de extraer .date
-                df_edades['FEC_NACIMIENTO'] = pd.to_datetime(df_edades['FEC_NACIMIENTO'], errors='coerce')
+                df_edades['FEC_NACIMIENTO'] = pd.to_datetime(df_edades['FEC_NACIMIENTO'], format='%d/%m/%Y', errors='coerce')
+                if df_edades['FEC_NACIMIENTO'].isna().all():
+                    df_edades['FEC_NACIMIENTO'] = pd.to_datetime(df_edades['FEC_NACIMIENTO'], format='%Y-%m-%d', errors='coerce')
                 try:
                     if pd.api.types.is_datetime64tz_dtype(df_edades['FEC_NACIMIENTO']):
                         df_edades['FEC_NACIMIENTO'] = df_edades['FEC_NACIMIENTO'].dt.tz_localize(None)
@@ -908,7 +910,9 @@ def mostrar_global(df_filtrado_global, tooltips_categorias):
                     pass
                 df_edades['FEC_NACIMIENTO'] = df_edades['FEC_NACIMIENTO'].dt.date
 
-                df_edades['FEC_FORM'] = pd.to_datetime(df_edades['FEC_FORM'], errors='coerce')
+                df_edades['FEC_FORM'] = pd.to_datetime(df_edades['FEC_FORM'], format='%d/%m/%Y', errors='coerce')
+                if df_edades['FEC_FORM'].isna().all():
+                    df_edades['FEC_FORM'] = pd.to_datetime(df_edades['FEC_FORM'], format='%Y-%m-%d', errors='coerce')
                 try:
                     if pd.api.types.is_datetime64tz_dtype(df_edades['FEC_FORM']):
                         df_edades['FEC_FORM'] = df_edades['FEC_FORM'].dt.tz_localize(None)
@@ -1012,7 +1016,9 @@ def mostrar_global(df_filtrado_global, tooltips_categorias):
             
             if aplicar_filtro_fecha and 'FEC_INICIO_PAGO' in df_categoria_estados.columns:
                 # Asegurar tz-naive antes de usar .dt.date
-                df_categoria_estados['FEC_INICIO_PAGO'] = pd.to_datetime(df_categoria_estados['FEC_INICIO_PAGO'], errors='coerce')
+                df_categoria_estados['FEC_INICIO_PAGO'] = pd.to_datetime(df_categoria_estados['FEC_INICIO_PAGO'], format='%d/%m/%Y', errors='coerce')
+                if df_categoria_estados['FEC_INICIO_PAGO'].isna().all():
+                    df_categoria_estados['FEC_INICIO_PAGO'] = pd.to_datetime(df_categoria_estados['FEC_INICIO_PAGO'], format='%Y-%m-%d', errors='coerce')
                 try:
                     if pd.api.types.is_datetime64tz_dtype(df_categoria_estados['FEC_INICIO_PAGO']):
                         df_categoria_estados['FEC_INICIO_PAGO'] = df_categoria_estados['FEC_INICIO_PAGO'].dt.tz_localize(None)
@@ -1221,7 +1227,9 @@ def mostrar_global(df_filtrado_global, tooltips_categorias):
                 
                 # Preparar DataFrame de fechas de formulario
                 df_fechas = df_filtrado_global[['FEC_FORM']].copy()
-                df_fechas['FEC_FORM'] = pd.to_datetime(df_fechas['FEC_FORM'], errors='coerce')
+                df_fechas['FEC_FORM'] = pd.to_datetime(df_fechas['FEC_FORM'], format='%d/%m/%Y', errors='coerce')
+                if df_fechas['FEC_FORM'].isna().all():
+                    df_fechas['FEC_FORM'] = pd.to_datetime(df_fechas['FEC_FORM'], format='%Y-%m-%d', errors='coerce')
                 df_fechas.dropna(subset=['FEC_FORM'], inplace=True)
                 # Normalizar timezone: convertir a tz-naive para evitar comparaciones tz-aware vs tz-naive
                 try:
@@ -1248,7 +1256,9 @@ def mostrar_global(df_filtrado_global, tooltips_categorias):
                 # Preparar DataFrame de fechas de inicio de pago si existe la columna
                 if tiene_fecha_inicio_pago:
                     df_fechas_pago = df_filtrado_global[['FEC_INICIO_PAGO']].copy()
-                    df_fechas_pago['FEC_INICIO_PAGO'] = pd.to_datetime(df_fechas_pago['FEC_INICIO_PAGO'], errors='coerce')
+                    df_fechas_pago['FEC_INICIO_PAGO'] = pd.to_datetime(df_fechas_pago['FEC_INICIO_PAGO'], format='%d/%m/%Y', errors='coerce')
+                    if df_fechas_pago['FEC_INICIO_PAGO'].isna().all():
+                        df_fechas_pago['FEC_INICIO_PAGO'] = pd.to_datetime(df_fechas_pago['FEC_INICIO_PAGO'], format='%Y-%m-%d', errors='coerce')
                     df_fechas_pago.dropna(subset=['FEC_INICIO_PAGO'], inplace=True)
                     # Normalizar timezone para FEC_INICIO_PAGO
                     try:

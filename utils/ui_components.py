@@ -121,7 +121,9 @@ def show_last_update(dates, file_substring, mensaje="Última actualización"):
     
     if latest_date:
         # Convertir a pandas datetime
-        latest_date = pd.to_datetime(latest_date)
+        latest_date = pd.to_datetime(latest_date, format='%Y-%m-%d %H:%M:%S', errors='coerce')
+        if pd.isna(latest_date):
+            latest_date = pd.to_datetime(latest_date, format='%Y-%m-%d', errors='coerce')
         
         # Aplicar zona horaria de Argentina (UTC-3)
         try:
