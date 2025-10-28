@@ -35,15 +35,33 @@ def _normalize_datetime_columns(df):
                     except Exception:
                         pass
             elif df[col].dtype == 'object':
-                # Intentar convertir strings a datetime
-                temp = pd.to_datetime(df[col], errors='coerce')
-                if temp.notna().any():
-                    df[col] = temp
-                    try:
-                        if hasattr(df[col].dt, 'tz') and df[col].dt.tz is not None:
-                            df[col] = df[col].dt.tz_localize(None)
-                    except Exception:
-                        pass
+                # Intentar convertir strings a datetime con formatos específicos
+                try:
+                    # Intentar primero con formato DD/MM/YYYY (común en Argentina)
+                    temp = pd.to_datetime(df[col], format='%d/%m/%Y', errors='coerce')
+                    if temp.isna().all():
+                        # Si falla, intentar con YYYY-MM-DD
+                        temp = pd.to_datetime(df[col], format='%Y-%m-%d', errors='coerce')
+                        if temp.isna().all():
+                            # Si ambos fallan, intentar con YYYY-MM-DD HH:MM:SS
+                            temp = pd.to_datetime(df[col], format='%Y-%m-%d %H:%M:%S', errors='coerce')
+                    if temp.notna().any():
+                        df[col] = temp
+                        try:
+                            if hasattr(df[col].dt, 'tz') and df[col].dt.tz is not None:
+                                df[col] = df[col].dt.tz_localize(None)
+                        except Exception:
+                            pass
+                except Exception:
+                    # Si hay algún error con los formatos, intentar sin formato (manteniendo el warning controlado)
+                    temp = pd.to_datetime(df[col], errors='coerce')
+                    if temp.notna().any():
+                        df[col] = temp
+                        try:
+                            if hasattr(df[col].dt, 'tz') and df[col].dt.tz is not None:
+                                df[col] = df[col].dt.tz_localize(None)
+                        except Exception:
+                            pass
         except Exception:
             # Si falla para una columna, seguimos con la siguiente
             continue
@@ -1178,4 +1196,3 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
             f'</div>',
             unsafe_allow_html=True,
         )
-        

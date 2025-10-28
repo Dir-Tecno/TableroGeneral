@@ -84,10 +84,12 @@ def show_dev_dataframe_info(data, modulo_nombre="Módulo", info_caption=None, is
                     # Añadir botón para descargar CSV
                     try:
                         csv = convert_df_to_csv(df)
+                        # Limpiar el nombre del archivo reemplazando caracteres problemáticos
+                        safe_name = name.replace(' ', '_').replace('/', '_').replace('\\', '_')
                         st.download_button(
                             label=f"⬇️ Descargar {name} como CSV",
                             data=csv,
-                            file_name=f"{name.replace(' ', '_').replace('/', '_').replace('\\', '_')}.csv",
+                            file_name=f"{safe_name}.csv",
                             mime='text/csv',
                             help=f"Descargar el DataFrame completo '{name}' en formato CSV"
                         )
@@ -228,7 +230,7 @@ def render_footer():
             valoracion = st.selectbox("Valoración:", options=[1, 2, 3, 4, 5], index=2, format_func=lambda x: "⭐" * x)
         
         with col_b:
-            enviar = st.button("Enviar", type="primary", use_container_width=True)
+            enviar = st.button("Enviar", type="primary", width='stretch')
         
         if enviar:
             if comentario.strip():

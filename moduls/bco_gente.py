@@ -1499,10 +1499,24 @@ def mostrar_recupero(df_filtrado_recupero=None, is_development=False):
             for col in df_csv.columns:
                 if df_csv[col].dtype == 'object':
                     try:
-                        # Intentar convertir a datetime y verificar si tiene timezone
-                        temp_col = pd.to_datetime(df_csv[col], errors='coerce')
-                        if temp_col.dt.tz is not None:
-                            df_csv[col] = temp_col.dt.tz_localize(None)
+                        # Intentar convertir a datetime con formatos específicos
+                        try:
+                            # Intentar primero con formato DD/MM/YYYY (común en Argentina)
+                            temp_col = pd.to_datetime(df_csv[col], format='%d/%m/%Y', errors='coerce')
+                            if temp_col.isna().all():
+                                # Si falla, intentar con YYYY-MM-DD
+                                temp_col = pd.to_datetime(df_csv[col], format='%Y-%m-%d', errors='coerce')
+                                if temp_col.isna().all():
+                                    # Si ambos fallan, intentar con YYYY-MM-DD HH:MM:SS
+                                    temp_col = pd.to_datetime(df_csv[col], format='%Y-%m-%d %H:%M:%S', errors='coerce')
+                        except Exception:
+                            # Si hay algún error con los formatos, intentar sin formato (manteniendo el warning controlado)
+                            temp_col = pd.to_datetime(df_csv[col], errors='coerce')
+                        
+                        if temp_col.notna().any():
+                            df_csv[col] = temp_col
+                            if hasattr(df_csv[col].dt, 'tz') and df_csv[col].dt.tz is not None:
+                                df_csv[col] = df_csv[col].dt.tz_localize(None)
                     except:
                         pass
                 elif hasattr(df_csv[col], 'dt') and hasattr(df_csv[col].dt, 'tz') and df_csv[col].dt.tz is not None:

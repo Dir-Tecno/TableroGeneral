@@ -727,7 +727,7 @@ def show_companies(df_empresas):
         # Filtrar columnas existentes en el DataFrame
         existing_columns = [col for col in columns_to_select if col in df_display.columns]
         
-        st.dataframe(df_filtered[existing_columns], hide_index=True, use_container_width=True)
+        st.dataframe(df_filtered[existing_columns], hide_index=True, width='stretch')
 
     st.markdown("<hr style='border: 1px solid #e0e0e0; margin: 20px 0;'>", unsafe_allow_html=True)
 
@@ -1149,7 +1149,7 @@ def show_inscriptions(df_inscriptos_empleo, geojson_data):
             
             st.dataframe(
                 styled_df,
-                use_container_width=True,
+                width='stretch',
                 hide_index=True,
                 column_config={
                     "N_DEPARTAMENTO": st.column_config.TextColumn("Departamento"),
@@ -1214,7 +1214,7 @@ def show_inscriptions(df_inscriptos_empleo, geojson_data):
                                 'BENEFICIARIO- CTI': 'Beneficiarios CTI',
                                 'Total': 'Total Beneficiarios'
                             })
-                            st.dataframe(df_mapa_display, use_container_width=True)
+                            st.dataframe(df_mapa_display, width='stretch')
 
                         with map_col:
                             with st.spinner("Generando mapa..."):
