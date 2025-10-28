@@ -274,6 +274,18 @@ def load_data_from_gitlab_with_cache(repo_id, branch, token, modules):
                 cache_path = cache_manager.get_cached_file(archivo)
                 logs["info"].append(f"Cargando {archivo} desde caché en disco")
 
+                # Obtener fecha del commit desde metadata del caché
+                commit_date = cache_manager.get_commit_date(archivo)
+                
+                # Si no hay fecha de commit guardada, intentar obtenerla ahora
+                if commit_date is None:
+                    logs["info"].append(f"Intentando obtener fecha de commit para {archivo}")
+                    commit_date = obtener_fecha_commit_gitlab(repo_id, branch, archivo, token, logs)
+                    if commit_date:
+                        # Actualizar la metadata con la fecha obtenida
+                        cache_manager.update_commit_date(archivo, commit_date)
+                        logs["info"].append(f"Fecha de commit obtenida y guardada para {archivo}")
+
                 # Obtener columnas necesarias
                 columns = COLUMNAS_NECESARIAS.get(archivo, None)
 
@@ -282,7 +294,7 @@ def load_data_from_gitlab_with_cache(repo_id, branch, token, modules):
 
                 if df is not None:
                     all_data[archivo] = df
-                    all_dates[archivo] = datetime.datetime.now()
+                    all_dates[archivo] = commit_date or datetime.datetime.now()
                     logs["info"].append(f"✓ {archivo} cargado desde caché")
                 else:
                     logs["warnings"].append(f"Error al procesar {archivo} desde caché")
@@ -299,7 +311,9 @@ def load_data_from_gitlab_with_cache(repo_id, branch, token, modules):
 
                     if df is not None:
                         all_data[archivo] = df
-                        all_dates[archivo] = datetime.datetime.now()
+                        # Obtener fecha del commit desde metadata del caché
+                        commit_date = cache_manager.get_commit_date(archivo)
+                        all_dates[archivo] = commit_date or datetime.datetime.now()
                         logs["info"].append(f"✓ {archivo} descargado y cacheado")
                     else:
                         logs["warnings"].append(f"Error al procesar {archivo} después de descargar")

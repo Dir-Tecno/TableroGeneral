@@ -122,10 +122,24 @@ def show_last_update(dates, file_substring, mensaje="Última actualización"):
     latest_date = file_dates[0] if file_dates else None
     
     if latest_date:
-        # Convertir a pandas datetime
-        latest_date = pd.to_datetime(latest_date, format='%Y-%m-%d %H:%M:%S', errors='coerce')
+        # Convertir a pandas datetime si es necesario
+        if isinstance(latest_date, str):
+            latest_date = pd.to_datetime(latest_date, format='%Y-%m-%d %H:%M:%S', errors='coerce')
+            if pd.isna(latest_date):
+                latest_date = pd.to_datetime(latest_date, format='%Y-%m-%d', errors='coerce')
+        elif isinstance(latest_date, datetime.datetime):
+            latest_date = pd.to_datetime(latest_date)
+        else:
+            # Si no es string ni datetime, intentar convertir genéricamente
+            latest_date = pd.to_datetime(latest_date, errors='coerce')
+        
         if pd.isna(latest_date):
-            latest_date = pd.to_datetime(latest_date, format='%Y-%m-%d', errors='coerce')
+            st.markdown(f"""
+                <div style="background-color:#ffecec; padding:10px; border-radius:5px; margin-bottom:20px; font-size:0.9em; color:#a94442;">
+                    <i class="fas fa-exclamation-circle"></i> <strong>{mensaje}:</strong> Fecha inválida
+                </div>
+            """, unsafe_allow_html=True)
+            return
         
         # Aplicar zona horaria de Argentina (UTC-3)
         try:

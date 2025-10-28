@@ -92,6 +92,35 @@ class DiskCacheManager:
             )
             return None
 
+    def _get_commit_date(self, repo_id: str, branch: str, filename: str, token: str) -> Optional[datetime.datetime]:
+        """
+        Obtiene la fecha del último commit de un archivo específico en GitLab.
+        """
+        try:
+            repo_id_encoded = requests.utils.quote(str(repo_id), safe='')
+
+            # Obtener commits para el archivo específico
+            url = f'https://gitlab.com/api/v4/projects/{repo_id_encoded}/repository/commits'
+            headers = {'PRIVATE-TOKEN': token}
+            params = {'ref': branch, 'path': filename, 'per_page': 1}
+
+            response = requests.get(url, headers=headers, params=params, timeout=10)
+            if response.status_code == 200:
+                commits = response.json()
+                if commits:
+                    commit_date = commits[0]['committed_date']
+                    # Convertir la fecha ISO a datetime
+                    fecha_commit = datetime.datetime.fromisoformat(commit_date.replace('Z', '+00:00'))
+                    return fecha_commit
+            return None
+        except Exception as e:
+            add_breadcrumb(
+                category="cache",
+                message=f"Error al obtener fecha de commit: {filename}",
+                data={"error": str(e)}
+            )
+            return None
+
     def is_cached(self, filename: str) -> bool:
         """Verifica si un archivo existe en caché"""
         cache_path = self._get_cache_path(filename)
@@ -148,11 +177,15 @@ class DiskCacheManager:
             # Obtener ETag remoto
             remote_etag = self._get_remote_etag(repo_id, branch, filename, token)
 
+            # Obtener fecha del commit
+            commit_date = self._get_commit_date(repo_id, branch, filename, token)
+
             # Actualizar metadata
             self.metadata[filename] = {
                 'downloaded_at': datetime.datetime.now().isoformat(),
                 'last_checked': datetime.datetime.now().isoformat(),
                 'remote_etag': remote_etag,
+                'commit_date': commit_date.isoformat() if commit_date else None,
                 'repo_id': repo_id,
                 'branch': branch,
                 'size': cache_path.stat().st_size
@@ -162,7 +195,7 @@ class DiskCacheManager:
             add_breadcrumb(
                 category="cache",
                 message=f"Archivo descargado y cacheado: {filename}",
-                data={"size": cache_path.stat().st_size}
+                data={"size": cache_path.stat().st_size, "commit_date": commit_date}
             )
 
             return True, None
@@ -186,6 +219,30 @@ class DiskCacheManager:
         if self.is_cached(filename):
             return self._get_cache_path(filename)
         return None
+
+    def get_commit_date(self, filename: str) -> Optional[datetime.datetime]:
+        """
+        Obtiene la fecha del commit guardada en la metadata para un archivo en caché.
+
+        Returns:
+            datetime si existe en metadata, None si no
+        """
+        if filename in self.metadata:
+            commit_date_str = self.metadata[filename].get('commit_date')
+            if commit_date_str:
+                try:
+                    return datetime.datetime.fromisoformat(commit_date_str)
+                except (ValueError, TypeError):
+                    return None
+        return None
+
+    def update_commit_date(self, filename: str, commit_date: datetime.datetime):
+        """
+        Actualiza la fecha del commit en la metadata para un archivo en caché.
+        """
+        if filename in self.metadata:
+            self.metadata[filename]['commit_date'] = commit_date.isoformat()
+            self._save_metadata()
 
     def check_for_updates(self, filename: str, token: str) -> bool:
         """
