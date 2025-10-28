@@ -53,9 +53,6 @@ def create_empleo_kpis(resultados, programa_nombre=""):
     ]
     return kpis
 
-
-
-
 def calculate_cupo(cantidad_empleados, empleador, adherido):
     # Condición para el programa PPP
     if adherido == "PPP - PROGRAMA PRIMER PASO [2024]":
@@ -146,7 +143,6 @@ def show_empleo_dashboard(data, dates, is_development=False):
     df_empresas = data.get('df_empresas.parquet')
 
     render_dashboard(df_postulantes_empleo, df_inscriptos, df_empresas, geojson_data)
-
 
 def render_dashboard(df_postulantes_empleo,df_inscriptos, df_empresas, geojson_data):
     """
@@ -261,9 +257,6 @@ def render_dashboard(df_postulantes_empleo,df_inscriptos, df_empresas, geojson_d
 
             show_companies(df_empresas)
             
-        
-       
-
 def show_postulantes(df_postulantes_empleo):
     """
     Display postulantes dashboard with filters, KPIs, and visualizations.
@@ -719,7 +712,7 @@ def show_companies(df_empresas):
         columns_to_select = [col for col in ['N_LOCALIDAD', 'N_DEPARTAMENTO', 'CUIT', 'N_EMPRESA', 
                                            'NOMBRE_TIPO_EMPRESA', 'ADHERIDO', 'CANTIDAD_EMPLEADOS', 
                                            'VACANTES', 'CUPO', 'IMP_GANANCIAS', 'IMP_IVA', 'MONOTRIBUTO',
-                                           'INTEGRANTE_SOC', 'EMPLEADOR', 'ACTIVIDAD_MONOTRIBUTO','BENEF', 
+                                           'INTEGRANTE_SOC', 'EMPLEADOR', 'ACTIVIDAD_MONOTRIBUTO','BENEF_COUNT', 
                                            'TELEFONO', 'CELULAR', 'MAIL', 'SITIO_WEB', 'TEL_CONTACTO', 
                                            'EMAIL_CONTACTO', 'NOMBRE_FANTASIA', 'ZONA'] 
                            if col in df_filtered.columns]
