@@ -1,16 +1,16 @@
 import streamlit as st
 import pandas as pd
 import os
+from os import path
+
 # --- Configuración de la Página ---
 st.set_page_config(
     page_title="Dashboard Resumen del Ministerio de Desarrollo Social y Promoción del Empleo",
     layout="wide"
 )
 
+# --- Imports ---
 from utils.sentry_utils import init_sentry, sentry_wrap, sentry_error, capture_exception
-# Inicializar Sentry al principio de la aplicación
-init_sentry()
-
 from moduls.carga import load_data_from_local, load_data_from_gitlab, load_data_from_gitlab_with_cache
 from moduls.carga_optimized import cleanup_memory, optimize_dataframe
 from moduls import bco_gente, cbamecapacita, empleo, escrituracion
@@ -18,87 +18,92 @@ from utils.styles import setup_page
 from utils.ui_components import render_footer, show_notification_bell, insert_google_analytics
 from utils.session_helper import safe_session_get, safe_session_set, safe_session_check, is_session_initialized
 
-# --- Integración de Google Analytics ---
+# --- Inicialización ---
+init_sentry()
 insert_google_analytics()
-
 setup_page()
-st.markdown('<div class="main-header">Tablero General de Reportes</div>', unsafe_allow_html=True)
-# --- Configuración General ---
-try:
-    # Intenta leer desde st.secrets["configuraciones"]
-    FUENTE_DATOS = st.secrets["configuraciones"]["FUENTE_DATOS"]
-    REPO_ID = st.secrets["configuraciones"]["REPO_ID"]
-    BRANCH = st.secrets["configuraciones"]["BRANCH"]
-    LOCAL_PATH = st.secrets["configuraciones"]["LOCAL_PATH"]
-except KeyError:
-    # Si falla, lee directamente de st.secrets (variables de entorno)
-    FUENTE_DATOS = st.secrets.get("FUENTE_DATOS", "gitlab")
-    REPO_ID = st.secrets.get("REPO_ID", "Dir-Tecno/df_ministerio")
-    BRANCH = st.secrets.get("BRANCH", "main")
-    LOCAL_PATH = st.secrets.get("LOCAL_PATH", "df_ministerio")
 
-# --- Determinación del Modo de Ejecución ---
-from os import path
-is_local = path.exists(LOCAL_PATH) and FUENTE_DATOS == "local"
+# --- Configuración de Datos ---
+# ⚠️ CAMBIA ESTA VARIABLE PARA CAMBIAR ENTRE MODO DESARROLLO Y PRODUCCIÓN
+FUENTE_DATOS = "gitlab"  
 
+def get_data_config():
+    """Obtiene la configuración de fuente de datos de manera centralizada."""
+    # Configuración por defecto (se puede sobreescribir con secrets si existen)
+    default_config = {
+        "FUENTE_DATOS": FUENTE_DATOS,
+        "REPO_ID": "Dir-Tecno/df_ministerio",
+        "BRANCH": "main",
+        "LOCAL_PATH": "df_ministerio"
+    }
 
-if is_local:
-    st.sidebar.title("🛠️ Opciones de Desarrollo")
+    return default_config
 
-    # Mostrar uso de RAM
-    try:
-        import psutil
-        process = psutil.Process(os.getpid())
-        ram_gb = process.memory_info().rss / 1024**3
-        ram_percent = process.memory_percent()
-        st.sidebar.metric(
-            "Uso de RAM",
-            f"{ram_gb:.2f} GB",
-            f"{ram_percent:.1f}%"
+def get_gitlab_token():
+    """Obtiene y valida el token de GitLab."""
+    gitlab_token = None
+
+    # Opción 1: Estructura anidada [gitlab] token = "..."
+    if "gitlab" in st.secrets and "token" in st.secrets["gitlab"]:
+        gitlab_token = st.secrets["gitlab"]["token"]
+        
+    return gitlab_token
+
+def setup_development_mode(config):
+    """Configura el modo de desarrollo si está activo.
+
+    Returns:
+        bool: True si está en modo local (desarrollo), False si está en modo GitLab (producción)
+    """
+    # Solo dos modos simples:
+    is_local_mode = config["FUENTE_DATOS"] == "local"
+
+    if is_local_mode:
+        # Sidebar de desarrollo
+        st.sidebar.title("🛠️ Modo Desarrollo")
+
+        # Mostrar uso de RAM
+        try:
+            import psutil
+            process = psutil.Process(os.getpid())
+            ram_gb = process.memory_info().rss / 1024**3
+            ram_percent = process.memory_percent()
+            st.sidebar.metric("Uso de RAM", f"{ram_gb:.2f} GB", f"{ram_percent:.1f}%")
+        except ImportError:
+            pass
+
+        # Botón para recargar datos
+        if st.sidebar.button("Recargar Datos"):
+            st.cache_data.clear()
+            st.cache_resource.clear()
+            st.success("Caché limpiado. La página se recargará con datos frescos.")
+            st.rerun()
+
+        # Señal visual prominente
+        st.markdown(
+            f"""
+            <div style="background:#fff3cd;padding:12px;border-left:6px solid #ffc107;border-radius:4px;margin-bottom:10px">
+                <strong>⚠️ Modo Desarrollo Activo</strong><br/>
+                Fuente de datos: <code>{config["FUENTE_DATOS"]}</code> — Ruta local: <code>{config["LOCAL_PATH"]}</code>
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
-    except ImportError:
-        pass  # psutil no instalado
 
-    if st.sidebar.button("Recargar Datos"):
-        st.cache_data.clear()
-        st.cache_resource.clear()
-        st.success("Caché limpiado. La página se recargará con datos frescos.")
-        st.rerun()
+        # Debug expander
+        with st.expander("🔍 Información del Sistema", expanded=False):
+            st.write({
+                "Modo": "Desarrollo (Local)",
+                "FUENTE_DATOS": config["FUENTE_DATOS"],
+                "LOCAL_PATH": config["LOCAL_PATH"],
+                "Ruta existe": path.exists(config["LOCAL_PATH"])
+            })
 
-# Señal visual prominente para modo desarrollo/local
-if is_local:
-    try:
-        local_exists = path.exists(LOCAL_PATH)
-    except Exception:
-        local_exists = False
+    return is_local_mode
 
-    st.markdown(
-        f"""
-        <div style="background:#fff3cd;padding:12px;border-left:6px solid #ffc107;border-radius:4px;margin-bottom:10px">
-            <strong>⚠️ Modo Desarrollo (LOCAL) activo</strong><br/>
-            Fuente de datos: <code>{FUENTE_DATOS}</code> — Ruta local: <code>{LOCAL_PATH}</code><br/>
-            Ruta accesible: <strong>{'Sí' if local_exists else 'No'}</strong>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    with st.expander("🔍 Debug rápido (información local)", expanded=True):
-        st.write({
-            "is_local": is_local,
-            "FUENTE_DATOS": FUENTE_DATOS,
-            "LOCAL_PATH": LOCAL_PATH,
-            "LOCAL_PATH_exists": local_exists,
-        })
-        # Mostrar contenido de la carpeta local (si existe)
-        if local_exists:
-            try:
-                files = os.listdir(LOCAL_PATH)
-                st.write(f"Archivos en {LOCAL_PATH}:", files)
-            except Exception as e:
-                st.write(f"No se pudo listar {LOCAL_PATH}: {e}")
-        else:
-            st.info("La ruta local configurada no existe o no es accesible desde este entorno.")
+# --- Obtener configuración ---
+config = get_data_config()
+is_local_mode = setup_development_mode(config)
 
 # --- Mapeo de Archivos por Módulo ---
 modules = {
@@ -107,109 +112,58 @@ modules = {
     'empleo': ['df_postulantes_empleo.parquet','df_inscriptos_empleo.parquet', 'df_empresas.parquet','capa_departamentos_2010.geojson'],
 }
 
-
-
-# --- Funciones Cacheadas para Rendimiento ---
-# OPTIMIZACIÓN APLICADA: Carga lazy por módulo para reducir uso de RAM
-# - TTL reducido de 3600s a 1800s (30 min)
-# - Máximo 10 entradas en caché por módulo
-# - Solo carga datos cuando se accede a una pestaña específica
-
-@st.cache_data(ttl=1800, max_entries=10, show_spinner="Cargando datos del módulo...")
-def load_module_data(module_key):
+# --- Función de Carga de Datos (Lazy Loading) ---
+def load_module_data(module_key, config, is_local_mode):
     """Carga datos específicos para un módulo individual (carga lazy)."""
     module_files = modules.get(module_key, [])
     if not module_files:
         return {}, {}, {"warnings": [f"No hay archivos definidos para el módulo {module_key}"], "info": []}
 
-    # Crear un diccionario temporal solo con los archivos de este módulo
     temp_modules = {module_key: module_files}
 
-    if is_local:
-        data, dates, logs = load_data_from_local(LOCAL_PATH, temp_modules)
-        # Optimizar DataFrames después de cargarlos
+    # Carga desde fuente local
+    if is_local_mode:
+        data, dates, logs = load_data_from_local(config["LOCAL_PATH"], temp_modules)
+        # Optimizar DataFrames
         for key, df in data.items():
             if isinstance(df, pd.DataFrame):
                 data[key] = optimize_dataframe(df)
         return data, dates, logs
 
-    # MINIO SUPPORT REMOVED - only local and gitlab sources supported
-
-    if FUENTE_DATOS == "gitlab":
-        gitlab_token = None
-        if "gitlab" in st.secrets and "token" in st.secrets["gitlab"]:
-            gitlab_token = st.secrets["gitlab"]["token"]
-
+    # Carga desde GitLab
+    if config["FUENTE_DATOS"] == "gitlab":
+        gitlab_token = get_gitlab_token()
         if not gitlab_token:
             return {}, {}, {"warnings": ["Token de GitLab no configurado."], "info": []}
-        elif gitlab_token == "TU_TOKEN_DE_GITLAB_AQUI":
-            return {}, {}, {"warnings": ["Token de GitLab no configurado (valor de ejemplo)."], "info": []}
 
-        # USAR CACHÉ EN DISCO - Descarga solo cuando es necesario
-        data, dates, logs = load_data_from_gitlab_with_cache(REPO_ID, BRANCH, gitlab_token, temp_modules)
-        # Optimizar DataFrames después de cargarlos
+        # Usar caché en disco
+        data, dates, logs = load_data_from_gitlab_with_cache(
+            config["REPO_ID"], config["BRANCH"], gitlab_token, temp_modules
+        )
+        # Optimizar DataFrames
         for key, df in data.items():
             if isinstance(df, pd.DataFrame):
                 data[key] = optimize_dataframe(df)
         return data, dates, logs
 
-    return {}, {}, {"warnings": [f"Fuente de datos no reconocida: {FUENTE_DATOS}"], "info": []}
+    return {}, {}, {"warnings": [f"Fuente de datos no reconocida: {config['FUENTE_DATOS']}"], "info": []}
 
-@st.cache_data(ttl=1800, max_entries=5, show_spinner="Cargando datos del dashboard...")  # Cachear datos por 30 min, máximo 5 entradas
-def load_all_data():
-    """Carga todos los datos necesarios para la aplicación desde la fuente configurada."""
-    if is_local:
-        st.success("Modo de desarrollo: Cargando datos desde carpeta local.")
-        return load_data_from_local(LOCAL_PATH, modules)
+# --- Header Principal ---
+st.markdown('<div class="main-header">Tablero General de Reportes</div>', unsafe_allow_html=True)
 
-    # MINIO SUPPORT REMOVED - only local and gitlab sources supported
-
-    if FUENTE_DATOS == "gitlab":
-        
-        # Intenta leer el token desde diferentes ubicaciones
-        gitlab_token = None
-        
-        # Opción 1: Estructura anidada [gitlab] token = "..."
-        if "gitlab" in st.secrets and "token" in st.secrets["gitlab"]:
-            gitlab_token = st.secrets["gitlab"]["token"]
-        
-        # Validar el token
-        if not gitlab_token:
-            st.error("❌ El token de GitLab no está configurado en los secretos.")
-            st.info("📝 Configura el token en tu archivo `.streamlit/secrets.toml` usando una de estas opciones:")
-            st.code("""# Opción 1 (recomendada):
-                        [gitlab]
-                        token = "tu_token_aqui" """)
-            return {}, {}, {"warnings": ["Token de GitLab no configurado."], "info": []}
-        elif gitlab_token == "TU_TOKEN_DE_GITLAB_AQUI":
-            st.error("❌ El token de GitLab tiene el valor de ejemplo. Por favor, configura tu token real.")
-            return {}, {}, {"warnings": ["Token de GitLab no configurado (valor de ejemplo)."], "info": []}
-        
-        return load_data_from_gitlab(REPO_ID, BRANCH, gitlab_token, modules)
-
-    st.error(f"Fuente de datos no reconocida: {FUENTE_DATOS}")
-    return {}, {}, {"warnings": [f"Fuente de datos no reconocida: {FUENTE_DATOS}"], "info": []}
-
-# --- Carga de Datos (Solo para inicialización) ---
-# Nota: Ahora usamos carga lazy por módulo, pero mantenemos esta función para compatibilidad
-all_data, all_dates, logs = {}, {}, {"warnings": [], "info": ["Usando carga lazy por módulo"]}
-
-# --- Inicializar variables de sesión de forma segura ---
+# --- Inicializar variables de sesión ---
 if is_session_initialized():
-    # Inicializar variables de sesión necesarias
     if not safe_session_check("campanita_mostrada"):
         safe_session_set("campanita_mostrada", False)
     if not safe_session_check("mostrar_form_comentario"):
         safe_session_set("mostrar_form_comentario", False)
 
-# --- Mostrar Campanita de Novedades DESPUÉS de la carga ---
+# --- Mostrar Campanita de Novedades ---
 if is_session_initialized():
     show_notification_bell()
 
-# --- La opción para limpiar caché ahora está en el footer ---
-
 # --- Definición de Pestañas ---
-tab_names = ["Programas de Empleo", "CBA Me Capacita", "Banco de la Gente",  "Escrituración"]
+tab_names = ["Programas de Empleo", "CBA Me Capacita", "Banco de la Gente", "Escrituración"]
 tabs = st.tabs(tab_names)
 tab_keys = ['empleo', 'cba_capacita', 'bco_gente', 'escrituracion']
 tab_functions = [
@@ -224,12 +178,12 @@ for idx, tab in enumerate(tabs):
     with tab:
         module_key = tab_keys[idx]
         show_func = tab_functions[idx]
-        
+
         st.markdown(f'<div class="tab-subheader">{tab_names[idx]}</div>', unsafe_allow_html=True)
-        
+
         # Carga lazy: solo cargar datos cuando se accede al módulo
         try:
-            module_data, module_dates, module_logs = load_module_data(module_key)
+            module_data, module_dates, module_logs = load_module_data(module_key, config, is_local_mode)
             data_for_module = module_data
             dates_for_module = module_dates
         except Exception as e:
@@ -238,8 +192,7 @@ for idx, tab in enumerate(tabs):
             dates_for_module = {}
             module_logs = {"warnings": [f"Error de carga: {str(e)}"], "info": []}
 
-        # Si no hay datos, mostrar el warning SÓLO para módulos que realmente requieren archivos.
-        # Para 'escrituracion' queremos mostrar siempre la vista (redirige a un servicio externo).
+        # Si no hay datos, mostrar warning (excepto para escrituracion)
         if not data_for_module and module_key != "escrituracion":
             st.warning(f"No se encontraron datos para el módulo '{tab_names[idx]}'.")
             with st.expander("🔍 Debug: Ver archivos esperados vs cargados"):
@@ -248,8 +201,7 @@ for idx, tab in enumerate(tabs):
                 st.write(module_files)
                 st.write(f"**Archivos cargados para este módulo:**")
                 st.write(list(data_for_module.keys()))
-                
-                # Mostrar logs de carga del módulo
+
                 if module_logs:
                     st.write("**Logs de carga del módulo:**")
                     if module_logs.get("warnings"):
@@ -264,13 +216,12 @@ for idx, tab in enumerate(tabs):
 
         try:
             # Pasar los datos filtrados a la función del dashboard del módulo
-            show_func(data_for_module, dates_for_module, is_local)
+            show_func(data_for_module, dates_for_module, is_local_mode)
         except Exception as e:
             st.error(f"Error al renderizar el dashboard '{tab_names[idx]}': {e}")
             st.exception(e)
 
 # --- Limpieza de Memoria ---
-# Liberar memoria después de renderizar todas las pestañas
 cleanup_memory()
 
 # --- Footer ---
