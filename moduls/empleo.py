@@ -165,8 +165,8 @@ def render_dashboard(df_postulantes_empleo,df_inscriptos, df_empresas, geojson_d
         # Calcular total de beneficiarios Empleo+26 2025
         beneficiarios_e26_2025 = df_inscriptos[
             (df_inscriptos['PROGRAMA'] == "Más 26 [2025]") & 
-            ((df_inscriptos['N_ESTADO_FICHA'] == "BENEFICIARIO") | 
-             (df_inscriptos['BEN_N_ESTADO'].isin(["BENEFICIARIO RETENIDO", "ACTIVO", "BAJA PEDIDO POR EMPRESA"])))
+            (df_inscriptos['N_ESTADO_FICHA'] == "BENEFICIARIO") &
+            (df_inscriptos['BEN_N_ESTADO'] == "ACTIVO")
         ].shape[0]
         
         # Mostrar KPIs en dos filas para mejor distribución visual
