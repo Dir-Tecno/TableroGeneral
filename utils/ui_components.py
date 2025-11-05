@@ -297,9 +297,12 @@ def create_kpi_card(title, color_class="kpi-primary", delta=None, delta_color="#
     # Agregar atributo title para el tooltip si está presente
     tooltip_attr = f' title="{tooltip}"' if tooltip else ''
     
+    # Determinar si centrar la tarjeta KPI
+    center_card_style = ' style="margin: 0 auto; display: block;"' if any(keyword in title for keyword in ["Postulantes AMBOS PROGRAMAS", "Cantidad CVs Cargados", "Empresas Seleccionadas"]) else ''
+    
     # Construir HTML para la tarjeta KPI
     html = f"""
-        <div class="kpi-card {color_class}"{tooltip_attr}>
+        <div class="kpi-card {color_class}"{tooltip_attr}{center_card_style}>
             <div class="kpi-title">{title}</div>
             <div class="kpi-value">{formatted_value}</div>
     """
