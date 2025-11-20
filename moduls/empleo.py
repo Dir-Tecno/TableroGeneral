@@ -499,15 +499,6 @@ def show_companies(df_empresas):
     else:
         df_empresas['VACANTES'] = 0
 
-    # Verificar si la sesión está inicializada
-    session_ready = st.session_state.get('initialized', False)
-    if not session_ready:
-        st.markdown("""
-            <div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 10px 15px; margin-bottom: 15px; border-radius: 4px; font-size: 14px; color: #333;">
-                <strong>⚠️ Atención:</strong> La sesión no está completamente inicializada. Algunas funcionalidades pueden estar limitadas.
-            </div>
-        """, unsafe_allow_html=True)
-        
     # Crear una copia para trabajar
     df_display = df_empresas.copy()
     
@@ -706,22 +697,7 @@ def show_companies(df_empresas):
 
     st.markdown("""<div class="info-box">Las empresas (Empresas y Monotributistas) en esta tabla se encuentran adheridas a uno o más programas de empleo, han cumplido con los requisitos establecidos por los programas en su momento y salvo omisiones, han proporcionado sus datos a través de los registros de programasempleo.cba.gov.ar</div>""", unsafe_allow_html=True)
 
-    # Mostrar el DataFrame con mejor estilo, dentro de un expander
-    with st.expander("Ver tabla de empresas adheridas", expanded=False):
-        # Usar las columnas especificadas por el usuarioDefinir las columnas a mostrar (usando los nombres reales disponibles en el DataFrame)
-        columns_to_select = [col for col in ['N_LOCALIDAD', 'N_DEPARTAMENTO', 'CUIT', 'N_EMPRESA', 
-                                           'NOMBRE_TIPO_EMPRESA', 'ADHERIDO', 'CANTIDAD_EMPLEADOS', 
-                                           'VACANTES', 'CUPO', 'IMP_GANANCIAS', 'IMP_IVA', 'MONOTRIBUTO',
-                                           'INTEGRANTE_SOC', 'EMPLEADOR', 'ACTIVIDAD_MONOTRIBUTO','BENEF_COUNT', 
-                                           'TELEFONO', 'CELULAR', 'MAIL', 'SITIO_WEB', 'TEL_CONTACTO', 
-                                           'EMAIL_CONTACTO', 'NOMBRE_FANTASIA', 'ZONA'] 
-                           if col in df_filtered.columns]
-        
-        # Filtrar columnas existentes en el DataFrame
-        existing_columns = [col for col in columns_to_select if col in df_display.columns]
-        
-        st.dataframe(df_filtered[existing_columns], hide_index=True, width='stretch')
-
+    # Si desea volver a mostrar la tabla, descomente y adapte el bloque correspondiente.
     st.markdown("<hr style='border: 1px solid #e0e0e0; margin: 20px 0;'>", unsafe_allow_html=True)
 
     # --- Nuevo apartado: Perfil de Demanda con mejor estilo ---
