@@ -697,9 +697,7 @@ def show_companies(df_empresas):
 
     st.markdown("""<div class="info-box">Las empresas (Empresas y Monotributistas) en esta tabla se encuentran adheridas a uno o más programas de empleo, han cumplido con los requisitos establecidos por los programas en su momento y salvo omisiones, han proporcionado sus datos a través de los registros de programasempleo.cba.gov.ar</div>""", unsafe_allow_html=True)
 
-    # Si desea volver a mostrar la tabla, descomente y adapte el bloque correspondiente.
-    st.markdown("<hr style='border: 1px solid #e0e0e0; margin: 20px 0;'>", unsafe_allow_html=True)
-
+    
     # --- Nuevo apartado: Perfil de Demanda con mejor estilo ---
     st.markdown('<div class="section-title">Perfil de Demanda</div>', unsafe_allow_html=True)
 
@@ -882,13 +880,25 @@ def show_inscriptions(df_inscriptos_empleo, geojson_data):
         # === SECCIÓN 4: TABLA PIVOT DE TODOS LOS PROGRAMAS ===
         # Conteo de ID_FICHA por PROGRAMA y ESTADO_FICHA
         if 'PROGRAMA' in df_inscriptos_filtrado.columns and 'N_ESTADO_FICHA' in df_inscriptos_filtrado.columns:
+            # Contar filas por PROGRAMA y ESTADO_FICHA
             pivot_table = df_inscriptos_filtrado.pivot_table(
                 index='PROGRAMA',
                 columns='N_ESTADO_FICHA',
-                values='ID_FICHA',
-                aggfunc='count',
+                aggfunc='size',
                 fill_value=0
             )
+
+            # Ajustar la columna 'BENEFICIARIO' para contar solo beneficiarios activos
+            if 'BEN_N_ESTADO' in df_inscriptos_filtrado.columns:
+                df_activos = df_inscriptos_filtrado[
+                    (df_inscriptos_filtrado['N_ESTADO_FICHA'] == "BENEFICIARIO") &
+                    (df_inscriptos_filtrado['BEN_N_ESTADO'] == "ACTIVO")
+                ]
+                if not df_activos.empty:
+                    pivot_activos = df_activos.groupby('PROGRAMA').size()
+                    # Sobrescribir la columna BENEFICIARIO con el conteo de activos
+                    if 'BENEFICIARIO' in pivot_table.columns:
+                        pivot_table['BENEFICIARIO'] = pivot_activos.reindex(pivot_table.index, fill_value=0)
             
             # Definir el orden de las columnas por grupos
             grupo1 = ["POSTULANTE APTO", "INSCRIPTO", "BENEFICIARIO"]
@@ -1089,19 +1099,21 @@ def show_inscriptions(df_inscriptos_empleo, geojson_data):
         # === SECCIÓN 5: BENEFICIARIOS POR LOCALIDAD ===
         st.subheader("Beneficiarios por Localidad")
         
-        # Filtrar solo beneficiarios
-        beneficiarios_estados = ["BENEFICIARIO", "BENEFICIARIO- CTI"]
-        df_beneficiarios = df_inscriptos_filtrado[df_inscriptos_filtrado['N_ESTADO_FICHA'].isin(beneficiarios_estados)]
+        # Filtrar solo beneficiarios activos: N_ESTADO_FICHA == 'BENEFICIARIO' y BEN_N_ESTADO == 'ACTIVO'
+        if 'BEN_N_ESTADO' in df_inscriptos_filtrado.columns:
+            df_beneficiarios = df_inscriptos_filtrado[(df_inscriptos_filtrado['N_ESTADO_FICHA'] == "BENEFICIARIO") & (df_inscriptos_filtrado['BEN_N_ESTADO'] == "ACTIVO")]
+        else:
+            df_beneficiarios = pd.DataFrame()
         
         if df_beneficiarios.empty:
             st.warning("No hay beneficiarios con los filtros seleccionados.")
         else:
-            # Crear dataframes separados por tipo de beneficiario
-            df_beneficiarios_el = df_beneficiarios[df_beneficiarios['N_ESTADO_FICHA'] == "BENEFICIARIO"]
+            # Crear dataframe de beneficiarios EL (activos)
+            df_beneficiarios_el = df_beneficiarios.copy()
             df_el_count = df_beneficiarios_el.groupby(['N_DEPARTAMENTO', 'N_LOCALIDAD'], observed=True).size().reset_index(name='BENEFICIARIO')
             
-            df_beneficiarios_cti = df_beneficiarios[df_beneficiarios['N_ESTADO_FICHA'] == "BENEFICIARIO- CTI"]
-            df_cti_count = df_beneficiarios_cti.groupby(['N_DEPARTAMENTO', 'N_LOCALIDAD'], observed=True).size().reset_index(name='BENEFICIARIO- CTI')
+            # No contamos CTI aquí (criterio estricto: solo N_ESTADO_FICHA == 'BENEFICIARIO' y BEN_N_ESTADO == 'ACTIVO')
+            df_cti_count = pd.DataFrame(columns=['N_DEPARTAMENTO', 'N_LOCALIDAD', 'BENEFICIARIO- CTI'])
             
             # Unir los dataframes
             df_mapa = pd.merge(df_el_count, df_cti_count, on=['N_DEPARTAMENTO', 'N_LOCALIDAD'], how='outer')
@@ -1135,19 +1147,23 @@ def show_inscriptions(df_inscriptos_empleo, geojson_data):
             if df_inscriptos_filtrado['N_DEPARTAMENTO'].nunique() <= 5:  # Mostrar mapa solo si hay pocos departamentos
                 st.markdown('<h3 style="font-size: 20px; margin: 20px 0 15px 0;">Distribución Geográfica</h3>', unsafe_allow_html=True)
                 
-                # Filtrar solo beneficiarios para el mapa
-                df_beneficiarios_mapa = df_inscriptos_filtrado[df_inscriptos_filtrado['N_ESTADO_FICHA'].isin(beneficiarios_estados)]
+                # Filtrar solo beneficiarios activos para el mapa
+                if 'BEN_N_ESTADO' in df_inscriptos_filtrado.columns:
+                    df_beneficiarios_mapa = df_inscriptos_filtrado[(df_inscriptos_filtrado['N_ESTADO_FICHA'] == "BENEFICIARIO") & (df_inscriptos_filtrado['BEN_N_ESTADO'] == "ACTIVO")]
+                else:
+                    df_beneficiarios_mapa = pd.DataFrame()
                 
                 if not df_beneficiarios_mapa.empty and 'ID_DEPARTAMENTO_GOB' in df_beneficiarios_mapa.columns:
-                    # Crear datos para el mapa por departamento
-                    df_beneficiarios_el = df_beneficiarios_mapa[df_beneficiarios_mapa['N_ESTADO_FICHA'] == "BENEFICIARIO"]
+                    df_beneficiarios_el = df_beneficiarios_mapa.copy()
                     df_el_count = df_beneficiarios_el.groupby(['ID_DEPARTAMENTO_GOB', 'N_DEPARTAMENTO'], observed=True).size().reset_index(name='BENEFICIARIO')
                     
-                    df_beneficiarios_cti = df_beneficiarios_mapa[df_beneficiarios_mapa['N_ESTADO_FICHA'] == "BENEFICIARIO- CTI"]
-                    df_cti_count = df_beneficiarios_cti.groupby(['ID_DEPARTAMENTO_GOB', 'N_DEPARTAMENTO'], observed=True).size().reset_index(name='BENEFICIARIO- CTI')
+                    df_cti_count = pd.DataFrame(columns=['ID_DEPARTAMENTO_GOB', 'N_DEPARTAMENTO', 'BENEFICIARIO- CTI'])
                     
                     df_mapa_geo = pd.merge(df_el_count, df_cti_count, on=['ID_DEPARTAMENTO_GOB', 'N_DEPARTAMENTO'], how='outer')
                     df_mapa_geo['BENEFICIARIO'] = df_mapa_geo['BENEFICIARIO'].fillna(0).astype(int)
+                    # Asegurar columna CTI presente y sumar (será 0 si no hay datos)
+                    if 'BENEFICIARIO- CTI' not in df_mapa_geo.columns:
+                        df_mapa_geo['BENEFICIARIO- CTI'] = 0
                     df_mapa_geo['BENEFICIARIO- CTI'] = df_mapa_geo['BENEFICIARIO- CTI'].fillna(0).astype(int)
                     df_mapa_geo['Total'] = df_mapa_geo['BENEFICIARIO'] + df_mapa_geo['BENEFICIARIO- CTI']
                     
