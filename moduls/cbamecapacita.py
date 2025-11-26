@@ -9,6 +9,8 @@ from utils.kpi_tooltips import TOOLTIPS_DESCRIPTIVOS
 import geopandas as gpd
 import json
 
+pd.set_option('future.no_silent_downcasting', True)
+
 
 def _normalize_datetime_columns(df):
     """Convierte todas las columnas datetime del DataFrame a timezone-naive.
@@ -120,8 +122,6 @@ def create_cbamecapacita_kpi(resultados):
         }
     ]
     return kpis
-
-
 
 def show_cba_capacita_dashboard(data, dates, is_development=False):
     """
@@ -610,6 +610,107 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                 st.plotly_chart(fig_gauge)
                 
         
+        
+        st.markdown("## Sector Productivos por Departamento")
+        # Mostrar DataFrame solo si existe
+        if df_cursos is not None:
+            import io
+            columnas_exportar = [
+                "ID_PLANIFICACION",
+                "N_INSTITUCION",
+                "N_CURSO",
+                "FEC_INICIO",
+                "FEC_FIN",
+                "N_SECTOR_PRODUCTIVO",
+                "N_SEDE",
+                "N_DEPARTAMENTO",
+                "N_LOCALIDAD",
+                "N_CALLE",
+                "ALTURA",
+                "POSTULACIONES",
+                "ALUMNOS",
+                "EGRESADOS",
+                "No asignados",
+                "COMENZADO"
+            ]
+            # Filtrar solo columnas existentes
+            columnas_existentes = [col for col in columnas_exportar if col in df_cursos.columns]
+            df_export = df_cursos[columnas_existentes].copy()
+            
+            # Convertir columnas datetime con timezone a timezone-naive para Excel
+            for col in df_export.columns:
+                if pd.api.types.is_datetime64_any_dtype(df_export[col]):
+                    try:
+                        # Si la columna tiene timezone, removerla
+                        if hasattr(df_export[col].dtype, 'tz') and df_export[col].dtype.tz is not None:
+                            df_export[col] = df_export[col].dt.tz_localize(None)
+                        # También intentar con dt.tz_convert(None) si existe zona horaria
+                        elif hasattr(df_export[col].dt, 'tz') and df_export[col].dt.tz is not None:
+                            df_export[col] = df_export[col].dt.tz_localize(None)
+                    except Exception:
+                        # Si hay algún error, intentar convertir de forma general
+                        try:
+                            df_export[col] = pd.to_datetime(df_export[col]).dt.tz_localize(None)
+                        except Exception:
+                            pass  # Si no se puede convertir, dejar como está
+            
+            # Mostrar tabla con estilos
+            st.markdown("### Tabla de Cursos")
+            
+            # Seleccionar solo las columnas solicitadas para mostrar
+            columnas_mostrar = [
+                "N_INSTITUCION",
+                "N_CURSO",
+                "FEC_INICIO",
+                "FEC_FIN",
+                "N_SECTOR_PRODUCTIVO",
+                "N_SEDE",
+                "N_DEPARTAMENTO",
+                "N_LOCALIDAD",
+                "POSTULACIONES",
+                "ALUMNOS",
+                "EGRESADOS",
+                "No asignados",
+                "COMENZADO"
+            ]
+            
+            # Filtrar solo columnas existentes para mostrar
+            columnas_mostrar_existentes = [col for col in columnas_mostrar if col in df_export.columns]
+            df_display = df_export[columnas_mostrar_existentes].copy()
+            
+            # Convertir COMENZADO a Sí/No para simplicidad
+            if "COMENZADO" in df_display.columns:
+                df_display['COMENZADO'] = df_display['COMENZADO'].map({True: 'Sí', False: 'No'})
+            
+            # Aplicar estilos al DataFrame
+            styled_display = df_display.style\
+                .background_gradient(subset=["POSTULACIONES"], cmap="Blues")\
+                .background_gradient(subset=["ALUMNOS"], cmap="Greens")\
+                .background_gradient(subset=["No asignados"], cmap="Oranges")\
+                .format({"POSTULACIONES": "{:,.0f}", "ALUMNOS": "{:,.0f}", "No asignados": "{:,.0f}"})
+            
+            # Mostrar la tabla con estilos
+            st.dataframe(
+                styled_display,
+                width='stretch',
+                hide_index=True
+            )
+            
+            # Verificar que la columna "No asignados" esté presente en df_export
+            if 'No asignados' not in df_export.columns and 'POSTULACIONES' in df_export.columns and 'ALUMNOS' in df_export.columns:
+                # Si no existe, crearla nuevamente
+                df_export['No asignados'] = df_export['POSTULACIONES'] - df_export['ALUMNOS']
+                df_export['No asignados'] = df_export['No asignados'].apply(lambda x: max(0, x))
+            
+            # Botón para descargar Excel debajo de la tabla
+            buffer = io.BytesIO()
+            df_export.to_excel(buffer, index=False)
+            st.download_button(
+                label="Descargar Excel de Cursos (columnas seleccionadas)",
+                data=buffer.getvalue(),
+                file_name="cursos_sector_productivo.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
         
         # Sección 'Sector Productivos por Departamento' eliminada.
         # Mantener la limpieza mínima de coordenadas para garantizar que el Mapa de Sedes funcione.
