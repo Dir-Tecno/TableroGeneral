@@ -944,8 +944,267 @@ def mostrar_global(df_filtrado_global, tooltips_categorias):
         except Exception as e:
             st.error(f"Error al generar el gráfico de edades: {e}")
 
-    # Sección "Estados de Préstamos por Localidad y Categoría de Estados" eliminada a pedido.
-    # (Código removido para simplificar la interfaz)
+# Línea divisoria para separar secciones
+    st.markdown("<hr style='border: 2px solid #cccccc;'>", unsafe_allow_html=True)
+            
+    # Tabla de estados de préstamos agrupados
+    st.subheader("Estados de Préstamos por Localidad y Categoría de Estados", 
+                 help="Muestra el conteo de préstamos agrupados por categorías de estado, "
+                      "basado en los datos filtrados. Las categorías agrupa estados del sistema. No considera formularios de baja ni lineas antiguas históricas.")
+    try: #Tabla de estados de préstamos agrupados por categoría
+        # Verificar que las columnas necesarias existan en el DataFrame
+        required_columns = ['N_DEPARTAMENTO', 'N_LOCALIDAD', 'N_ESTADO_PRESTAMO', 'NRO_SOLICITUD','MONTO_OTORGADO']
+        missing_columns = [col for col in required_columns if col not in df_filtrado_global.columns]
+        
+        if missing_columns:
+            st.warning(f"No se pueden mostrar los estados de préstamos. Faltan columnas: {', '.join(missing_columns)}")
+        else:
+            # Filtro específico para esta tabla - Categorías de estado
+            categorias_orden = list(ESTADO_CATEGORIAS.keys())
+            # Excluir "Rechazados - Bajas" de las categorías disponibles
+            if "Rechazados - Bajas" in categorias_orden:
+                categorias_orden.remove("Rechazados - Bajas")
+            
+            # Usar session_state seguro para mantener las categorías seleccionadas
+            if not safe_session_check('selected_categorias'):
+                safe_session_set('selected_categorias', categorias_orden)
+            
+            # Obtener líneas de crédito disponibles
+            if 'N_LINEA_PRESTAMO' in df_filtrado_global.columns:
+                lineas_credito = sorted(df_filtrado_global['N_LINEA_PRESTAMO'].dropna().unique())
+            else:
+                lineas_credito = []
+            
+            
+            # Inicializar selected_lineas en session_state seguro si no existe
+            if not safe_session_check('selected_lineas_credito'):
+                safe_session_set('selected_lineas_credito', lineas_credito)
+            
+            col1, col2 = st.columns([3, 1])
+            
+            with col1: # Multiselect para seleccionar categorías
+                selected_categorias = st.multiselect(
+                    "Filtrar por categorías de estado:",
+                    options=categorias_orden,
+                    default=safe_session_get('selected_categorias', categorias_orden),
+                    key="estado_categoria_filter"
+                )
+            
+            with col2: # Multiselect para seleccionar líneas de crédito
+                selected_lineas = st.multiselect(
+                    "Filtrar por línea de crédito:",
+                    options=lineas_credito,
+                    default=safe_session_get('selected_lineas_credito', lineas_credito),
+                    key="linea_credito_filter"
+                )
+
+            # Aplicar filtros al DataFrame para la tabla de Estados de Préstamos por Categoría
+            df_categoria_estados = df_filtrado_global.copy()
+            
+            # Agregar columna de categoría basada en N_ESTADO_PRESTAMO
+            df_categoria_estados['CATEGORIA'] = 'Otros'
+            for categoria, estados in ESTADO_CATEGORIAS.items():
+                mask = df_categoria_estados['N_ESTADO_PRESTAMO'].isin(estados)
+                df_categoria_estados.loc[mask, 'CATEGORIA'] = categoria
+            
+            # --- Filtro de rango de fechas FEC_INICIO_PAGO (solo para categorías que tienen esta fecha) ---
+            aplicar_filtro_fecha = st.checkbox('Aplicar filtro por Fecha de Inicio de Pago', value=False, help="Este filtro solo afecta a préstamos que tienen fecha de inicio de pago (principalmente categoría 'Pagados')")
+            
+            if aplicar_filtro_fecha and 'FEC_INICIO_PAGO' in df_categoria_estados.columns:
+                # Asegurar tz-naive antes de usar .dt.date
+                df_categoria_estados['FEC_INICIO_PAGO'] = pd.to_datetime(df_categoria_estados['FEC_INICIO_PAGO'], format='%d/%m/%Y', errors='coerce')
+                if df_categoria_estados['FEC_INICIO_PAGO'].isna().all():
+                    df_categoria_estados['FEC_INICIO_PAGO'] = pd.to_datetime(df_categoria_estados['FEC_INICIO_PAGO'], format='%Y-%m-%d', errors='coerce')
+                try:
+                    if pd.api.types.is_datetime64tz_dtype(df_categoria_estados['FEC_INICIO_PAGO']):
+                        df_categoria_estados['FEC_INICIO_PAGO'] = df_categoria_estados['FEC_INICIO_PAGO'].dt.tz_localize(None)
+                except Exception:
+                    pass
+                fechas_validas = df_categoria_estados['FEC_INICIO_PAGO'].dropna().dt.date.unique()
+                fechas_validas = sorted(fechas_validas)
+                if fechas_validas:
+                    min_fecha = fechas_validas[0]
+                    max_fecha = fechas_validas[-1]
+                    fecha_inicio, fecha_fin = st.select_slider(
+                        'Seleccionar rango de Fecha de Inicio de Pago:',
+                        options=fechas_validas,
+                        value=(min_fecha, max_fecha),
+                        key='filtro_fecha_inicio_pago_categoria'
+                    )
+                    
+                    # Crear una máscara para filtrar solo registros con fecha válida en el rango seleccionado
+                    mask_fecha = ((df_categoria_estados['FEC_INICIO_PAGO'].dt.date >= fecha_inicio) & 
+                                 (df_categoria_estados['FEC_INICIO_PAGO'].dt.date <= fecha_fin))
+                    
+                    # Crear una máscara para mantener registros sin fecha (NaT)
+                    mask_sin_fecha = df_categoria_estados['FEC_INICIO_PAGO'].isna()
+                    
+                    # Aplicar ambas máscaras para mantener registros que cumplen con el rango de fechas O no tienen fecha
+                    df_categoria_estados = df_categoria_estados[mask_fecha | mask_sin_fecha]
+            
+            # Filtrar por categorías seleccionadas
+            if selected_categorias:
+                df_categoria_estados = df_categoria_estados[df_categoria_estados['CATEGORIA'].isin(selected_categorias)]
+            
+            # Filtrar por líneas de crédito seleccionadas
+            if selected_lineas:
+                df_categoria_estados = df_categoria_estados[df_categoria_estados['N_LINEA_PRESTAMO'].isin(selected_lineas)]
+            
+            # Asegurarse de que los montos sean numéricos y reemplazar NaN por 0
+            if 'MONTO_OTORGADO' in df_categoria_estados.columns:
+                df_categoria_estados['MONTO_OTORGADO'] = pd.to_numeric(df_categoria_estados['MONTO_OTORGADO'], errors='coerce').fillna(0)
+            
+            # Continuar con el agrupamiento solo si hay datos filtrados
+            if not df_categoria_estados.empty:
+                # Realizar el agrupamiento
+                df_grouped = df_categoria_estados.groupby(
+                    ['N_DEPARTAMENTO', 'N_LOCALIDAD', 'CATEGORIA', 'N_LINEA_PRESTAMO'], observed=True
+                ).agg({
+                    'NRO_SOLICITUD': 'count',
+                    'MONTO_OTORGADO': 'sum'
+                }).reset_index()
+            else:
+                st.warning("No hay datos para mostrar con los filtros seleccionados.")
+
+            # Actualizar session_state
+            if selected_categorias != safe_session_get('selected_categorias', []):
+                safe_session_set('selected_categorias', selected_categorias)
+            if selected_lineas != safe_session_get('selected_lineas_credito', []):
+                safe_session_set('selected_lineas_credito', selected_lineas)
+            
+            # Si no se selecciona ninguna categoría, mostrar todas
+            if not selected_categorias:
+                selected_categorias = categorias_orden
+                
+            # Crear copia del DataFrame para manipulación
+            # Usar @st.cache_data para evitar recalcular si los datos no cambian
+            @st.cache_data
+            def prepare_categoria_data(df, categorias):
+                # La categoría ya está asignada en df_categoria_estados, no necesitamos hacerlo de nuevo
+                df_copy = df.copy()
+
+                # Crear pivot table con conteo agrupado por categorías
+                pivot_df = df_copy.pivot_table(
+                    index=['N_DEPARTAMENTO', 'N_LOCALIDAD'],
+                    columns='CATEGORIA',
+                    values='NRO_SOLICITUD',
+                    aggfunc='count',
+                    fill_value=0
+                ).reset_index()
+                
+                # Asegurar que todas las categorías seleccionadas estén en la tabla
+                for categoria in categorias:
+                    if categoria not in pivot_df.columns:
+                        pivot_df[categoria] = 0
+                
+                # Reordenar columnas para mostrar en orden consistente
+                return pivot_df.reindex(columns=['N_DEPARTAMENTO', 'N_LOCALIDAD'] + categorias)
+            
+            # Obtener el DataFrame procesado usando caché
+            pivot_df = prepare_categoria_data(df_categoria_estados, categorias_orden)
+            
+            # Filtrar solo las columnas seleccionadas
+            columnas_mostrar = ['N_DEPARTAMENTO', 'N_LOCALIDAD'] + selected_categorias
+            pivot_df_filtered = pivot_df[columnas_mostrar].copy()
+            
+            # Agregar columna de total para las categorías seleccionadas
+            pivot_df_filtered['Total'] = pivot_df_filtered[selected_categorias].sum(axis=1)
+            
+            # Agregar fila de totales
+            totales = pivot_df_filtered[selected_categorias + ['Total']].sum()
+            totales_row = pd.DataFrame([['Total', 'Total'] + totales.values.tolist()], 
+                                      columns=['N_DEPARTAMENTO', 'N_LOCALIDAD'] + selected_categorias + ['Total'])
+            pivot_df_filtered = pd.concat([pivot_df_filtered, totales_row], ignore_index=True)
+            
+            # Aplicar estilo a la tabla usando pandas Styler
+            def highlight_totals(val):
+                if val == 'Total':
+                    return 'background-color: #f2f2f2; font-weight: bold'
+                return ''
+            
+            def highlight_total_rows(s):
+                is_total_row = s.iloc[0] == 'Total' or s.iloc[1] == 'Total'
+                return ['background-color: #f2f2f2; font-weight: bold' if is_total_row else '' for _ in s]
+            
+            styled_df = pivot_df_filtered.style.apply(highlight_total_rows, axis=1)
+            st.dataframe(styled_df, hide_index=True)
+            
+            # --- Generar DataFrame extendido para descarga (con todas las categorías) ---
+            columnas_extra = [
+                col for col in ['ID_GOBIERNO_LOCAL','TIPO', 'Gestion 2023-2027', 'FUERZAS', 'ESTADO', 'LEGISLADOR DEPARTAMENTAL'] if col in df_filtrado_global.columns
+            ]
+            
+            # Usar una copia del DataFrame filtrado globalmente para no estar limitado por la selección de categorías de la UI
+            df_para_descarga = df_filtrado_global.copy()
+
+            # Aplicar filtro por línea de crédito si está seleccionado
+            if selected_lineas:
+                df_para_descarga = df_para_descarga[df_para_descarga['N_LINEA_PRESTAMO'].isin(selected_lineas)]
+
+            # Asignar categorías
+            df_para_descarga['CATEGORIA'] = 'Otros'
+            for categoria, estados in ESTADO_CATEGORIAS.items():
+                mask = df_para_descarga['N_ESTADO_PRESTAMO'].isin(estados)
+                df_para_descarga.loc[mask, 'CATEGORIA'] = categoria
+
+            # Agrupar para obtener el conteo y la suma de montos
+            df_descarga_grouped = df_para_descarga.groupby(
+                ['N_DEPARTAMENTO', 'N_LOCALIDAD', 'N_LINEA_PRESTAMO'] + columnas_extra + ['CATEGORIA'], observed=True
+            ).agg({
+                'NRO_SOLICITUD': 'count',
+                'MONTO_OTORGADO': 'sum'
+            }).reset_index()
+            
+            # Renombrar las columnas para mayor claridad
+            df_descarga_grouped = df_descarga_grouped.rename(columns={
+                'NRO_SOLICITUD': 'Cantidad',
+                'MONTO_OTORGADO': 'Monto Total'
+            })
+            
+            # Convertir columnas datetime con timezone a timezone-naive para Excel
+            for col in df_descarga_grouped.columns:
+                if pd.api.types.is_datetime64_any_dtype(df_descarga_grouped[col]):
+                    try:
+                        # Si la columna tiene timezone, removerla
+                        if hasattr(df_descarga_grouped[col].dtype, 'tz') and df_descarga_grouped[col].dtype.tz is not None:
+                            df_descarga_grouped[col] = df_descarga_grouped[col].dt.tz_localize(None)
+                        elif hasattr(df_descarga_grouped[col].dt, 'tz') and df_descarga_grouped[col].dt.tz is not None:
+                            df_descarga_grouped[col] = df_descarga_grouped[col].dt.tz_localize(None)
+                    except Exception:
+                        # Si hay algún error, intentar convertir de forma general
+                        try:
+                            df_descarga_grouped[col] = pd.to_datetime(df_descarga_grouped[col]).dt.tz_localize(None)
+                        except Exception:
+                            pass  # Si no se puede convertir, dejar como está
+            
+            # --- Botón de descarga Excel con ícono ---
+            import io
+            excel_buffer = io.BytesIO()
+            df_descarga_grouped.to_excel(excel_buffer, index=False)
+            fecha_rango_str = ''
+            if 'fecha_inicio' in locals() and 'fecha_fin' in locals():
+                fecha_rango_str = f"_{fecha_inicio.strftime('%Y%m%d')}_{fecha_fin.strftime('%Y%m%d')}"
+            nombre_archivo = f"pagados_x_localidad{fecha_rango_str}.xlsx"
+            excel_buffer.seek(0)
+            excel_icon = """
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="20" height="20" rx="3" fill="#217346"/>
+            <path d="M6.5 7.5H8L9.25 10L10.5 7.5H12L10.25 11L12 14.5H10.5L9.25 12L8 14.5H6.5L8.25 11L6.5 7.5Z" fill="white"/>
+            </svg>
+            """
+            st.markdown(f'<span style="vertical-align:middle">{excel_icon}</span> <b>Descargar (Excel)</b>', unsafe_allow_html=True)
+            st.download_button(
+                label=f"Descargar Excel {nombre_archivo}",
+                data=excel_buffer.getvalue(),
+                file_name=nombre_archivo,
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                help="Descargar el agrupado por localidad con id de censo, incluyendo montos totales."
+            )
+           
+    except Exception as e:
+        st.warning(f"Error al generar la tabla de estados: {str(e)}")
+
+
 
 
      # Línea divisoria en gris claro
