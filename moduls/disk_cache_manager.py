@@ -14,7 +14,9 @@ import pandas as pd
 import geopandas as gpd
 import requests
 
-from utils.sentry_utils import capture_exception, add_breadcrumb
+# Funciones stub para reemplazar Sentry (removido)
+def capture_exception(e=None, extra_data=None): pass
+def add_breadcrumb(category=None, message=None, data=None, level=None): pass
 
 # Configuración del caché
 CACHE_DIR = Path("./cache_datos")

@@ -10,7 +10,7 @@ st.set_page_config(
 )
 
 # --- Imports ---
-from utils.sentry_utils import init_sentry, sentry_wrap, sentry_error, capture_exception
+# Sentry removido
 from moduls.carga import load_data_from_local, load_data_from_gitlab, load_data_from_gitlab_with_cache
 from moduls.carga_optimized import cleanup_memory, optimize_dataframe
 from moduls import bco_gente, cbamecapacita, empleo, escrituracion
@@ -19,7 +19,6 @@ from utils.ui_components import render_footer, show_notification_bell, insert_go
 from utils.session_helper import safe_session_get, safe_session_set, safe_session_check, is_session_initialized
 
 # --- Inicialización ---
-init_sentry()
 insert_google_analytics()
 setup_page()
 
@@ -32,9 +31,9 @@ def get_data_config():
     # Configuración por defecto (se puede sobreescribir con secrets si existen)
     default_config = {
         "FUENTE_DATOS": FUENTE_DATOS,
-        "REPO_ID": "Dir-Tecno/df_ministerio",
+        "REPO_ID": "Dir-Tecno/df_tablero",
         "BRANCH": "main",
-        "LOCAL_PATH": "df_ministerio"
+        "LOCAL_PATH": "df_tablero"
     }
 
     return default_config

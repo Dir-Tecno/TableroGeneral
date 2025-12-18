@@ -8,13 +8,15 @@ import requests
 import os
 # from minio import Minio  # REMOVED: Minio support disabled
 import os 
-# Importar utilidades de Sentry
-from utils.sentry_utils import (
-    capture_exception, 
-    add_breadcrumb, 
-    sentry_wrap, 
-    sentry_context_manager
-)
+# Funciones stub para reemplazar Sentry (removido)
+def capture_exception(e=None, extra_data=None): pass
+def add_breadcrumb(category=None, message=None, data=None, level=None): pass
+def sentry_wrap(module_name=None, operation=None):
+    def decorator(func):
+        return func
+    return decorator
+
+def sentry_context_manager(): pass
 
 def convert_numpy_types(df):
     if df is None or df.empty:

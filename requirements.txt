@@ -17,7 +17,7 @@ pyproj>=3.3.0,<4.0.0
 streamlit==1.50.0
 plotly==5.23.0
 requests==2.32.3
-sentry-sdk==1.43.0
+# sentry-sdk==1.43.0  # Removido
 #xlsxwriter==3.9.0
 
 
