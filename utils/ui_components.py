@@ -244,7 +244,7 @@ def render_footer():
             valoracion = st.selectbox("Valoración:", options=[1, 2, 3, 4, 5], index=2, format_func=lambda x: "⭐" * x)
         
         with col_b:
-            enviar = st.button("Enviar", type="primary", width='stretch')
+            enviar = st.button("Enviar", type="primary", use_container_width=True)
         
         if enviar:
             if comentario.strip():

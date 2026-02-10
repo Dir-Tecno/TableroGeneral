@@ -24,7 +24,7 @@ setup_page()
 
 # --- Configuración de Datos ---
 # ⚠️ CAMBIA ESTA VARIABLE PARA CAMBIAR ENTRE MODO DESARROLLO Y PRODUCCIÓN
-FUENTE_DATOS = "gitlab"  
+FUENTE_DATOS = "local"  
 
 def get_data_config():
     """Obtiene la configuración de fuente de datos de manera centralizada."""
@@ -33,7 +33,7 @@ def get_data_config():
         "FUENTE_DATOS": FUENTE_DATOS,
         "REPO_ID": "Dir-Tecno/df_tablero",
         "BRANCH": "main",
-        "LOCAL_PATH": "df_tablero"
+        "LOCAL_PATH": "df_tablero-main"
     }
 
     return default_config

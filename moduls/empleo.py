@@ -454,6 +454,9 @@ def show_postulantes(df_postulantes_empleo):
                 # Unimos con la información de empresa
                 empresas_counts = pd.merge(empresas_counts, df_empresas_unicas, on='CUIT', how='left')
                 
+                # Filtrar filas sin nombre de empresa antes de ordenar
+                empresas_counts = empresas_counts[empresas_counts['N_EMPRESA'].notna()]
+                
                 # Ordenar y tomar el TOP 10
                 top_empresas = empresas_counts.sort_values('Postulantes', ascending=False).head(10)
                 
@@ -1105,15 +1108,23 @@ def show_inscriptions(df_inscriptos_empleo, geojson_data):
         else:
             df_beneficiarios = pd.DataFrame()
         
-        if df_beneficiarios.empty:
+        # Filtrar beneficiarios CTI: N_ESTADO_FICHA == 'BENEFICIARIO- CTI'
+        df_beneficiarios_cti = df_inscriptos_filtrado[df_inscriptos_filtrado['N_ESTADO_FICHA'] == "BENEFICIARIO- CTI"]
+        
+        if df_beneficiarios.empty and df_beneficiarios_cti.empty:
             st.warning("No hay beneficiarios con los filtros seleccionados.")
         else:
             # Crear dataframe de beneficiarios EL (activos)
-            df_beneficiarios_el = df_beneficiarios.copy()
-            df_el_count = df_beneficiarios_el.groupby(['N_DEPARTAMENTO', 'N_LOCALIDAD'], observed=True).size().reset_index(name='BENEFICIARIO')
+            if not df_beneficiarios.empty:
+                df_el_count = df_beneficiarios.groupby(['N_DEPARTAMENTO', 'N_LOCALIDAD'], observed=True).size().reset_index(name='BENEFICIARIO')
+            else:
+                df_el_count = pd.DataFrame(columns=['N_DEPARTAMENTO', 'N_LOCALIDAD', 'BENEFICIARIO'])
             
-            # No contamos CTI aquí (criterio estricto: solo N_ESTADO_FICHA == 'BENEFICIARIO' y BEN_N_ESTADO == 'ACTIVO')
-            df_cti_count = pd.DataFrame(columns=['N_DEPARTAMENTO', 'N_LOCALIDAD', 'BENEFICIARIO- CTI'])
+            # Crear dataframe de beneficiarios CTI
+            if not df_beneficiarios_cti.empty:
+                df_cti_count = df_beneficiarios_cti.groupby(['N_DEPARTAMENTO', 'N_LOCALIDAD'], observed=True).size().reset_index(name='BENEFICIARIO- CTI')
+            else:
+                df_cti_count = pd.DataFrame(columns=['N_DEPARTAMENTO', 'N_LOCALIDAD', 'BENEFICIARIO- CTI'])
             
             # Unir los dataframes
             df_mapa = pd.merge(df_el_count, df_cti_count, on=['N_DEPARTAMENTO', 'N_LOCALIDAD'], how='outer')

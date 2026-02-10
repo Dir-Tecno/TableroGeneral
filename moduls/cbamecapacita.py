@@ -631,7 +631,8 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                 "ALUMNOS",
                 "EGRESADOS",
                 "No asignados",
-                "COMENZADO"
+                "COMENZADO",
+                "ESTADO_CURSO"
             ]
             # Filtrar solo columnas existentes
             columnas_existentes = [col for col in columnas_exportar if col in df_cursos.columns]
@@ -671,7 +672,8 @@ def show_cba_capacita_dashboard(data, dates, is_development=False):
                 "ALUMNOS",
                 "EGRESADOS",
                 "No asignados",
-                "COMENZADO"
+                "COMENZADO",
+                "ESTADO_CURSO"
             ]
             
             # Filtrar solo columnas existentes para mostrar
