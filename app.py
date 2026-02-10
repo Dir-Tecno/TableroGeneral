@@ -24,7 +24,7 @@ setup_page()
 
 # --- Configuración de Datos ---
 # ⚠️ CAMBIA ESTA VARIABLE PARA CAMBIAR ENTRE MODO DESARROLLO Y PRODUCCIÓN
-FUENTE_DATOS = "local"  
+FUENTE_DATOS = "gitlab"  
 
 def get_data_config():
     """Obtiene la configuración de fuente de datos de manera centralizada."""
